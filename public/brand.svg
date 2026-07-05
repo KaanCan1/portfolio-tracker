@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Portfolio brandmark — solid deep-emerald tile + white breakout line trending up-right.
+       Reads at 16px favicon: high contrast, monochrome, no illustration. -->
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0.7" y2="1">
+      <stop offset="0" stop-color="#17714a"/>
+      <stop offset="0.55" stop-color="#0e5236"/>
+      <stop offset="1" stop-color="#0a3a27"/>
+    </linearGradient>
+  </defs>
+  <rect x="1" y="1" width="62" height="62" rx="16" fill="url(#tile)"/>
+  <rect x="1.75" y="1.75" width="60.5" height="60.5" rx="15.25" fill="none" stroke="#ffffff" stroke-opacity="0.10" stroke-width="1.5"/>
+  <g fill="none" stroke="#eafff3" stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M14 41 L27 27 L36 35 L50 20"/>
+    <path d="M38.5 20 H50 V31.5"/>
+  </g>
+</svg>

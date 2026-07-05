@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Portfolio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="brand.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="layout">
+    <!-- Sol menü -->
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <div class="logo" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 15.5 L10 9.5 L13.5 13 L20 6.5" />
+            <path d="M15 6.5 H20 V11.5" />
+          </svg>
+        </div>
+        <div class="brand-text">
+          <h1>Portfolio</h1>
+          <span class="sub">Live data</span>
+        </div>
+      </div>
+
+      <nav class="nav" id="nav">
+        <button class="nav-item" data-view="notlar"><span class="ni-ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="16" height="20" x="4" y="2" rx="2"/><path d="M8 2v20"/><path d="M12 7h4"/><path d="M12 12h4"/><path d="M12 17h2"/></svg></span> Notlar</button>
+        <button class="nav-item active" data-view="genel"><span class="ni-ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg></span> Genel Bakış</button>
+        <button class="nav-item" data-view="swingdefteri"><span class="ni-ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span> Swing</button>
+        <button class="nav-item" data-view="radar"><span class="ni-ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></span> Radar</button>
+        <button class="nav-item" data-view="analiz"><span class="ni-ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 18h8"/><path d="M3 22h18"/><path d="M14 22a7 7 0 1 0 0-14h-1"/><path d="M9 14h2"/><path d="M9 12a2 2 0 0 1-2-2V6h6v4a2 2 0 0 1-2 2Z"/><path d="M12 6V3a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v3"/></svg></span> Analiz</button>
+        <button class="nav-item" data-view="challenge"><span class="ni-ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" x2="4" y1="22" y2="15"/></svg></span> Alfa Avı</button>
+        <button class="nav-item" data-view="raporlar"><span class="ni-ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/></svg></span> Günlük Raporlar</button>
+      </nav>
+
+      <div class="sidebar-foot">
+        <div class="updated" id="updated">—</div>
+        <div class="sidebar-actions">
+          <button class="btn ghost sm" id="refreshBtn" title="Yenile">↻ Yenile</button>
+          <button class="btn ghost sm" id="logoutBtn" title="Çıkış yap">⏻ Çıkış</button>
+        </div>
+      </div>
+    </aside>
+    <div class="nav-backdrop" id="navBackdrop" hidden></div>
+
+    <!-- İçerik -->
+    <main class="content">
+      <button class="menu-toggle" id="menuToggle" aria-label="Menü">☰</button>
+
+      <!-- Yapışkan mini özet — kaydırınca portföy değeri + günlük değişim hep görünür -->
+      <div id="miniTop" class="mini-top" hidden>
+        <button class="mt-up" title="En üste dön" aria-label="En üste dön">↑</button>
+        <span class="mt-val"></span>
+        <span class="mt-day"></span>
+        <span class="mt-spacer"></span>
+        <span class="mt-sub"></span>
+      </div>
+
+      <!-- ===== Görünüm: Hisse Notları ===== -->
+      <section class="view" id="view-notlar">
+        <div class="view-head">
+          <h2 class="view-title">Hisse Notları</h2>
+          <span class="view-sub">Alım/satım fikirlerini etiketle ve kaydet · sadece sana özel, kalıcı</span>
+        </div>
+
+        <form id="noteForm" class="note-composer" autocomplete="off">
+          <div class="note-fields">
+            <input id="noteSymbol" class="note-sym" type="text" maxlength="12" placeholder="Sembol · örn. MU" />
+            <select id="noteLabel" class="note-label-sel" aria-label="Etiket"></select>
+          </div>
+          <textarea id="noteText" class="note-text" rows="2" placeholder="Notun… örn. MU'ya bu hafta 300-500$ arası eklemeyi düşünüyorum"></textarea>
+          <div class="note-composer-foot">
+            <span class="note-hint" id="noteHint">Enter ile kaydet · Shift+Enter yeni satır</span>
+            <div class="note-composer-actions">
+              <button type="button" class="btn ghost sm" id="noteCancel" hidden>Vazgeç</button>
+              <button type="submit" class="btn primary sm" id="noteSubmit">Not ekle</button>
+            </div>
+          </div>
+        </form>
+
+        <div class="notes-filter" id="notesFilter"></div>
+        <div class="notes-list" id="notesList"></div>
+      </section>
+
+      <!-- ===== Görünüm: Genel Bakış ===== -->
+      <section class="view active" id="view-genel">
+        <div class="view-head"><h2 class="view-title">Genel Bakış</h2></div>
+
+        <section id="alertStrip" hidden></section>
+        <section id="huntStrip" hidden></section>
+        <section class="cards-top" id="cardsTop"></section>
+        <section id="sentimentRow"></section>
+        <section class="cards-metrics" id="cardsMetrics"></section>
+        <section id="rule1Panel"></section>
+        <section id="topInsights"></section>
+        <section id="dailyBoard"></section>
+        <section id="earningsWatch"></section>
+
+        <section class="panel chart-panel">
+          <div class="panel-head">
+            <div>
+              <h2><svg class="h2-ic" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>Portföy Değeri <span class="tip" data-tip="İpucu: Günlük görünüm 15 dakikalık noktalarla çizilir; uzun aralıklar gün kapanışlarını gösterir. Tek günlük oynamaya değil eğimin yönüne bak — Kural 1: ana trend aşağı kırılırsa önce sermayeyi koru.">?</span></h2>
+              <span class="chart-sub" id="chartSub">—</span>
+            </div>
+            <div class="range-tabs" id="rangeTabs">
+              <button class="rt active" data-range="1d">Günlük</button>
+              <button class="rt" data-range="1w">Haftalık</button>
+              <button class="rt" data-range="1m">Aylık</button>
+              <button class="rt" data-range="3m">3 Aylık</button>
+              <button class="rt" data-range="6m">6 Aylık</button>
+              <button class="rt" data-range="1y">1 Yıllık</button>
+              <button class="rt" data-range="all">Tümü</button>
+            </div>
+          </div>
+          <div class="chart-box" id="chartBox"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h2><svg class="h2-ic" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>Varlıklar <span class="tip" data-tip="İpucu: Maliyetler işlemlerle otomatik senkron — alış ortalama maliyeti ağırlıklı günceller, satış pozisyondan düşer. Bir hissede plan stop girersen Pozisyon Bekçisi onu asla aşağı çekmez, sadece yukarı taşır.">?</span></h2>
+            <div class="head-actions">
+              <button class="btn ghost sm" id="addOptionBtn">+ Opsiyon</button>
+              <button class="btn primary sm" id="addBtn">+ Varlık Ekle</button>
+            </div>
+          </div>
+          <form class="quick-add" id="quickAdd">
+            <div class="qa-fields">
+              <label class="qa-field qa-field-sym">
+                <span class="qa-lbl">Sembol</span>
+                <input id="qaSymbol" class="qa-input" placeholder="NVDA" list="symbolSuggestions" autocomplete="off" />
+                <span class="qa-name" id="qaName"></span>
+              </label>
+              <label class="qa-field">
+                <span class="qa-lbl">Adet</span>
+                <input id="qaQty" class="qa-input qa-num" type="number" step="any" placeholder="0" />
+              </label>
+              <label class="qa-field">
+                <span class="qa-lbl">Fiyat $ <i>ops.</i></span>
+                <input id="qaCost" class="qa-input qa-num" type="number" step="any" placeholder="canlı fiyat" />
+              </label>
+              <button type="submit" class="btn primary qa-submit" id="qaAdd"><span class="qa-icon">⚡</span> Hızlı ekle</button>
+            </div>
+            <div class="qa-foot">
+              <span class="qa-preview" id="qaPreview">Sembol + adet gir → anında portföye eklenir.</span>
+              <span class="qa-hint">Fiyat girersen İşlem Geçmişi'ne “Alış” olarak da yazılır · detay için “+ Varlık Ekle”.</span>
+            </div>
+          </form>
+          <div id="tables"></div>
+        </section>
+
+        <div class="home-drawer" id="homeDrawer">
+        <section class="panel collapsible" id="cashPanel">
+          <div class="panel-head">
+            <div class="panel-toggle" data-collapse role="button" tabindex="0" aria-label="Nakit &amp; Döviz'i aç/kapat">
+              <span class="collapse-chev" aria-hidden="true">▸</span>
+              <div><h2>Nakit &amp; Döviz <span class="tip" data-tip="İpucu: Nakit senin sigortan. Fırsat Radarı'ndaki VIX rejimi hedef nakit bandı verir — piyasa gerginken nakit oranını bilinçli yüksek tut; düşüşte alım gücü = Kural 1'in ödülü.">?</span></h2></div>
+            </div>
+            <div class="head-actions">
+              <button class="btn ghost sm" id="editCashBtn">Düzenle</button>
+            </div>
+          </div>
+          <div class="cash-grid panel-body" id="cashGrid"></div>
+        </section>
+
+        <section class="panel collapsible" id="flowsPanel">
+          <div class="panel-head">
+            <div class="panel-toggle" data-collapse role="button" tabindex="0" aria-label="Sermaye'yi aç/kapat">
+              <span class="collapse-chev" aria-hidden="true">▸</span>
+              <div>
+                <h2>Sermaye (Para Giriş / Çıkış) <span class="tip" data-tip="İpucu: Gerçek getiri = bugünkü değer − net yatırdığın para. Piyasa kazancıyla cebinden eklediğin parayı ayırır; kendini kandırmanın panzehiri budur.">?</span></h2>
+                <span class="chart-sub" id="flowsSub">—</span>
+              </div>
+            </div>
+            <div class="head-actions">
+              <button class="btn ghost sm" id="addWithdrawBtn">− Para Çek</button>
+              <button class="btn primary sm" id="addDepositBtn">+ Para Yatır</button>
+            </div>
+          </div>
+          <div id="flowsList" class="panel-body"></div>
+        </section>
+
+        <section class="panel collapsible" id="alertsPanel">
+          <div class="panel-head">
+            <div class="panel-toggle" data-collapse role="button" tabindex="0" aria-label="Fiyat Alarmları'nı aç/kapat">
+              <span class="collapse-chev" aria-hidden="true">▸</span>
+              <div>
+                <h2>🔔 Fiyat Alarmları <span class="tip" data-tip="Sembol + koşul (altına/üstüne/günlük %) gir; canlı fiyat eşiği geçince ana sayfada uyarı çıkar. Uygulama-içi; e-posta yok.">?</span></h2>
+                <span class="chart-sub" id="alertsSub">—</span>
+              </div>
+            </div>
+          </div>
+          <div class="panel-body" id="alertsList"></div>
+        </section>
+
+        <section class="panel collapsible" id="tradesPanel">
+          <div class="panel-head">
+            <div class="panel-toggle" data-collapse role="button" tabindex="0" aria-label="İşlem Geçmişi'ni aç/kapat">
+              <span class="collapse-chev" aria-hidden="true">▸</span>
+              <div>
+                <h2><svg class="h2-ic" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>İşlem Geçmişi <span class="tip" data-tip="İpucu: Realize K/Z yalnızca satışlardan hesaplanır; alışlar 'Alış' etiketiyle listelenir. Satışta alış fiyatını boş bırak — pozisyonun gerçek ortalama maliyeti kullanılır.">?</span></h2>
+                <span class="chart-sub" id="tradesSub">—</span>
+              </div>
+            </div>
+            <div class="head-actions">
+              <div class="range-tabs" id="tradeRangeTabs">
+                <button class="rt" data-trange="1w">Haftalık</button>
+                <button class="rt" data-trange="1m">Aylık</button>
+                <button class="rt" data-trange="3m">3 Aylık</button>
+                <button class="rt" data-trange="1y">Yıllık</button>
+                <button class="rt active" data-trange="all">Tümü</button>
+              </div>
+              <button class="btn primary sm" id="addTradeBtn">+ İşlem Ekle</button>
+            </div>
+          </div>
+          <div id="allTrades" class="panel-body"></div>
+        </section>
+
+        <section class="panel collapsible" id="r26Panel">
+          <div class="panel-head">
+            <div class="panel-toggle" data-collapse role="button" tabindex="0" aria-label="Realize Kazançları'nı aç/kapat">
+              <span class="collapse-chev" aria-hidden="true">▸</span>
+              <div>
+                <h2><span id="r26Title">2026</span> Realize Kazançları <span class="tip" data-tip="İpucu: Broker'ın 'Yatırım geliri / Beyana tabi kazanç' sayfasından girilen, yıl içinde kapattığın pozisyonların realize kâr/zararı (₺). Hisse + opsiyon dahil. Net rakam beyan döneminde işine yarar; vergi danışmanı değildir.">?</span></h2>
+                <span class="chart-sub" id="r26Sub">—</span>
+              </div>
+            </div>
+            <div class="head-actions">
+              <select id="r26Year" class="r26-year-sel" title="Vergi yılı seç"></select>
+              <button class="btn ghost sm" id="exportR26Btn" title="Seçili yılın beyan özeti + CSV çıktısı">📄 Beyan</button>
+              <button class="btn ghost sm" id="syncR26Btn" title="İşlem Geçmişi'ndeki tüm satışları (henüz eklenmemiş olanları) bu listeye yaz">↻ Satışları senkronla</button>
+              <button class="btn primary sm" id="addR26Btn">+ Kayıt Ekle</button>
+            </div>
+          </div>
+          <div id="realized2026" class="panel-body"></div>
+        </section>
+        </div>
+      </section>
+
+      <!-- ===== Görünüm: Swing Defteri ===== -->
+      <section class="view" id="view-swingdefteri">
+        <div class="view-head">
+          <h2 class="view-title">💹 Swing Defteri <span class="tip" data-tip="İpucu: Her pozisyon stop ve hedef fiyatla açılır — planı olmayan işleme girme. Kural 1: önce sermayeyi koru. Aylık hedef bir tavan değil, disiplin çıpasıdır.">?</span></h2>
+          <span class="view-sub">Açtığın swing pozisyonlarını stop/hedefle kaydet · aylık kazancı 12 ay boyunca hedefe karşı izle</span>
+        </div>
+        <div class="seg-tabs swing-seg" role="tablist">
+          <button class="seg" data-swseg="swingdefteri" role="tab">💹 Defter</button>
+          <button class="seg" data-swseg="buyume" role="tab">💎 Büyüme</button>
+        </div>
+        <div id="swingDeck"></div>
+      </section>
+
+      <!-- ===== Görünüm: Büyüme (Sıfır-Maliyet Motoru) ===== -->
+      <section class="view" id="view-buyume">
+        <div class="view-head">
+          <h2 class="view-title">💎 Büyüme <span class="tip" data-tip="İpucu: Tezin — kâra geçince ana parayı çek, kârı 'bedava pozisyon' olarak bırak. Etkin maliyet = pozisyon maliyeti − o hisseden realize ettiğin kâr. Sıfır ya da altına inince pozisyon risksizdir; artık sadece kazanırsın.">?</span></h2>
+          <span class="view-sub">Ana paranı geri al, kârı bedava bindir · sıfır maliyetli pozisyonlarla portföyü büyüt</span>
+        </div>
+        <div class="seg-tabs swing-seg" role="tablist">
+          <button class="seg" data-swseg="swingdefteri" role="tab">💹 Defter</button>
+          <button class="seg" data-swseg="buyume" role="tab">💎 Büyüme</button>
+        </div>
+        <div id="growthDeck"></div>
+      </section>
+
+      <!-- ===== Görünüm: Radar (Sinyaller · Tarama · Swing tek çatı) ===== -->
+      <section class="view" id="view-radar">
+        <div class="view-head">
+          <h2 class="view-title">🎯 Radar <span class="tip" data-tip="İpucu: Skor bir başlangıç filtresi, alım emri değil. En iyi fırsat, stop planı yazılabilen fırsattır — 'Şimdi girilebilir' şeridi hem yüksek skorlu hem taze swing tetiği olanları toplar.">?</span></h2>
+          <span class="view-sub">Tüm hisseler tek skorlu listede — tarama · swing kurulumları · Cuma Hoca · sinyaller birleşik</span>
+        </div>
+
+        <section class="panel" id="radarBoardPanel">
+          <div class="panel-head">
+            <div>
+              <h2>📈 Birleşik Hisse Radarı <span class="tip" data-tip="İpucu: Tek liste — 0–100 skor omurga, üstüne ⚡ swing kurulumu, ⭐ Cuma Hoca üyeliği ve 📡 taze tetik rozetleri. Satıra tıkla: swing planı (giriş/stop/hedef) + skorun nereden geldiği açılır.">?</span></h2>
+              <span class="chart-sub" id="radarBoardSub">Skor · momentum · analist · bilanço · insider · swing kurulumu — tek birleşik liste</span>
+            </div>
+            <div class="head-actions">
+              <div class="range-tabs" id="radarTiers">
+                <button class="rt active" data-tier="all">Tümü</button>
+                <button class="rt" data-tier="strong">Güçlü Al</button>
+                <button class="rt" data-tier="buy">Al</button>
+                <button class="rt" data-tier="watch">İzle</button>
+                <button class="rt" data-tier="swing">⚡ Swing kurulumu</button>
+                <button class="rt" data-tier="cuma">⭐ Cuma Hoca</button>
+              </div>
+              <input id="watchInput" class="watch-input" placeholder="Sembol ekle" maxlength="8" />
+              <button class="btn primary sm" id="addWatchBtn">+ İzle</button>
+              <button class="btn ghost sm" id="radarRefreshBtn" title="Yeniden tara">↻ Tara</button>
+            </div>
+          </div>
+          <div class="radar-groupbar" id="radarGroups"></div>
+          <details class="radar-legend">
+            <summary>ℹ️ Skor, rozetler &amp; hedef fiyat nasıl hesaplanıyor?</summary>
+            <div class="rl-body">
+              <p>Her hisse <b>0–100 birleşik alınabilirlik skoru</b> alır. Skor 4 bileşenin ağırlıklı ortalamasıdır
+                (eksik veri sıfır sayılmaz; yalnızca gelen bileşenler üzerinden normalize edilir):</p>
+              <ul>
+                <li><b>Momentum (≈%30)</b> — 3a/6a getiri, 52 haftalık zirveye yakınlık, 200 günlük ortalamaya göre konum, RSI.</li>
+                <li><b>Analist (≈%25)</b> — al/tut/sat konsensüsü ve analist sayısı.</li>
+                <li><b>Bilanço &amp; büyüme (≈%30)</b> — gelir &amp; kâr büyümesi, net marj, PEG (büyümeye göre ucuzluk).</li>
+                <li><b>Insider (≈%15)</b> — son 90 günde yönetici açık piyasa alım/satımları.</li>
+              </ul>
+              <p><b>Rozetler:</b> <b>⚡ Swing</b> — teknik kurulum var (giriş/stop/hedef; satıra tıkla). <b>⭐ Cuma Hoca</b> — TradingView “Strong Uptrend Stocks” listesinde. <b>📡</b> — bugün girilebilir taze tetik (kırılım/geri çekilme). <b>Sıralama</b>: yüksek skor + taze swing tetiği en üste (“Şimdi girilebilir”).</p>
+              <p><b>Karar kademesi:</b> 68+ Güçlü Al · 50–67 Al · 34–49 İzle · &lt;34 Nötr.</p>
+              <p><b>🎯 Model hedef fiyat (12 ay):</b> analist hedefi ücretsiz veride olmadığından, hedef
+                <i>şeffaf bir model</i> ile tahmin edilir: temel büyümenin ~yarısı + analist eğilimi + trend + değerleme (PEG)
+                düzeltmeleri. Beklenen getiri −%25…+%70 ile sınırlanır. <b>Analist konsensüsü değil, model tahminidir</b> —
+                yatırım tavsiyesi değildir.</p>
+              <p><b>🔥 SICAK / ↑ YÜKSELİŞ / ↓ DÜŞÜŞ:</b> kısa (1a) + orta (3a) vade momentum ve trend yönüne göre etiketlenir.</p>
+            </div>
+          </details>
+          <div id="radarBoard"></div>
+        </section>
+      </section>
+
+      <!-- ===== Görünüm: Analiz ===== -->
+      <section class="view" id="view-analiz">
+        <div class="view-head"><h2 class="view-title">🔬 Analiz</h2>
+          <span class="view-sub">Risk & performans karnesi · getiri dökümü · ileri tahmin · ısı haritası · sektör · vergi</span></div>
+
+        <section class="analiz-summary" id="analizSummary"></section>
+
+        <section class="panel" id="aiDeskPanel">
+          <div class="panel-head">
+            <div><h2>🤖 Claude Tez Masası <span class="tip" data-tip="Seçtiğin pozisyon için Claude, panonun kendi verisiyle (fiyat, QM teknik analizi, notların, bilanço takvimi, haberler) çekişmeli bir yatırım tezi üretir: boğa + ayı tezi, karar, güven, kırmızı çizgiler. 24 saat önbelleklenir. Yatırım tavsiyesi değildir.">?</span></h2>
+              <span class="chart-sub">boğa/ayı tezi · karar · kırmızı çizgiler · seviyeler — kendi verinle</span></div>
+          </div>
+          <div id="aiDeskBox"></div>
+        </section>
+
+        <section class="panel panel-prorisk">
+          <div class="panel-head">
+            <div><h2>🎓 Profesyonel Risk Masası <span class="tip" data-tip="Kurumsal portföy yöneticilerinin kullandığı araçlar: pozisyonlar arası korelasyon (gerçek çeşitlendirme), VaR (Value at Risk — istatistiksel max kayıp), beta (piyasa duyarlılığı), her pozisyonun toplam riske katkısı, risk-bazlı pozisyon boyutu ve faktör maruziyeti. Son 90 işlem gününün getiri serisinden hesaplanır.">?</span></h2>
+              <span class="chart-sub">Korelasyon · VaR · beta · risk katkısı · pozisyon boyutlama · tahsis · faktör</span></div>
+          </div>
+          <div id="proRiskBox"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <div><h2>📐 Risk &amp; Performans Karnesi <span class="tip" data-tip="İpucu: Getiri tek başına yanıltır — onu aldığın riskle birlikte oku. Sharpe &gt; 1 sağlıklı, &lt; 0 kötü. Maksimum düşüş, geçmişte en kötü anda ne kadar zarara katlandığını gösterir; konsantrasyon düşükse tek hisse seni batıramaz (Kural 1). Günlük net-değer kayıtlarından hesaplanır, ek API yok.">?</span></h2>
+              <span class="chart-sub">Sharpe · volatilite · maksimum düşüş · CAGR · konsantrasyon — günlük net değerden</span></div>
+          </div>
+          <div id="riskBox"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <div><h2>📡 Pozisyon Teknikleri <span class="tip" data-tip="İpucu: Tuttuğun her hissenin trader gözüyle anlık durumu. RSI &gt; 70 ısınmış (geri çekilme riski), &lt; 30 aşırı satım. Trend, fiyatın 50/200 günlük ortalamalara göre yeri. Açık R = açık kârın kaç 'risk birimi' — stopuna göre ne kadar önde olduğun. Teknikler günlük taramadan gelir.">?</span></h2>
+              <span class="chart-sub">RSI · trend · 52h zirveye uzaklık · analist hedef · açık R — pozisyon bazında</span></div>
+          </div>
+          <div id="posTechBox"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <div><h2>🗺️ Portföy Isı Haritası <span class="tip" data-tip="İpucu: Büyük ve koyu kırmızı kutu = günün asıl riski. Küçük kutulardaki sert düşüş toplamı az etkiler; önce büyük kutuların rengine bak.">?</span></h2>
+              <span class="chart-sub">Kutu boyutu = pozisyon büyüklüğü · renk = günlük değişim</span></div>
+          </div>
+          <div id="heatmap" class="heatmap"></div>
+        </section>
+
+        <div class="analiz-grid">
+          <section class="panel">
+            <div class="panel-head">
+              <div><h2>🏭 Sektör / Tema Dağılımı <span class="tip" data-tip="İpucu: Aynı temadaki hisseler aynı haberle birlikte düşer. Tek tema %40'ı aşarsa Kural 1 Bekçisi uyarır — çeşitlendirme bedava sigortadır.">?</span></h2>
+                <span class="chart-sub">Yoğunlaşma riski</span></div>
+            </div>
+            <div id="sectorBox"></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <div><h2>🗓️ Haftalık Özet <span class="tip" data-tip="İpucu: Günlük gürültüyü atlayıp haftalık eğilime bak — bir hisse 3 haftadır her hafta düşüyorsa bu 'fırsat' değil trend olabilir.">?</span></h2>
+                <span class="chart-sub">Son 5 işlem günü</span></div>
+            </div>
+            <div id="weeklyBox"></div>
+          </section>
+        </div>
+
+        <section class="panel">
+          <div class="panel-head">
+            <div><h2>💵 Realize Özeti — sembol başına <span class="tip" data-tip="Her sembolün tüm kapanmış işlemlerinin net kâr/zararı (hisse + opsiyon dahil). Ground-truth: aracı kurumun 'Yatırım geliri' ekranı. Halen elinde olmayan kapanmış semboller de listede.">?</span></h2>
+              <span class="chart-sub">Aracı kurum 'Yatırım geliri' ile birebir · kapanmış semboller dahil · düzeltme Vergi panelinden</span></div>
+          </div>
+          <div id="realizeSummary" class="panel-body"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <div><h2>🧾 Vergi / Realize K/Z — Yıllık <span class="tip" data-tip="İpucu: Yurt dışı hisse kazancı Türkiye'de beyana tabi olabilir (alış-satış kuru farkı dahil). Yıl bitmeden realize toplamına bakıp planlama yap; bu panel beyan dönemi için kayıt tutar.">?</span></h2>
+              <span class="chart-sub">İşlem geçmişinden otomatik</span></div>
+          </div>
+          <div id="taxBox"></div>
+        </section>
+
+      </section>
+
+      <!-- ===== Görünüm: Alfa Avı (AI oyun-parası swing challenge) ===== -->
+      <section class="view" id="view-challenge">
+        <div class="view-head"><h2 class="view-title">🏆 Alfa Avı</h2>
+          <p class="view-sub">$1.500 oyun parası · yapay zekânın kendi swing işlemleri · Radar + Swing evreninin tamamı taranır · gerçek fiyatlarla otomatik ölçülür (gerçek portföyden bağımsız)</p>
+        </div>
+        <section class="panel"><div id="challengeBox"><div class="rk-empty">Alfa Avı yükleniyor…</div></div></section>
+      </section>
+
+      <!-- ===== Görünüm: Günlük Raporlar ===== -->
+      <section class="view" id="view-raporlar">
+        <section class="panel" id="dayAnalysisPanel">
+          <div class="panel-head">
+            <div><h2>🧭 Günlük İşlem Analizi <span class="tip" data-tip="O gün yaptığın her alım/satım tek tek, o işlemin KENDİ verisiyle değerlendirilir (EMA konumu, ADR, satış sonrası fiyat, plan uyumu, boyut). Şablon nasihat değil — sayılarla dürüst karne. Swing ve uzun vade satışları ayrı etiketlenir.">?</span></h2>
+            <span class="chart-sub">bugün doğru mu yaptın? — işlem işlem, veriyle</span></div>
+            <input type="date" id="daDate" class="da-date" />
+          </div>
+          <div id="dayAnalysisBox"><div class="rk-empty">İşlem analizi yükleniyor…</div></div>
+        </section>
+        <section class="panel" id="reportsPanel">
+          <div class="panel-head">
+            <h2>📋 Günlük Raporlar <span class="tip" data-tip="İpucu: Raporları geriye doğru oku — dünkü sinyal bugün ne yaptı? Sistemin dünden bugüne tutarlılığı, yarınki karara güven verir.">?</span></h2>
+            <span class="chart-sub">Sinyaller · rejim · kâr-al · swing</span>
+          </div>
+          <div id="reports"></div>
+        </section>
+      </section>
+
+      <footer class="foot">
+        Veriler: Finnhub & Twelve Data (hisse) · TEFAS (fon) · Truncgil (altın & döviz). Yatırım tavsiyesi değildir.
+      </footer>
+    </main>
+  </div>
+
+  <!-- Varlık ekle/düzenle modal -->
+  <div class="modal-bg" id="modalBg" hidden>
+    <div class="modal">
+      <h3 id="modalTitle">Varlık Ekle</h3>
+      <form id="holdingForm">
+        <input type="hidden" name="id" />
+        <div class="type-pills" id="typePills" role="tablist" aria-label="Varlık türü">
+          <button type="button" class="type-pill active" data-type="stock">📈 Hisse</button>
+          <button type="button" class="type-pill" data-type="fund">🏦 Fon</button>
+          <button type="button" class="type-pill" data-type="gold">🪙 Altın</button>
+        </div>
+        <select name="type" id="typeSel" hidden>
+          <option value="stock">Hisse (ABD)</option>
+          <option value="fund">Fon (TEFAS)</option>
+          <option value="gold">Altın (gram)</option>
+        </select>
+        <div class="hz-pills" id="hzPills" role="tablist" aria-label="Hisse vadesi">
+          <button type="button" class="hz-pill active" data-hz="long">🌱 Uzun Vade</button>
+          <button type="button" class="hz-pill" data-hz="swing">⚡ Swing (stop / hedef)</button>
+        </div>
+        <input type="hidden" name="horizon" id="hzSel" value="long" />
+        <label>Sembol / Fon Kodu
+          <input name="symbol" id="symbolInput" placeholder="örn. NVDA, PHE, GRA" list="symbolSuggestions" autocomplete="off" required />
+        </label>
+        <datalist id="symbolSuggestions"></datalist>
+        <label>Ad (opsiyonel)
+          <input name="name" id="nameInput" placeholder="sembol yazınca otomatik gelir" />
+        </label>
+        <div class="field-row">
+          <label id="qtyLabel">Adet / Miktar
+            <input name="quantity" type="number" step="any" placeholder="0" required />
+          </label>
+          <label id="ayarLabel" style="display:none">Ayar
+            <select name="ayar">
+              <option value="24">24 Ayar</option>
+              <option value="22">22 Ayar</option>
+              <option value="18">18 Ayar</option>
+              <option value="14">14 Ayar</option>
+            </select>
+          </label>
+          <label id="costUsdLabel">Ödenen Fiyat ($ / birim)
+            <input name="costUSD" type="number" step="any" placeholder="0" />
+          </label>
+        </div>
+        <details class="adv-fields" id="advFields">
+          <summary>⚙️ Gelişmiş <span>stop · hedef · maliyet ₺ · tarih</span></summary>
+          <div class="adv-body">
+            <div class="field-row">
+              <label id="planStopLabel">Plan: Stop ($ · ops.)
+                <input name="planStop" type="number" step="any" placeholder="boş = oto. iz süren stop" />
+              </label>
+              <label id="planTargetLabel">Plan: Hedef ($ · ops.)
+                <input name="planTarget" type="number" step="any" placeholder="kâr-al seviyesi" />
+              </label>
+            </div>
+            <label>Maliyet Bedeli (₺ toplam · ops.)
+              <input name="costTRY" type="number" step="any" placeholder="0" />
+            </label>
+            <label id="dateLabel" style="display:none">Alındığı Tarih
+              <input name="purchaseDate" type="date" />
+            </label>
+          </div>
+        </details>
+        <div class="modal-actions">
+          <button type="button" class="btn ghost" id="cancelBtn">İptal</button>
+          <button type="submit" class="btn primary">Kaydet</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Opsiyon ekle/düzenle modal -->
+  <div class="modal-bg" id="optionModalBg" hidden>
+    <div class="modal">
+      <h3 id="optionModalTitle">Opsiyon Ekle</h3>
+      <form id="optionForm">
+        <input type="hidden" name="id" />
+        <div class="tf-grid">
+          <label>Dayanak (hisse)
+            <input name="underlying" placeholder="örn. NVDA" required />
+          </label>
+          <label>Tür
+            <select name="kind">
+              <option value="call">CALL (Alım)</option>
+              <option value="put">PUT (Satım)</option>
+            </select>
+          </label>
+          <label>Yön
+            <select name="direction">
+              <option value="long">Long — primi ben ödedim (aldım)</option>
+              <option value="short">Short — primi ben aldım (sattım)</option>
+            </select>
+          </label>
+          <label>Vade (expiry)
+            <input name="expiry" type="date" />
+          </label>
+          <label>Strike ($)
+            <input name="strike" type="number" step="any" placeholder="0" />
+          </label>
+          <label>Kontrat sayısı
+            <input name="contracts" type="number" step="any" placeholder="1" required />
+          </label>
+          <label>Giriş primi ($ / hisse)
+            <input name="premiumPaid" type="number" step="any" placeholder="0" required />
+          </label>
+          <label>Güncel prim ($ / hisse)
+            <input name="currentPremium" type="number" step="any" placeholder="broker'dan bak" />
+          </label>
+        </div>
+        <label>Not (opsiyonel)
+          <input name="note" placeholder="örn. kapalı çağrı stratejisi" />
+        </label>
+        <p class="modal-note">1 kontrat = 100 hisse. Güncel primi elle güncelleyerek anlık K/Z'yi takip edersin. Güncel primi girilen opsiyonların değeri toplam portföye dahil edilir.</p>
+        <div class="modal-actions">
+          <button type="button" class="btn ghost" id="optionCancelBtn">İptal</button>
+          <button type="submit" class="btn primary">Kaydet</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Swing pozisyon ekle/düzenle modal -->
+  <div class="modal-bg" id="swingModalBg" hidden>
+    <div class="modal">
+      <h3 id="swingModalTitle">Swing Pozisyonu Aç</h3>
+      <form id="swingForm">
+        <input type="hidden" name="id" />
+        <label class="sw-pick-lbl">Portföyden seç <i>pozisyonunu swing olarak işaretle</i>
+          <select id="swPick" name="pick">
+            <option value="">— Portföy pozisyonu seç (veya aşağıya elle sembol gir) —</option>
+          </select>
+        </label>
+        <div class="tf-grid">
+          <label>Sembol
+            <input name="symbol" placeholder="örn. NVDA" list="symbolSuggestions" autocomplete="off" required />
+          </label>
+          <label>Adet (hisse)
+            <input name="qty" type="number" step="any" placeholder="0" required />
+            <span class="sw-avail" id="swAvail"></span>
+          </label>
+        </div>
+        <div class="sw-costmode">
+          <span class="sw-costmode-lbl">Maliyet girişi</span>
+          <div class="seg-mini" id="swCostMode" role="tablist">
+            <button type="button" class="segm active" data-cm="unit">Birim ($/hisse)</button>
+            <button type="button" class="segm" data-cm="total">Toplam ($)</button>
+            <button type="button" class="segm" data-cm="auto">Portföyden al</button>
+          </div>
+        </div>
+        <div class="tf-grid">
+          <label id="swEntryWrap">Giriş maliyeti ($/hisse)
+            <input name="entry" type="number" step="any" placeholder="0" />
+          </label>
+          <label id="swTotalWrap" hidden>Toplam maliyet ($)
+            <input name="totalCost" type="number" step="any" placeholder="adet × birim" />
+          </label>
+          <label>Açılış tarihi
+            <input name="openedAt" type="date" />
+          </label>
+        </div>
+        <div class="tf-grid">
+          <label>Stop fiyatı ($) <i>ops.</i>
+            <input name="stop" type="number" step="any" placeholder="zarar-kes" />
+          </label>
+          <label>Hedef / çıkış fiyatı ($) <i>ops.</i>
+            <input name="target" type="number" step="any" placeholder="kâr-al" />
+          </label>
+        </div>
+        <label>Not (opsiyonel)
+          <input name="note" placeholder="örn. 50g ortalama üstü kırılım" />
+        </label>
+        <div class="sw-calc">
+          <div class="sw-calc-head">
+            <span>💰 Pozisyon boyutu</span>
+            <label class="sw-calc-risk">Risk %
+              <input id="swRiskPct" name="riskPct" type="number" step="0.1" min="0.1" max="10" value="1" />
+            </label>
+          </div>
+          <div class="sw-calc-body" id="swCalcBody"></div>
+          <button type="button" class="btn ghost sm" id="swCalcUse" disabled>↧ Önerilen adedi kullan</button>
+        </div>
+        <p class="modal-note" id="swingRiskNote">Stop ve hedef gir → risk/ödül oranını ve pozisyon riskini otomatik hesaplarım. Planı olmayan işleme girme.</p>
+        <div class="sw-qm-check" id="swQmCheck" hidden></div>
+        <div class="sw-exit-plan" id="swExitPlan" hidden></div>
+        <div class="modal-actions">
+          <button type="button" class="btn ghost" id="swingCancelBtn">İptal</button>
+          <button type="submit" class="btn primary">Kaydet</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Swing aylık hedef düzenle modal -->
+  <div class="modal-bg" id="swingGoalBg" hidden>
+    <div class="modal">
+      <h3>Aylık Geçim Hedefi</h3>
+      <form id="swingGoalForm">
+        <div class="tf-grid">
+          <label>Alt hedef ($/ay)
+            <input name="min" type="number" step="any" min="0" placeholder="600" required />
+          </label>
+          <label>Üst hedef ($/ay)
+            <input name="max" type="number" step="any" min="0" placeholder="700" required />
+          </label>
+          <label>Risk sermayesi ($) <i>ops.</i>
+            <input name="capital" type="number" step="any" min="0" placeholder="boş = canlı portföy" />
+          </label>
+          <label>İşlem başına risk (%)
+            <input name="riskPct" type="number" step="0.1" min="0.1" max="10" placeholder="1" />
+          </label>
+        </div>
+        <p class="modal-note">Aylık realize swing kazancı bu banda göre ölçülür. Risk sermayesi + risk% pozisyon boyutu hesaplayıcısını besler (boş bırakırsan portföy değerin kullanılır).</p>
+        <div class="modal-actions">
+          <button type="button" class="btn ghost" id="swingGoalCancelBtn">İptal</button>
+          <button type="submit" class="btn primary">Kaydet</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Swing sat / ana para çek modal -->
+  <div class="modal-bg" id="swingCloseBg" hidden>
+    <div class="modal">
+      <h3 id="swingCloseTitle">Sat / Ana Para Çek</h3>
+      <form id="swingCloseForm">
+        <input type="hidden" name="id" />
+        <div class="tf-grid">
+          <label>Satılacak adet
+            <input name="shares" type="number" step="any" min="0" placeholder="0" required />
+          </label>
+          <label>Çıkış fiyatı ($)
+            <input name="exitPrice" type="number" step="any" placeholder="0" required />
+          </label>
+          <label>Tarih
+            <input name="closedAt" type="date" />
+          </label>
+        </div>
+        <p class="modal-note" id="swingCloseNote">Realize ettiğin kâr/zarar aylık kazanca eklenir.</p>
+        <div class="modal-actions">
+          <button type="button" class="btn ghost" id="swingCloseCancelBtn">İptal</button>
+          <button type="submit" class="btn primary">Kapat &amp; Kaydet</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Nakit düzenleme modal -->
+  <div class="modal-bg" id="cashModalBg" hidden>
+    <div class="modal">
+      <h3>Nakit & Döviz Düzenle</h3>
+      <form id="cashForm">
+        <label>Nakit TL (₺)<input name="tl" type="number" step="any" /></label>
+        <label>Dolar ($)<input name="usd" type="number" step="any" /></label>
+        <label>Euro (€)<input name="eur" type="number" step="any" /></label>
+        <div class="modal-actions">
+          <button type="button" class="btn ghost" id="cashCancelBtn">İptal</button>
+          <button type="submit" class="btn primary">Kaydet</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Realize edilen işlemler modal -->
+  <div class="modal-bg" id="tradeModalBg" hidden>
+    <div class="modal wide">
+      <h3 id="tradeTitle">Hisse İşlemleri</h3>
+      <p class="modal-note">Sattığın hisseleri buraya gir; realize ettiğin kâr/zararı geriye dönük takip et.</p>
+
+      <div class="trade-summary" id="tradeSummary"></div>
+
+      <div class="trade-list-wrap">
+        <table class="trade-table">
+          <thead><tr>
+            <th class="l">Tarih</th><th class="l">Sembol</th><th>Adet</th>
+            <th>Alış $</th><th>Satış $</th><th>Realize K/Z</th><th>%</th><th></th>
+          </tr></thead>
+          <tbody id="tradeRows"></tbody>
+        </table>
+      </div>
+
+      <form id="tradeForm" class="trade-form">
+        <input type="hidden" name="name" />
+        <div class="tf-grid">
+          <label>İşlem Türü
+            <select name="kind" id="tfKind">
+              <option value="sell">Satış</option>
+              <option value="buy">Alış</option>
+            </select>
+          </label>
+          <label>Sembol<input name="symbol" placeholder="örn. CIFR" required style="text-transform:uppercase" /></label>
+          <label>Tarih<input name="date" type="date" required /></label>
+          <label id="tfSharesLabel">Adet (satılan)<input name="shares" type="number" step="any" placeholder="0" required /></label>
+          <label id="tfBuyLabel">Alış Fiyatı ($)<input name="buyUSD" type="number" step="any" placeholder="0" /></label>
+          <label id="tfSellLabel">Satış Fiyatı ($)<input name="sellUSD" type="number" step="any" placeholder="0" /></label>
+          <label class="tf-note">Not (opsiyonel)<input name="note" placeholder="örn. kısmi satış" /></label>
+        </div>
+        <p class="modal-note">Varlıklar otomatik senkronlanır: <b>Alış</b> pozisyona eklenir (ort. maliyet ağırlıklı güncellenir), <b>Satış</b> pozisyondan düşülür; tamamı satılırsa varlık listeden kalkar. Satışta alış fiyatını boş bırakırsan pozisyonun ortalama maliyeti kullanılır.</p>
+        <div class="tf-preview" id="tfPreview">Realize: —</div>
+        <div class="modal-actions">
+          <button type="button" class="btn ghost" id="tradeCloseBtn">Kapat</button>
+          <button type="submit" class="btn primary">İşlem Ekle</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Para giriş/çıkış modal -->
+  <div class="modal-bg" id="flowModalBg" hidden>
+    <div class="modal">
+      <h3 id="flowTitle">Para Yatır</h3>
+      <p class="modal-note">Yatırdığın / çektiğin parayı kaydet. “Net sermaye = yatırılan − çekilen” baz alınarak <b>gerçek getirin</b> hesaplanır. İlk kez kullanıyorsan, bugüne kadar yatırdığın toplam parayı tek bir “Yatırma” olarak gir.</p>
+      <form id="flowForm">
+        <input type="hidden" name="type" value="deposit" />
+        <div class="tf-grid">
+          <label>Tarih<input name="date" type="date" required /></label>
+          <label>Para Birimi
+            <select name="currency">
+              <option value="TL">₺ TL</option>
+              <option value="USD">$ Dolar</option>
+              <option value="EUR">€ Euro</option>
+            </select>
+          </label>
+          <label>Tutar<input name="amount" type="number" step="any" placeholder="0" required /></label>
+          <label class="tf-note">Not (opsiyonel)<input name="note" placeholder="örn. banka havalesi" /></label>
+        </div>
+        <div class="tf-preview" id="flowPreview">≈ ₺ —</div>
+        <div class="modal-actions">
+          <button type="button" class="btn ghost" id="flowCancelBtn">İptal</button>
+          <button type="submit" class="btn primary">Kaydet</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 2026 realize kazanç kaydı modal -->
+  <div class="modal-bg" id="r26ModalBg" hidden>
+    <div class="modal">
+      <h3>Realize Kaydı</h3>
+      <p class="modal-note">Broker'ın “Yatırım geliri” sayfasındaki bir kalemi gir: açıklama + realize tutar (₺). Zarar için eksi (−) yaz. Tarih, kaydın vergi yılını belirler.</p>
+      <form id="r26Form">
+        <label>Açıklama / Sembol
+          <input name="label" placeholder="örn. MU veya SOFI $28 Call 30/01/26" required />
+        </label>
+        <label>Realize Tutar (₺)
+          <input name="amountTRY" type="number" step="any" placeholder="örn. 29776.76 veya -10213.34" required />
+        </label>
+        <label>Tarih
+          <input name="date" type="date" />
+        </label>
+        <div class="modal-actions">
+          <button type="button" class="btn ghost" id="r26CancelBtn">İptal</button>
+          <button type="submit" class="btn primary">Kaydet</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Vergi beyanı özeti + CSV çıktısı modal -->
+  <div class="modal-bg" id="taxModalBg" hidden>
+    <div class="modal tax-modal">
+      <div class="tax-head">
+        <div>
+          <h3 class="tax-title">📄 <span id="taxYearTitle">2026</span> Yılı Realize Beyan Özeti</h3>
+          <p class="tax-sub">Yıl içinde kapatılan pozisyonların gerçekleşen (realize) kâr/zararı — ₺ cinsinden.</p>
+        </div>
+        <button type="button" class="btn icon tax-close" id="taxCloseBtn" title="Kapat">✕</button>
+      </div>
+
+      <div id="taxBody"></div>
+
+      <div class="tax-note">
+        ℹ️ <b>Nasıl okunur?</b> <b>Net realize</b>, yıl içinde sattıkların üzerinden cebe giren/çıkan gerçek sonuçtur (açık pozisyonların kâğıt kârı dahil değildir).
+        Yurt dışı borsa işlemlerinde beyan, her satışın <b>işlem günündeki TL kuru</b> üzerinden hesaplanır — bu özet o mantığı kullanır.
+        Kazanç ve zararlar yıl içinde mahsup edilebilir. <b>Bu bir vergi danışmanlığı değildir</b>; resmî beyan için kendi broker dökümünle ve mali müşavirinle teyit et.
+      </div>
+
+      <div class="modal-actions tax-actions">
+        <button type="button" class="btn ghost" id="taxPrintBtn">🖨️ Yazdır</button>
+        <button type="button" class="btn primary" id="taxCsvBtn">⬇️ CSV indir</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Swing grafik modalı (TradingView Lightweight Charts) -->
+  <div class="chart-modal-bg" id="chartModalBg" hidden>
+    <div class="chart-modal">
+      <div class="cm-head">
+        <div class="cm-title">
+          <span class="cm-sym" id="cmSym">—</span>
+          <span class="cm-name" id="cmName"></span>
+          <span class="cm-price" id="cmPrice"></span>
+        </div>
+        <div class="cm-actions">
+          <button class="btn ghost sm" id="cmMeasure" title="Ölçüm aracı — grafikte basılı tutup çek, ne kadar yükselir/düşer göster">📏 Ölç</button>
+          <button class="btn ghost sm" id="cmRefresh" title="Teknik analizi en güncel veriyle yeniden hesapla">↻ Analizi Yenile</button>
+          <a class="btn ghost sm" id="cmTV" href="#" target="_blank" rel="noopener" title="TradingView'da aç">TradingView ↗</a>
+          <button class="btn ghost sm" id="cmClose">✕ Kapat</button>
+        </div>
+      </div>
+      <div class="cm-body">
+        <div class="cm-chart" id="cmChart"></div>
+        <aside class="cm-side" id="cmSide"></aside>
+      </div>
+      <div class="cm-legend" id="cmLegend"></div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

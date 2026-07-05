@@ -1,0 +1,29 @@
+# NOT — "veriler geç geliyor" sorununun ana sebebi free plan'ın spin-down'ıdır:
+# 15 dk istek gelmezse Render sunucuyu uyutur, sonraki ilk ziyarette 30-60 sn
+# uyanma gecikmesi olur. Sunucu içi self-ping bunu ÇÖZMEZ (process uyurken
+# timer da durur). Çözüm: DIŞ bir uptime servisi /healthz'i ~10 dk'da bir
+# pinglesin → sunucu hiç uyumaz. Kurulum adımları README'de ("Uyku/Spin-down").
+# Gereken env değişkenleri (Render → Environment): FINNHUB_API_KEY,
+# TWELVEDATA_API_KEY, AUTH_PASSWORD, AUTH_SECRET. Fiyat anahtarları eksikse
+# Render IP'sinde Yahoo bloklu olduğundan fiyatlar boş/çok geç gelir.
+#
+# KALICI VERİ — Render free disk GEÇİCİdir; her deploy/uykuda portfolio.json
+# git'teki sürüme sıfırlanır → elle eklenen hisse/işlem KAYBOLUR. Çözüm: ücretsiz
+# Postgres bağla, DATABASE_URL env'i ekle (Supabase ÖNERİLİR):
+#   1) supabase.com → ücretsiz proje aç (DB şifresi belirle).
+#   2) Project → "Connect" (üst bar) → "Session pooler" sekmesindeki URI'yi kopyala
+#      (postgresql://postgres.<ref>:<ŞİFRE>@aws-...pooler.supabase.com:5432/postgres).
+#      [PASSWORD] yazan yere kendi DB şifreni yaz.
+#   3) Render → servis → Environment → DATABASE_URL = bu URI → Save (otomatik deploy).
+# Loglarda "Kalıcı depolama → Postgres ✓" görünür. Boş DB ilk açılışta commit'li
+# portfolio.json'dan tohumlanır; sonra DB tek kaynaktır. Neon/herhangi Postgres de
+# çalışır (kod standart pg kullanır). Tanımsızsa eski dosya modu (geliştirme).
+services:
+  - type: web
+    name: portfoy-takip
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    autoDeploy: true
+    healthCheckPath: /healthz

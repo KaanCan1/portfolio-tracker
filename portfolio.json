@@ -1,0 +1,118 @@
+{
+  "_README": "DEMO DATA — obviously fake starter portfolio so the app runs out of the box. With DATABASE_URL set, this file only seeds an empty database on first boot; afterwards Postgres is the source of truth.",
+  "holdings": [
+    {
+      "id": "demo-1",
+      "type": "stock",
+      "symbol": "NVDA",
+      "name": "NVIDIA Corp",
+      "quantity": 10,
+      "costUSD": 120,
+      "planStop": 118,
+      "planTarget": 165
+    },
+    {
+      "id": "demo-2",
+      "type": "stock",
+      "symbol": "AAPL",
+      "name": "Apple Inc",
+      "quantity": 15,
+      "costUSD": 188,
+      "planStop": 179,
+      "planTarget": 220
+    },
+    {
+      "id": "demo-3",
+      "type": "stock",
+      "symbol": "MU",
+      "name": "Micron Technology",
+      "quantity": 20,
+      "costUSD": 95,
+      "planStop": 88,
+      "planTarget": 130
+    }
+  ],
+  "cash": {
+    "tl": 15000,
+    "usd": 500,
+    "eur": 0
+  },
+  "trades": [
+    {
+      "id": "demo-t1",
+      "kind": "buy",
+      "symbol": "NVDA",
+      "shares": 10,
+      "buyUSD": 120,
+      "sellUSD": 0,
+      "date": "2026-05-12",
+      "note": "breakout attempt"
+    },
+    {
+      "id": "demo-t2",
+      "kind": "sell",
+      "symbol": "PLTR",
+      "shares": 50,
+      "buyUSD": 24.5,
+      "sellUSD": 28.1,
+      "date": "2026-06-19",
+      "note": "took profit at target"
+    }
+  ],
+  "alerts": [
+    {
+      "id": "demo-a1",
+      "symbol": "NVDA",
+      "type": "above",
+      "value": 150
+    }
+  ],
+  "notes": [
+    {
+      "id": "demo-n1",
+      "symbol": "MU",
+      "label": "alacaklarim",
+      "text": "Planning to add $300-500 this week — HBM demand strong, holding the 20MA.",
+      "createdAt": "2026-07-01T09:00:00.000Z",
+      "updatedAt": "2026-07-01T09:00:00.000Z"
+    },
+    {
+      "id": "demo-n2",
+      "symbol": "",
+      "label": "tez",
+      "text": "Core thesis: once a position is in profit, pull the initial capital and let the profit ride for free (zero-cost position).",
+      "createdAt": "2026-06-20T09:00:00.000Z",
+      "updatedAt": "2026-06-20T09:00:00.000Z"
+    }
+  ],
+  "swingTrades": [
+    {
+      "id": "demo-sw1",
+      "symbol": "PLTR",
+      "entry": 24.5,
+      "stop": 22,
+      "target": 31,
+      "qty": 50,
+      "openedAt": "2026-06-02",
+      "status": "closed",
+      "exitPrice": 28.1,
+      "closedAt": "2026-06-19",
+      "note": "flag breakout"
+    },
+    {
+      "id": "demo-sw2",
+      "symbol": "NVDA",
+      "entry": 120,
+      "stop": 118,
+      "target": 165,
+      "qty": 10,
+      "openedAt": "2026-05-12",
+      "status": "open",
+      "note": "trend continuation"
+    }
+  ],
+  "options": [],
+  "realized2026": [],
+  "snapshots": [],
+  "signals": {}
+}

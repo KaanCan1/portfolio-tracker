@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Giriş · Portfolio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="icon" href="/brand.svg" type="image/svg+xml" />
+  <style>
+    /* Slate Pro — uygulamayla aynı tasarım dili */
+    :root { --bg:#f1f4f8; --card:#fff; --ink:#172029; --muted:#5a6571; --green:#2f8f57; --green-d:#1b6a40; --line:#dfe4ea; --hero:#172029; --red:#d83a2f; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family:"Plus Jakarta Sans",system-ui,sans-serif;
+      background: radial-gradient(95% 70% at 100% -10%, rgba(47,143,87,.06), transparent 55%),
+                  linear-gradient(180deg,#f4f7fa 0%,#edf1f5 100%);
+      color:var(--ink); min-height:100vh; display:grid; place-items:center; -webkit-font-smoothing:antialiased; padding:24px; }
+    .login { width:100%; max-width:380px; background:var(--card); border:1px solid var(--line); border-radius:18px; box-shadow:0 2px 12px -4px rgba(16,30,22,.12), 0 26px 60px -30px rgba(12,24,18,.25); padding:34px 30px 28px; }
+    .brand { display:flex; align-items:center; gap:13px; margin-bottom:24px; }
+    .logo { width:46px; height:46px; border-radius:13px; display:grid; place-items:center; color:#eafff3;
+      background:linear-gradient(155deg,#17714a 0%,#0c4531 55%,#0a3826 100%);
+      box-shadow:0 8px 20px -8px rgba(3,26,16,.4), inset 0 1px 0 rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.06); }
+    .logo svg { width:56%; height:56%; display:block; }
+    .brand h1 { font-size:19px; font-weight:700; letter-spacing:-.3px; }
+    .brand span { font-size:12.5px; color:var(--muted); font-weight:500; }
+    label { display:block; font-size:13px; font-weight:600; color:var(--muted); margin-bottom:8px; }
+    .field { position:relative; }
+    input { width:100%; font:inherit; font-size:15px; padding:12px 44px 12px 14px; border:1px solid var(--line); border-radius:11px; background:#f7f9fc; transition:.15s; }
+    input:focus { outline:none; border-color:var(--green); box-shadow:0 0 0 3px rgba(123,200,155,.35); background:#fff; }
+    .toggle { position:absolute; right:6px; top:50%; transform:translateY(-50%); border:none; background:none; cursor:pointer; color:var(--muted); font-size:13px; font-weight:600; padding:6px 9px; border-radius:8px; }
+    .toggle:hover { background:var(--bg); color:var(--ink); }
+    button.submit { width:100%; margin-top:18px; border:none; cursor:pointer; font:inherit; font-weight:700; font-size:15px; padding:13px; border-radius:11px;
+      background:linear-gradient(180deg,#36a062 0%,var(--green) 60%,#2a8350 100%); color:#fff;
+      box-shadow:0 4px 12px -5px rgba(28,106,64,.55), inset 0 1px 0 rgba(255,255,255,.18); transition:.15s; }
+    button.submit:hover { background:linear-gradient(180deg,#3aa869 0%,#2d8a54 100%); transform:translateY(-1px); }
+    button.submit:active { transform:none; }
+    button.submit:disabled { opacity:.6; cursor:default; transform:none; }
+    .err { margin-top:14px; font-size:13px; font-weight:600; color:var(--red); background:#fce6e3; border:1px solid #ecc9c4; border-radius:10px; padding:10px 13px; display:none; }
+    .err.show { display:block; }
+    .foot { margin-top:22px; font-size:11.5px; color:var(--muted); text-align:center; line-height:1.5; }
+  </style>
+</head>
+<body>
+  <form class="login" id="loginForm" autocomplete="off">
+    <div class="brand">
+      <div class="logo" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 15.5 L10 9.5 L13.5 13 L20 6.5" />
+          <path d="M15 6.5 H20 V11.5" />
+        </svg>
+      </div>
+      <div>
+        <h1>Portfolio</h1>
+        <span>Devam etmek için şifreni gir</span>
+      </div>
+    </div>
+    <label for="pw">Şifre</label>
+    <div class="field">
+      <input type="password" id="pw" name="password" placeholder="••••••••" required autofocus />
+      <button type="button" class="toggle" id="toggle">Göster</button>
+    </div>
+    <button type="submit" class="submit" id="submitBtn">Giriş Yap</button>
+    <div class="err" id="err">Şifre hatalı, tekrar dene.</div>
+    <div class="foot">Bu pano kişiseldir. Oturum 30 gün açık kalır.</div>
+  </form>
+
+  <script>
+    const form = document.getElementById("loginForm");
+    const pw = document.getElementById("pw");
+    const err = document.getElementById("err");
+    const btn = document.getElementById("submitBtn");
+    document.getElementById("toggle").addEventListener("click", () => {
+      const show = pw.type === "password";
+      pw.type = show ? "text" : "password";
+      document.getElementById("toggle").textContent = show ? "Gizle" : "Göster";
+      pw.focus();
+    });
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      err.classList.remove("show");
+      btn.disabled = true; btn.textContent = "Kontrol ediliyor…";
+      try {
+        const r = await fetch("/api/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ password: pw.value }),
+        });
+        if (r.ok) { window.location.href = "/"; return; }
+        err.classList.add("show");
+      } catch { err.textContent = "Bağlantı hatası, tekrar dene."; err.classList.add("show"); }
+      btn.disabled = false; btn.textContent = "Giriş Yap";
+      pw.select();
+    });
+  </script>
+</body>
+</html>

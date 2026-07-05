@@ -1,0 +1,8 @@
+{
+  "_README": "Piyasayi hareketlendiren makro olaylar. Tarihleri guncel tutmak senin sorumlulugunda (resmi takvimden dogrula). Istihdam Raporu (NFP) otomatik hesaplanir, buraya eklemene gerek yok. format: YYYY-MM-DD. Fed/CPI tarihlerini https://www.federalreserve.gov ve BLS takviminden kontrol et.",
+  "events": [
+    { "date": "2026-06-17", "title": "Fed faiz kararı (FOMC)", "impact": "yuksek" },
+    { "date": "2026-06-10", "title": "ABD Enflasyon (CPI)", "impact": "yuksek" },
+    { "date": "2026-07-29", "title": "Fed faiz kararı (FOMC)", "impact": "yuksek" }
+  ]
+}

@@ -1,0 +1,22 @@
+# secrets & sessions — never commit
+.env
+auth.json
+
+# runtime data & caches (regenerated; portfolio.json in repo is DEMO seed only)
+candle_cache.json
+news_cache.json
+price_cache.json
+vix_cache.json
+fng_cache.json
+opp_history.json
+radar.json
+signal_ledger.json
+challenge_ledger.json
+
+node_modules/
+*.log
+.DS_Store
+__pycache__/
+*.pyc
+.playwright-mcp/
+.claude/
