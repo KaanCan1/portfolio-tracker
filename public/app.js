@@ -5345,7 +5345,7 @@ async function renderChallenge() {
 
   // OPEN kartları
   const openCards = open.length ? open.slice().sort((a, b) => new Date(b.date) - new Date(a.date)).map((p) => `
-    <div class="ch-card open"><div class="ch-card-top"><div class="ch-card-sym"><b>${p.sym}</b> ${setup()}</div>
+    <div class="ch-card open" data-chsym="${p.sym}" title="Grafiği aç — ${p.sym}"><div class="ch-card-top"><div class="ch-card-sym"><b>${p.sym}</b> ${setup()}</div>
       <div class="ch-card-r"><span class="ch-pill open">Açık</span><span class="ch-card-pnl ${cls(p.unreal)}">${p.unreal >= 0 ? "+" : ""}${fmtUSD0(p.unreal)}</span><span class="ch-card-rr ${cls(p.R)}">${p.R >= 0 ? "+" : ""}${p.R}R</span></div></div>
     <div class="ch-card-dt">${chFmtD(p.date)} → açık · ~${fmtUSD0(p.notional)} pozisyon</div>
     <div class="ch-why">${chEntryWhy(p)}</div><div class="ch-why">${chExitWhy(p)}</div></div>`).join("") : "";
@@ -5355,7 +5355,7 @@ async function renderChallenge() {
   const wlAct = wl.filter((w) => w.status !== "off");
   const wlOff = wl.filter((w) => w.status === "off");
   const wpill = (st) => st === "ready" ? `<span class="ch-pill win">Tetik bölgesi</span>` : st === "forming" ? `<span class="ch-pill open">Oluşuyor</span>` : `<span class="ch-pill neu">Trendde</span>`;
-  const wlRows = wlAct.map((w) => `<tr class="wl-${w.status}">
+  const wlRows = wlAct.map((w) => `<tr class="wl-${w.status}" data-chsym="${w.sym}" title="Grafiği aç — ${w.sym}">
     <td class="l"><b>${w.sym}</b></td><td>${wpill(w.status)}</td><td>${fmtUSD(w.close)}</td>
     <td class="${w.distPct <= 0 ? "win-c" : ""}">${w.distPct <= 0 ? "EMA8 üstü ✓" : `+${w.distPct.toFixed(1)}%`}</td>
     <td>${fmtUSD(w.entry)} · <span class="loss-c">${fmtUSD0(w.stop)}</span> · <span class="win-c">${fmtUSD0(w.tp2)}</span></td>
@@ -6837,7 +6837,7 @@ function qmSizeLine(qm) {
   return `<div class="cm-qm-size">📐 <b>Boyut:</b> ${parts}${cashWarn}</div>`;
 }
 
-const VIEWS = ["notlar", "genel", "swingdefteri", "buyume", "radar", "analiz", "challenge", "raporlar"];
+const VIEWS = ["notlar", "genel", "swingdefteri", "buyume", "radar", "analiz", "challenge", "raporlar", "profil"];
 const SWING_SEGS = ["swingdefteri", "buyume"]; // ⚡ Swing hub segmentleri (tek nav altında)
 // Eski hash'ler (yer imi/paylaşılan link) → birleşik Radar + ilgili filtre
 let pendingRadarFilter = null;
@@ -6863,6 +6863,7 @@ function showView(name) {
   window.scrollTo(0, 0);
   $("#sidebar")?.classList.remove("open"); const _bd = $("#navBackdrop"); if (_bd) _bd.hidden = true; // mobilde menüyü kapat
   if (name === "notlar") loadNotes();
+  if (name === "profil") renderProfil();
   if (name === "analiz") renderAnaliz();
   if (name === "challenge") renderChallenge();
   if (name === "raporlar") renderDayAnalysis();
@@ -6936,10 +6937,8 @@ document.addEventListener("click", (e) => {
 $("#nav")?.addEventListener("click", (e) => {
   const b = e.target.closest(".nav-item");
   if (!b) return;
-  // ⚡ Swing nav → son kullanılan segmenti hatırla (varsayılan Defter)
-  let v = b.dataset.view;
-  if (v === "swingdefteri") { try { v = localStorage.getItem("swingSeg") || "swingdefteri"; } catch {} if (!SWING_SEGS.includes(v)) v = "swingdefteri"; }
-  showView(v);
+  // ⚡ Swing nav → HER ZAMAN Defter açılır (segment bar'dan Büyüme'ye geçilebilir)
+  showView(b.dataset.view);
 });
 // Swing hub segment bar (Defter / Qullamaggie / Büyüme)
 document.addEventListener("click", (e) => {
@@ -7015,7 +7014,7 @@ document.addEventListener("click", (e) => {
 });
 try { if (localStorage.getItem("privacy") === "1") document.body.classList.add("privacy"); } catch {}
 
-showView((location.hash || "").slice(1)); // hash'e göre açılış görünümü
+showView("genel"); // açılış HER ZAMAN Genel Bakış (hash oturum içi gezinmede çalışmaya devam eder)
 loadSentiment(); // duygu kartları anında gelsin (ağır portföy çağrısını beklemeden)
 loadRadarBoard(); // hisse radarı bağımsız yüklensin
 loadSwingBoard(); // swing tarayıcı bağımsız yüklensin
@@ -7035,6 +7034,7 @@ const NOTE_LABELS = {
 let NOTES = [];
 let NOTE_FILTER = "all";
 let NOTE_EDIT_ID = null;
+let NOTE_QUERY = "";
 function noteEsc(s) {
   return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
@@ -7074,40 +7074,77 @@ function renderNotes() {
   }
   const list = $("#notesList");
   if (!list) return;
-  const items = NOTES.filter((n) => NOTE_FILTER === "all" || n.label === NOTE_FILTER);
+  const q = NOTE_QUERY.trim().toLowerCase();
+  let items = NOTES.filter((n) => NOTE_FILTER === "all" || n.label === NOTE_FILTER);
+  if (q) items = items.filter((n) =>
+    (n.text || "").toLowerCase().includes(q) || (n.title || "").toLowerCase().includes(q) || (n.symbol || "").toLowerCase().includes(q));
+  items = items.slice().sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0)); // pinli üste (tarih sırası korunur)
   if (!items.length) {
-    list.innerHTML = `<div class="notes-empty">${NOTES.length ? "Bu etikette not yok." : "Henüz not yok — yukarıdan ilk fikrini ekle."}</div>`;
+    list.innerHTML = `<div class="notes-empty">${q ? "Aramayla eşleşen not yok." : NOTES.length ? "Bu etikette not yok." : "Henüz not yok — yukarıdan ilk fikrini ekle."}</div>`;
     return;
   }
+  // Sembolün güncel fiyatı (portföyde varsa) — "yazıldığında → şimdi" deltası için
+  const liveOf = (sym) => {
+    const h = (STATE?.holdings || []).find((x) => String(x.symbol).toUpperCase() === sym);
+    return Number(h?.live?.price ?? h?.live?.priceUSD) || null;
+  };
   list.innerHTML = items.map((n) => {
     const lb = NOTE_LABELS[n.label] || { name: n.label, cls: "gen" };
     const edited = n.updatedAt && n.createdAt && n.updatedAt.slice(0, 10) !== n.createdAt.slice(0, 10);
-    return `<div class="note-card note-${lb.cls}" data-id="${n.id}">
+    // Fiyat damgası: not anındaki fiyat + bugünkü fiyatla yüzde fark (tez ölçümü)
+    let priceChip = "";
+    if (n.symbol && n.priceAtUSD) {
+      const now = liveOf(n.symbol);
+      const d = now ? ((now / n.priceAtUSD - 1) * 100) : null;
+      priceChip = `<span class="note-price" title="Not yazıldığındaki fiyat → güncel">✍️ $${(+n.priceAtUSD).toFixed(2)}${d != null ? ` → <b class="${d >= 0 ? "win-c" : "loss-c"}">${d >= 0 ? "+" : ""}${d.toFixed(1)}%</b>` : ""}</span>`;
+    }
+    const conv = n.conviction ? `<span class="note-conv" title="Güven ${n.conviction}/5">${"●".repeat(n.conviction)}${"○".repeat(5 - n.conviction)}</span>` : "";
+    const levels = (n.targetUSD || n.stopUSD)
+      ? `<div class="note-levels">${n.targetUSD ? `<span>hedef <b class="win-c">$${(+n.targetUSD).toFixed(2)}</b></span>` : ""}${n.stopUSD ? `<span>stop <b class="loss-c">$${(+n.stopUSD).toFixed(2)}</b></span>` : ""}</div>` : "";
+    return `<div class="note-card note-${lb.cls}${n.pinned ? " pinned" : ""}" data-id="${n.id}">
       <div class="note-card-top">
         <span class="note-tag note-${lb.cls}">${noteEsc(lb.name)}</span>
-        ${n.symbol ? `<span class="note-symbol">${noteEsc(n.symbol)}</span>` : ""}
+        ${n.symbol ? `<span class="note-symbol" data-chsym="${noteEsc(n.symbol)}" title="Grafiği aç — ${noteEsc(n.symbol)}">${noteEsc(n.symbol)} ↗</span>` : ""}
+        ${conv}${priceChip}
         <span class="note-date">${noteDateLabel(n.createdAt)}${edited ? " · düzenlendi" : ""}</span>
         <span class="note-actions">
+          <button type="button" class="note-act${n.pinned ? " pin-on" : ""}" data-note-pin title="${n.pinned ? "Sabitlemeyi kaldır" : "Üste sabitle"}">${n.pinned ? "📌" : "📍"}</button>
           <button type="button" class="note-act" data-note-edit>Düzenle</button>
           <button type="button" class="note-act danger" data-note-del>Sil</button>
         </span>
       </div>
+      ${n.title ? `<div class="note-title">${noteEsc(n.title)}</div>` : ""}
       <div class="note-body">${noteEsc(n.text).replace(/\n/g, "<br>")}</div>
+      ${levels}
+      ${n.url ? `<a class="note-src" href="${noteEsc(n.url)}" target="_blank" rel="noopener noreferrer">🔗 kaynak</a>` : ""}
     </div>`;
   }).join("");
 }
 function resetNoteForm() {
   NOTE_EDIT_ID = null;
   $("#noteForm")?.reset();
+  const ex = $("#noteExtra"); if (ex) ex.hidden = true;
+  $("#noteMore")?.setAttribute("aria-expanded", "false");
   const sub = $("#noteSubmit"); if (sub) sub.textContent = "Not ekle";
   const cancel = $("#noteCancel"); if (cancel) cancel.hidden = true;
-  const hint = $("#noteHint"); if (hint) hint.textContent = "Enter ile kaydet · Shift+Enter yeni satır";
+  const hint = $("#noteHint"); if (hint) hint.textContent = "Enter ile kaydet · Shift+Enter yeni satır · not anındaki fiyat otomatik damgalanır";
 }
+$("#noteMore")?.addEventListener("click", () => {
+  const ex = $("#noteExtra"); if (!ex) return;
+  ex.hidden = !ex.hidden;
+  $("#noteMore")?.setAttribute("aria-expanded", String(!ex.hidden));
+});
+$("#noteSearch")?.addEventListener("input", (e) => { NOTE_QUERY = e.target.value || ""; renderNotes(); });
 $("#noteForm")?.addEventListener("submit", async (e) => {
   e.preventDefault();
   const text = ($("#noteText")?.value || "").trim();
   if (!text) { $("#noteText")?.focus(); return; }
-  const body = { text, symbol: $("#noteSymbol")?.value || "", label: $("#noteLabel")?.value || "genel" };
+  const body = {
+    text, symbol: $("#noteSymbol")?.value || "", label: $("#noteLabel")?.value || "genel",
+    title: $("#noteTitle")?.value || "", targetUSD: $("#noteTarget")?.value || null,
+    stopUSD: $("#noteStop")?.value || null, conviction: $("#noteConv")?.value || null,
+    url: $("#noteUrl")?.value || "",
+  };
   const sub = $("#noteSubmit"); if (sub) sub.disabled = true;
   try {
     const url = NOTE_EDIT_ID ? `/api/notes/${NOTE_EDIT_ID}` : "/api/notes";
@@ -7129,12 +7166,28 @@ $("#notesList")?.addEventListener("click", async (e) => {
   const card = e.target.closest(".note-card"); if (!card) return;
   const id = card.dataset.id;
   const note = NOTES.find((n) => n.id === id);
+  if (e.target.closest("[data-note-pin]")) {
+    if (!note) return;
+    try {
+      await fetch(`/api/notes/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pinned: !note.pinned }) });
+      await loadNotes();
+    } catch {}
+    return;
+  }
   if (e.target.closest("[data-note-edit]")) {
     if (!note) return;
     NOTE_EDIT_ID = id;
     if ($("#noteSymbol")) $("#noteSymbol").value = note.symbol || "";
     if ($("#noteLabel")) $("#noteLabel").value = note.label || "genel";
     if ($("#noteText")) $("#noteText").value = note.text || "";
+    if ($("#noteTitle")) $("#noteTitle").value = note.title || "";
+    if ($("#noteTarget")) $("#noteTarget").value = note.targetUSD ?? "";
+    if ($("#noteStop")) $("#noteStop").value = note.stopUSD ?? "";
+    if ($("#noteConv")) $("#noteConv").value = note.conviction ?? "";
+    if ($("#noteUrl")) $("#noteUrl").value = note.url || "";
+    const hasExtra = !!(note.title || note.targetUSD || note.stopUSD || note.conviction || note.url);
+    const ex = $("#noteExtra"); if (ex) ex.hidden = !hasExtra;
+    $("#noteMore")?.setAttribute("aria-expanded", String(hasExtra));
     const sub = $("#noteSubmit"); if (sub) sub.textContent = "Güncelle";
     const cancel = $("#noteCancel"); if (cancel) cancel.hidden = false;
     const hint = $("#noteHint"); if (hint) hint.textContent = "Notu düzenliyorsun";
@@ -7334,4 +7387,54 @@ function renderDayAiCard(rec) {
 document.addEventListener("click", (e) => {
   if (e.target.closest("[data-da-ai]")) daRunAi(false);
   else if (e.target.closest("[data-da-ai-fresh]")) daRunAi(true);
+});
+
+/* Alfa Avı: izleme listesi satırı / açık pozisyon kartı → grafik modalı (QM analiziyle) */
+document.addEventListener("click", (e) => {
+  const el = e.target.closest("[data-chsym]");
+  if (el) openChartModal(el.dataset.chsym, { horizon: "swing" });
+});
+
+/* ====================== Profil (kişisel bilgiler + bildirim e-postası) ====================== */
+const PF_FIELDS = { pfName: "name", pfTitle: "title", pfEmail: "email", pfPhone: "phone", pfAddress: "address", pfBroker: "broker", pfCurrency: "baseCurrency", pfAbout: "about" };
+function pfInitials(name) {
+  const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
+  return parts.length ? parts.slice(0, 2).map((p) => p[0].toUpperCase()).join("") : "?";
+}
+function pfPaint(p) {
+  const av = $("#profileAvatar"); if (av) av.textContent = pfInitials(p.name);
+  const nm = $("#profileWhoName"); if (nm) nm.textContent = p.name || "İsim eklenmedi";
+  const tt = $("#profileWhoTitle"); if (tt) tt.textContent = p.title || "";
+  const meta = $("#profileMeta");
+  if (meta) meta.innerHTML = [
+    p.email ? `<div>📧 ${noteEsc(p.email)} <span class="pf-hint">uyarı mailleri</span></div>` : `<div class="pf-hint">📧 e-posta ekle → Bekçi uyarıları oraya gitsin</div>`,
+    p.broker ? `<div>🏦 ${noteEsc(p.broker)}</div>` : "",
+    `<div>💱 taban: ${noteEsc(p.baseCurrency || "TRY")}</div>`,
+    p.updatedAt ? `<div class="pf-hint">güncelleme: ${noteEsc(String(p.updatedAt).slice(0, 10))}</div>` : "",
+  ].filter(Boolean).join("");
+  const sv = $("#pfSavedAt"); if (sv) sv.textContent = p.updatedAt ? `Son kayıt: ${String(p.updatedAt).slice(0, 16).replace("T", " ")}` : "";
+}
+async function renderProfil() {
+  try {
+    const p = await (await fetch("/api/profile")).json();
+    for (const [inputId, key] of Object.entries(PF_FIELDS)) {
+      const el = document.getElementById(inputId);
+      if (el) el.value = p[key] ?? (key === "baseCurrency" ? "TRY" : "");
+    }
+    pfPaint(p || {});
+  } catch {}
+}
+$("#profileForm")?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const body = {};
+  for (const [inputId, key] of Object.entries(PF_FIELDS)) body[key] = document.getElementById(inputId)?.value ?? "";
+  const btn = $("#pfSave"); if (btn) btn.disabled = true;
+  try {
+    const r = await fetch("/api/profile", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const p = await r.json();
+    if (!r.ok) throw new Error(p.error || "kaydedilemedi");
+    pfPaint(p);
+    toast("Profil kaydedildi");
+  } catch (err) { toast("Profil kaydedilemedi: " + err.message, "warn"); }
+  finally { if (btn) btn.disabled = false; }
 });

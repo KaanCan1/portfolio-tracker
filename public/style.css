@@ -2820,3 +2820,71 @@ ul.sw-qm-list li b { font-weight: 700; color: var(--ink); }
 .ai-tomorrow { padding: 10px 13px; border-radius: var(--radius-sm); background: var(--green-soft); border: 1px solid var(--green-line); color: var(--green-d); font-size: 13px; margin-bottom: 12px; }
 
 @media (max-width: 720px) { .ai-cols { grid-template-columns: 1fr; } .ai-meta { margin-left: 0; width: 100%; } }
+
+/* ==================== Notlar v2 (derin not) + Profil + tıklanabilir grafik ==================== */
+/* Alfa Avı: tıklanabilir satır/kart */
+.wl-table tbody tr[data-chsym] { cursor: pointer; }
+.wl-table tbody tr[data-chsym]:hover td { background: var(--green-soft); }
+.ch-card[data-chsym] { cursor: pointer; transition: border-color .15s ease, box-shadow .18s ease; }
+.ch-card[data-chsym]:hover { border-color: var(--green-line); box-shadow: 0 10px 28px -14px rgba(16,30,22,.28); }
+
+/* Notlar: composer detay alanları */
+.note-more-btn { flex: none; }
+.note-extra { margin-top: 10px; display: flex; flex-direction: column; gap: 9px; }
+.note-extra input, .note-extra select {
+  font: inherit; font-size: 13.5px; padding: 9px 12px; width: 100%;
+  border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--bg3); color: var(--ink);
+}
+.note-extra input:focus, .note-extra select:focus { outline: none; border-color: var(--green); background: var(--card); box-shadow: var(--ring); }
+.note-extra-row { display: grid; grid-template-columns: 110px 110px 150px 1fr; gap: 9px; }
+.notes-toolbar { margin-bottom: 10px; }
+.note-search {
+  font: inherit; font-size: 13.5px; width: 100%; padding: 10px 14px;
+  border: 1px solid var(--line); border-radius: 999px; background: var(--card); color: var(--ink);
+}
+.note-search:focus { outline: none; border-color: var(--green); box-shadow: var(--ring); }
+
+/* Notlar: kart zenginleştirmeleri */
+.note-card.pinned { border-color: var(--green-line); background: linear-gradient(180deg, #fbfdfb 0%, #fff 40%); }
+.note-title { font-size: 14px; font-weight: 700; margin-bottom: 4px; letter-spacing: -.1px; }
+.note-symbol[data-chsym] { cursor: pointer; }
+.note-symbol[data-chsym]:hover { color: var(--green-d); text-decoration: underline; }
+.note-conv { font-size: 10.5px; letter-spacing: 1px; color: var(--green-d); }
+.note-price { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.note-levels { display: flex; gap: 14px; margin-top: 8px; font-size: 12.5px; color: var(--muted); }
+.note-levels b { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.note-src { display: inline-block; margin-top: 7px; font-size: 12px; color: var(--sky); text-decoration: none; }
+.note-src:hover { text-decoration: underline; }
+.note-act.pin-on { color: var(--green-d); }
+.win-c { color: var(--green-d); } .loss-c { color: var(--red); }
+
+/* Profil */
+.profile-grid { display: grid; grid-template-columns: 260px 1fr; gap: 14px; align-items: start; }
+.profile-card { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; padding: 24px 18px; }
+.profile-avatar {
+  width: 76px; height: 76px; border-radius: 50%; display: grid; place-items: center;
+  font-size: 27px; font-weight: 800; color: #eafff3; letter-spacing: .5px;
+  background: linear-gradient(155deg, #17714a 0%, #0c4531 55%, #0a3826 100%);
+  box-shadow: 0 10px 24px -10px rgba(3,26,16,.45), inset 0 1px 0 rgba(255,255,255,.15);
+}
+.profile-who { display: flex; flex-direction: column; gap: 2px; }
+.profile-who b { font-size: 16px; letter-spacing: -.2px; }
+.profile-who-sub { font-size: 12.5px; color: var(--muted); }
+.profile-meta { display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; color: var(--ink2); width: 100%; border-top: 1px solid var(--line); padding-top: 12px; margin-top: 2px; text-align: left; }
+.pf-hint { font-size: 11px; color: var(--muted); font-weight: 500; }
+.profile-form { padding: 18px; }
+.pf-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 13px; }
+.pf-grid label { display: flex; flex-direction: column; gap: 6px; font-size: 12px; font-weight: 700; color: var(--ink2); }
+.pf-grid .pf-wide { grid-column: 1 / -1; }
+.pf-grid input, .pf-grid select, .pf-grid textarea {
+  font: inherit; font-size: 13.5px; font-weight: 500; padding: 10px 12px; width: 100%;
+  border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--bg3); color: var(--ink); resize: vertical;
+}
+.pf-grid input:focus, .pf-grid select:focus, .pf-grid textarea:focus { outline: none; border-color: var(--green); background: var(--card); box-shadow: var(--ring); }
+.profile-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; }
+.nav-profil { margin-top: auto; } /* Profil nav'ın en altına yaslanır */
+
+@media (max-width: 860px) {
+  .profile-grid { grid-template-columns: 1fr; }
+  .note-extra-row { grid-template-columns: 1fr 1fr; }
+}

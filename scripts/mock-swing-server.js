@@ -394,7 +394,7 @@ function swingMockItems() {
 
 // Hisse Notları önizleme defteri (bellek-içi) — server.js data.notes ile aynı şekil
 let notes = [
-  { id: "note-a", symbol: "MU", label: "alacaklarim", text: "MU'ya bu hafta 300-500$ arası eklemeyi düşünüyorum — HBM talebi güçlü, 20MA'da tutuyor.", createdAt: iso(Y, M, 2), updatedAt: iso(Y, M, 2) },
+  { id: "note-a", symbol: "MU", label: "alacaklarim", text: "MU'ya bu hafta 300-500$ arası eklemeyi düşünüyorum — HBM talebi güçlü, 20MA'da tutuyor.", title: "HBM döngüsü tezi", targetUSD: 130, stopUSD: 88, conviction: 4, url: "https://example.com/hbm-rapor", pinned: true, priceAtUSD: 95.4, createdAt: iso(Y, M, 2), updatedAt: iso(Y, M, 2) },
   { id: "note-b", symbol: "NVDA", label: "izliyorum", text: "Kırılım öncesi konsolidasyon. ORH 145 üstünü bekle, erken girme.", createdAt: iso(Y, M, 3), updatedAt: iso(Y, M, 3) },
   { id: "note-c", symbol: "AAPL", label: "satacaklarim", text: "Ağırlık %40'a çıktı — 205 civarı kısmi azalt, tek pozisyon riskini düşür.", createdAt: iso(Y, M, 1), updatedAt: iso(Y, M, 1) },
   { id: "note-d", symbol: "", label: "tez", text: "Genel tez: kâra geçince ana parayı çek, kârı bedava bindir. Nakit hedefi %20-25.", createdAt: iso(Y, M - 1, 20), updatedAt: iso(Y, M - 1, 20) },
@@ -402,14 +402,26 @@ let notes = [
 const readBody = async (req) => { let b = ""; for await (const c of req) b += c; return JSON.parse(b || "{}"); };
 const AI_THESES = {}; // Claude AI mock önbelleği (tez / gün denetimi)
 const AI_DAYS = {};
-const normNote = (b, id) => ({
-  id: id || ("note-" + Date.now().toString(36)),
-  symbol: String(b.symbol || "").trim().toUpperCase().replace(/[^A-Z0-9.\-]/g, "").slice(0, 12),
-  label: String(b.label || "genel").trim().slice(0, 24) || "genel",
-  text: String(b.text || "").trim().slice(0, 4000),
-  createdAt: b.createdAt || new Date().toISOString(),
-  updatedAt: new Date().toISOString(),
-});
+const normNote = (b, id) => {
+  const num = (v) => (v === "" || v == null || Number.isNaN(+v) ? null : +v);
+  const symbol = String(b.symbol || "").trim().toUpperCase().replace(/[^A-Z0-9.\-]/g, "").slice(0, 12);
+  return {
+    id: id || ("note-" + Date.now().toString(36)),
+    symbol,
+    label: String(b.label || "genel").trim().slice(0, 24) || "genel",
+    text: String(b.text || "").trim().slice(0, 4000),
+    title: String(b.title || "").trim().slice(0, 120),
+    targetUSD: num(b.targetUSD), stopUSD: num(b.stopUSD),
+    conviction: Math.min(5, Math.max(0, Math.round(num(b.conviction) || 0))) || null,
+    url: String(b.url || "").trim().slice(0, 300),
+    pinned: !!b.pinned,
+    priceAtUSD: num(b.priceAtUSD) ?? (symbol ? num(holdings.find((h) => h.symbol === symbol)?.live?.priceUSD) : null),
+    createdAt: b.createdAt || new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+};
+// Profil önizleme kaydı (bellek-içi)
+let mockProfile = { name: "Demo Kullanıcı", title: "Bireysel yatırımcı", email: "demo@example.com", phone: "", address: "", broker: "Midas", baseCurrency: "TRY", about: "Kural 1: önce sermayeyi koru.", updatedAt: new Date().toISOString() };
 
 const server = createServer(async (req, res) => {
   const url = req.url.split("?")[0];
@@ -433,6 +445,11 @@ const server = createServer(async (req, res) => {
   if (url.startsWith("/api/notes/") && req.method === "DELETE") {
     const id = url.split("/").pop(); notes = notes.filter((x) => x.id !== id);
     res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify({ ok: true })); return;
+  }
+  // Profil API mock
+  if (url === "/api/profile") {
+    if (req.method === "PUT") { const b = await readBody(req); mockProfile = { ...mockProfile, ...b, updatedAt: new Date().toISOString() }; }
+    res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify(mockProfile)); return;
   }
   // Claude AI mock — üretim akışıyla aynı şekil (600ms gecikme, bellek-içi önbellek)
   if (url === "/api/ai/status") {

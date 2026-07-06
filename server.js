@@ -387,8 +387,19 @@ async function chRefreshSectors(universe) {
   } finally { CH_SECT.busy = false; }
 }
 
+// Bildirim alıcısı: env > Profil sekmesindeki e-posta > sabit yedek
+const NOTIFY_FALLBACK = "";
+async function notifyTo(data) {
+  if (process.env.NOTIFY_EMAIL) return process.env.NOTIFY_EMAIL;
+  try {
+    const d = data || await loadData();
+    const p = String(d?.profile?.email || "").trim();
+    if (p) return p;
+  } catch {}
+  return NOTIFY_FALLBACK;
+}
 async function chSendMail(subject, html) {
-  const to = process.env.NOTIFY_EMAIL || "";
+  const to = await notifyTo();
   if (!process.env.RESEND_API_KEY) { console.log(`[Alfa Avı mail — RESEND_API_KEY yok, atlanıyor] ${subject}`); return false; }
   try {
     const r = await fetch("https://api.resend.com/emails", {
@@ -611,7 +622,7 @@ app.get("/api/challenge/status", (_req, res) => res.json({ lastRun: CH_ENG.lastR
 // Elle test maili — RESEND_API_KEY doğru mu anında gör (girişli kullanıcıdan çağrılır)
 app.post("/api/challenge/testmail", async (_req, res) => {
   const sent = await chSendMail("🧪 Alfa Avı test maili", "<p>Resend bağlantısı çalışıyor — pozisyon açılınca/kapanınca bildirim bu adrese gelecek.</p>");
-  res.json({ sent, configured: !!process.env.RESEND_API_KEY, to: process.env.NOTIFY_EMAIL || "" });
+  res.json({ sent, configured: !!process.env.RESEND_API_KEY, to: await notifyTo() });
 });
 
 /* ===== Portföy Bekçisi — ani hareket / risk uyarı e-postaları =====================
@@ -5209,11 +5220,22 @@ app.delete("/api/alerts/:id", async (req, res) => {
  * label serbest anahtar; UI sabit bir set gösterir, backend doğrulamaz. */
 function normalizeNote(b, id) {
   const now = new Date().toISOString();
+  const num = (v) => (v === "" || v == null || Number.isNaN(+v) ? null : +v);
+  const symbol = String(b.symbol || "").trim().toUpperCase().replace(/[^A-Z0-9.\-]/g, "").slice(0, 12);
   return {
     id: id || ("note-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7)),
-    symbol: String(b.symbol || "").trim().toUpperCase().replace(/[^A-Z0-9.\-]/g, "").slice(0, 12),
+    symbol,
     label: String(b.label || "genel").trim().slice(0, 24) || "genel",
     text: String(b.text || "").trim().slice(0, 4000),
+    // Derin not alanları (hepsi opsiyonel — v1 notlar geriye uyumlu)
+    title: String(b.title || "").trim().slice(0, 120),
+    targetUSD: num(b.targetUSD),
+    stopUSD: num(b.stopUSD),
+    conviction: Math.min(5, Math.max(0, Math.round(num(b.conviction) || 0))) || null, // 1-5 güven
+    url: String(b.url || "").trim().slice(0, 300),
+    pinned: !!b.pinned,
+    // Not yazıldığı andaki fiyat — tez sonradan "o gün haklı mıydım?" diye ölçülebilsin
+    priceAtUSD: num(b.priceAtUSD) ?? (symbol ? num(lastStocks[symbol]?.price ?? lastStocks[symbol]?.c) : null),
     createdAt: b.createdAt || now,
     updatedAt: now,
   };
@@ -5251,6 +5273,36 @@ app.delete("/api/notes/:id", async (req, res) => {
     data.notes = (data.notes || []).filter((x) => x.id !== req.params.id);
     await saveData(data);
     res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* ===== Profil — kişisel bilgiler (data.profile, Supabase-kalıcı) ==========
+ * email alanı Bekçi/Alfa Avı bildirim maillerinin alıcısı olur (NOTIFY_EMAIL
+ * env tanımlıysa env öncelikli). Diğer alanlar kişisel kayıt amaçlı. */
+function normalizeProfile(b = {}) {
+  const s = (v, n) => String(v ?? "").trim().slice(0, n);
+  return {
+    name: s(b.name, 80),
+    title: s(b.title, 80),
+    email: s(b.email, 120),
+    phone: s(b.phone, 40),
+    address: s(b.address, 400),
+    broker: s(b.broker, 80),
+    baseCurrency: ["TRY", "USD", "EUR"].includes(b.baseCurrency) ? b.baseCurrency : "TRY",
+    about: s(b.about, 1000),
+    updatedAt: new Date().toISOString(),
+  };
+}
+app.get("/api/profile", async (_req, res) => {
+  try { const data = await loadData(); res.json(data.profile || {}); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.put("/api/profile", async (req, res) => {
+  try {
+    const data = await loadData();
+    data.profile = normalizeProfile({ ...(data.profile || {}), ...req.body });
+    await saveData(data);
+    res.json(data.profile);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
