@@ -184,6 +184,26 @@ async function saveData(data) {
   await writeFile(DATA_FILE, JSON.stringify(data, null, 2), "utf8");
 }
 
+/* Genel anahtar-değer kalıcılığı (app_data tablosu) — Render free diskinin
+ * GEÇİCİ olması yüzünden restart'ta kaybolan önbellekler (radar taraması,
+ * mum önbelleği) Postgres'te de saklanır → uyanınca radar ANINDA dolu gelir,
+ * arka plan taraması sadece tazelemek için çalışır. Dosya modu etkilenmez. */
+async function kvLoad(key) {
+  if (!dbPool) return null;
+  try {
+    const r = await dbPool.query("SELECT value FROM app_data WHERE key=$1", [key]);
+    return r.rows.length ? r.rows[0].value : null;
+  } catch { return null; }
+}
+async function kvSave(key, value) {
+  if (!dbPool) return;
+  try {
+    await dbPool.query(
+      "INSERT INTO app_data(key,value,updated_at) VALUES($1,$2,now()) ON CONFLICT(key) DO UPDATE SET value=$2, updated_at=now()",
+      [key, value]);
+  } catch {}
+}
+
 /* ===== Alfa Avı challenge defteri — SADECE-EKLE (immutable açılışlar) =====
  * Client stratejiyi similar; açılan her plan buraya bir kez yazılır ve bir daha
  * DEĞİŞMEZ. Böylece Radar/Swing evreni değişse de geçmiş kararlar kaymaz
@@ -387,16 +407,10 @@ async function chRefreshSectors(universe) {
   } finally { CH_SECT.busy = false; }
 }
 
-// Bildirim alıcısı: env > Profil sekmesindeki e-posta > sabit yedek
+// Bildirim alıcısı: NOTIFY_EMAIL env > sabit yedek
 const NOTIFY_FALLBACK = "";
-async function notifyTo(data) {
-  if (process.env.NOTIFY_EMAIL) return process.env.NOTIFY_EMAIL;
-  try {
-    const d = data || await loadData();
-    const p = String(d?.profile?.email || "").trim();
-    if (p) return p;
-  } catch {}
-  return NOTIFY_FALLBACK;
+async function notifyTo() {
+  return process.env.NOTIFY_EMAIL || NOTIFY_FALLBACK;
 }
 async function chSendMail(subject, html) {
   const to = await notifyTo();
@@ -1913,6 +1927,16 @@ const pickFund = (obj, keys) => { const o = {}; for (const k of keys) if (obj[k]
     radarCache = raw.items || {};
     radarUpdated = raw.updated || 0;
   } catch {}
+  // Render'da dosya her restart'ta silinir → Postgres kopyası varsa ve daha
+  // yeniyse onu kullan (radar uyanır uyanmaz SON TAM taramayla dolu gelir)
+  try {
+    const db = await kvLoad("radar_cache");
+    if (db?.items && (db.updated || 0) > radarUpdated) {
+      radarCache = db.items;
+      radarUpdated = db.updated || 0;
+      console.log(`  Radar önbelleği Postgres'ten yüklendi (${Object.keys(radarCache).length} sembol)`);
+    }
+  } catch {}
 })();
 
 // Yahoo quoteSummary — fiyat + bilanço/temel metrikler tek çağrıda
@@ -2213,6 +2237,7 @@ async function refreshRadar(fast = false) {
     });
     radarUpdated = Date.now();
     try { await writeFile(RADAR_FILE, JSON.stringify({ updated: radarUpdated, items: radarCache }, null, 2)); } catch {}
+    await kvSave("radar_cache", { updated: radarUpdated, items: radarCache }); // restart-dayanıklı kopya
   } finally {
     radarRefreshing = false;
   }
@@ -2323,11 +2348,20 @@ let candleDirty = false;
 
 async function loadCandleCache() {
   try { Object.assign(candleCache, JSON.parse(await readFile(CANDLE_FILE, "utf8"))); } catch {}
+  // Postgres kopyası: dosya (Render'da geçici) kaybolmuşsa ya da sembol başına
+  // daha taze veri varsa DB kazanır → restart sonrası grafik/radar soğuk başlamaz
+  try {
+    const db = await kvLoad("candle_cache");
+    if (db) for (const [sym, v] of Object.entries(db)) {
+      if (!candleCache[sym] || (v?.t || 0) > (candleCache[sym].t || 0)) candleCache[sym] = v;
+    }
+  } catch {}
 }
 async function persistCandleCache() {
   if (!candleDirty) return;
   candleDirty = false;
   try { await writeFile(CANDLE_FILE, JSON.stringify(candleCache), "utf8"); } catch {}
+  await kvSave("candle_cache", candleCache);
 }
 
 // Tam OHLC mumları — taze önbellek varsa TD çağrısı yapmaz.
@@ -5273,36 +5307,6 @@ app.delete("/api/notes/:id", async (req, res) => {
     data.notes = (data.notes || []).filter((x) => x.id !== req.params.id);
     await saveData(data);
     res.json({ ok: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-/* ===== Profil — kişisel bilgiler (data.profile, Supabase-kalıcı) ==========
- * email alanı Bekçi/Alfa Avı bildirim maillerinin alıcısı olur (NOTIFY_EMAIL
- * env tanımlıysa env öncelikli). Diğer alanlar kişisel kayıt amaçlı. */
-function normalizeProfile(b = {}) {
-  const s = (v, n) => String(v ?? "").trim().slice(0, n);
-  return {
-    name: s(b.name, 80),
-    title: s(b.title, 80),
-    email: s(b.email, 120),
-    phone: s(b.phone, 40),
-    address: s(b.address, 400),
-    broker: s(b.broker, 80),
-    baseCurrency: ["TRY", "USD", "EUR"].includes(b.baseCurrency) ? b.baseCurrency : "TRY",
-    about: s(b.about, 1000),
-    updatedAt: new Date().toISOString(),
-  };
-}
-app.get("/api/profile", async (_req, res) => {
-  try { const data = await loadData(); res.json(data.profile || {}); }
-  catch (e) { res.status(500).json({ error: e.message }); }
-});
-app.put("/api/profile", async (req, res) => {
-  try {
-    const data = await loadData();
-    data.profile = normalizeProfile({ ...(data.profile || {}), ...req.body });
-    await saveData(data);
-    res.json(data.profile);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

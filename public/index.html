@@ -35,7 +35,6 @@
         <button class="nav-item" data-view="analiz"><span class="ni-ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 18h8"/><path d="M3 22h18"/><path d="M14 22a7 7 0 1 0 0-14h-1"/><path d="M9 14h2"/><path d="M9 12a2 2 0 0 1-2-2V6h6v4a2 2 0 0 1-2 2Z"/><path d="M12 6V3a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v3"/></svg></span> Analiz</button>
         <button class="nav-item" data-view="challenge"><span class="ni-ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" x2="4" y1="22" y2="15"/></svg></span> Alfa Avı</button>
         <button class="nav-item" data-view="raporlar"><span class="ni-ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/></svg></span> Günlük Raporlar</button>
-        <button class="nav-item nav-profil" data-view="profil"><span class="ni-ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a7 7 0 0 1 14 0v1"/></svg></span> Profil</button>
       </nav>
 
       <div class="sidebar-foot">
@@ -103,42 +102,6 @@
         </div>
         <div class="notes-filter" id="notesFilter"></div>
         <div class="notes-list" id="notesList"></div>
-      </section>
-
-      <!-- ===== Görünüm: Profil ===== -->
-      <section class="view" id="view-profil">
-        <div class="view-head">
-          <h2 class="view-title">Profil</h2>
-          <span class="view-sub">Kişisel bilgiler · bildirim e-postası · tercihlerin — yalnız sana görünür, kalıcı</span>
-        </div>
-        <div class="profile-grid">
-          <div class="panel profile-card">
-            <div class="profile-avatar" id="profileAvatar">?</div>
-            <div class="profile-who">
-              <b id="profileWhoName">—</b>
-              <span id="profileWhoTitle" class="profile-who-sub"></span>
-            </div>
-            <div class="profile-meta" id="profileMeta"></div>
-          </div>
-          <form class="panel profile-form" id="profileForm" autocomplete="off">
-            <div class="pf-grid">
-              <label>Ad Soyad<input id="pfName" type="text" maxlength="80" placeholder="Kaan Can Kurt" /></label>
-              <label>Unvan / rol<input id="pfTitle" type="text" maxlength="80" placeholder="örn. Yazılım geliştirici · bireysel yatırımcı" /></label>
-              <label>E-posta <span class="pf-hint">Bekçi + Alfa Avı uyarı mailleri bu adrese gider</span><input id="pfEmail" type="email" maxlength="120" placeholder="ornek@mail.com" /></label>
-              <label>Telefon<input id="pfPhone" type="tel" maxlength="40" placeholder="+90 ..." /></label>
-              <label class="pf-wide">Adres<textarea id="pfAddress" rows="2" maxlength="400" placeholder="Şehir / ülke yeterli"></textarea></label>
-              <label>Aracı kurum<input id="pfBroker" type="text" maxlength="80" placeholder="örn. Midas" /></label>
-              <label>Taban para birimi
-                <select id="pfCurrency"><option value="TRY">₺ TRY</option><option value="USD">$ USD</option><option value="EUR">€ EUR</option></select>
-              </label>
-              <label class="pf-wide">Hakkında / yatırım felsefen<textarea id="pfAbout" rows="3" maxlength="1000" placeholder="örn. Kural 1: önce sermayeyi koru. Kâra geçince ana parayı çek, kârı bedava bindir."></textarea></label>
-            </div>
-            <div class="profile-actions">
-              <span class="note-hint" id="pfSavedAt"></span>
-              <button type="submit" class="btn primary sm" id="pfSave">Kaydet</button>
-            </div>
-          </form>
-        </div>
       </section>
 
       <!-- ===== Görünüm: Genel Bakış ===== -->
@@ -441,17 +404,9 @@
         <section class="panel">
           <div class="panel-head">
             <div><h2>💵 Realize Özeti — sembol başına <span class="tip" data-tip="Her sembolün tüm kapanmış işlemlerinin net kâr/zararı (hisse + opsiyon dahil). Ground-truth: aracı kurumun 'Yatırım geliri' ekranı. Halen elinde olmayan kapanmış semboller de listede.">?</span></h2>
-              <span class="chart-sub">Aracı kurum 'Yatırım geliri' ile birebir · kapanmış semboller dahil · düzeltme Vergi panelinden</span></div>
+              <span class="chart-sub">Aracı kurum 'Yatırım geliri' ile birebir · kapanmış semboller dahil</span></div>
           </div>
           <div id="realizeSummary" class="panel-body"></div>
-        </section>
-
-        <section class="panel">
-          <div class="panel-head">
-            <div><h2>🧾 Vergi / Realize K/Z — Yıllık <span class="tip" data-tip="İpucu: Yurt dışı hisse kazancı Türkiye'de beyana tabi olabilir (alış-satış kuru farkı dahil). Yıl bitmeden realize toplamına bakıp planlama yap; bu panel beyan dönemi için kayıt tutar.">?</span></h2>
-              <span class="chart-sub">İşlem geçmişinden otomatik</span></div>
-          </div>
-          <div id="taxBox"></div>
         </section>
 
       </section>
@@ -882,9 +837,14 @@
           <span class="cm-price" id="cmPrice"></span>
         </div>
         <div class="cm-actions">
-          <button class="btn ghost sm" id="cmMeasure" title="Ölçüm aracı — grafikte basılı tutup çek, ne kadar yükselir/düşer göster">📏 Ölç</button>
-          <button class="btn ghost sm" id="cmRefresh" title="Teknik analizi en güncel veriyle yeniden hesapla">↻ Analizi Yenile</button>
-          <a class="btn ghost sm" id="cmTV" href="#" target="_blank" rel="noopener" title="TradingView'da aç">TradingView ↗</a>
+          <div class="cm-tools" role="toolbar" aria-label="Çizim araçları">
+            <button class="cm-tool" id="cmMeasure" title="Ölçüm — basılı tutup çek: % değişim ve gün sayısı">📏 Ölç</button>
+            <button class="cm-tool" id="cmToolTrend" title="Trend çizgisi — iki nokta tıkla, kaydedilir">╱ Trend</button>
+            <button class="cm-tool" id="cmToolHline" title="Yatay seviye — fiyata tıkla, kaydedilir">─ Yatay</button>
+            <button class="cm-tool" id="cmToolClear" title="Bu semboldeki çizimlerini sil">🗑</button>
+          </div>
+          <button class="btn ghost sm" id="cmRefresh" title="Teknik analizi en güncel veriyle yeniden hesapla">↻ Yenile</button>
+          <a class="btn ghost sm" id="cmTV" href="#" target="_blank" rel="noopener" title="TradingView'da aç">TV ↗</a>
           <button class="btn ghost sm" id="cmClose">✕ Kapat</button>
         </div>
       </div>

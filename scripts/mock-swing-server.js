@@ -420,8 +420,6 @@ const normNote = (b, id) => {
     updatedAt: new Date().toISOString(),
   };
 };
-// Profil önizleme kaydı (bellek-içi)
-let mockProfile = { name: "Demo Kullanıcı", title: "Bireysel yatırımcı", email: "demo@example.com", phone: "", address: "", broker: "Midas", baseCurrency: "TRY", about: "Kural 1: önce sermayeyi koru.", updatedAt: new Date().toISOString() };
 
 const server = createServer(async (req, res) => {
   const url = req.url.split("?")[0];
@@ -445,11 +443,6 @@ const server = createServer(async (req, res) => {
   if (url.startsWith("/api/notes/") && req.method === "DELETE") {
     const id = url.split("/").pop(); notes = notes.filter((x) => x.id !== id);
     res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify({ ok: true })); return;
-  }
-  // Profil API mock
-  if (url === "/api/profile") {
-    if (req.method === "PUT") { const b = await readBody(req); mockProfile = { ...mockProfile, ...b, updatedAt: new Date().toISOString() }; }
-    res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify(mockProfile)); return;
   }
   // Claude AI mock — üretim akışıyla aynı şekil (600ms gecikme, bellek-içi önbellek)
   if (url === "/api/ai/status") {

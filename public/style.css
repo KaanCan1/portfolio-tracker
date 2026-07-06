@@ -812,7 +812,7 @@ tfoot td.l { text-align: left; }
 /* ===================== Grafik modalı ===================== */
 .chart-modal-bg { position: fixed; inset: 0; background: rgba(14,24,18,.58); display: flex; align-items: center; justify-content: center; z-index: var(--z-modal); padding: 24px; animation: modalFade .18s ease; }
 .chart-modal-bg[hidden] { display: none; }
-.chart-modal { background: #fff; border-radius: 16px; width: min(1360px, 97vw); max-height: 94vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 24px 70px rgba(0,0,0,.3); }
+.chart-modal { background: #fff; border-radius: 16px; width: min(1720px, 97.5vw); height: min(94vh, 1040px); display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 24px 70px rgba(0,0,0,.3); }
 .cm-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--border); }
 .cm-title { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .cm-sym { font-size: 20px; font-weight: 800; }
@@ -828,7 +828,7 @@ tfoot td.l { text-align: left; }
 .cm-skel-bars span { flex: 1; border-radius: 3px 3px 0 0; background: linear-gradient(90deg, var(--bg2) 25%, var(--line) 37%, var(--bg2) 63%); background-size: 280% 100%; animation: cmShimmer 1.25s ease-in-out infinite; }
 .cm-skel-label { color: var(--muted); font-size: 13px; font-weight: 600; }
 @keyframes cmShimmer { 0% { background-position: 180% 0; } 100% { background-position: -120% 0; } }
-.cm-side { width: 300px; flex-shrink: 0; border-left: 1px solid var(--border); padding: 14px 16px; overflow-y: auto; background: var(--bg2); }
+.cm-side { width: 332px; flex-shrink: 0; border-left: 1px solid var(--border); padding: 14px 16px; overflow-y: auto; background: var(--bg3, #f7f9fc); }
 .rb-analiz { font-size: 13px; margin-left: 4px; vertical-align: middle; }
 .cm-plan, .cm-ctx { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
 .cm-ctx .cm-setup { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
@@ -2858,33 +2858,55 @@ ul.sw-qm-list li b { font-weight: 700; color: var(--ink); }
 .note-act.pin-on { color: var(--green-d); }
 .win-c { color: var(--green-d); } .loss-c { color: var(--red); }
 
-/* Profil */
-.profile-grid { display: grid; grid-template-columns: 260px 1fr; gap: 14px; align-items: start; }
-.profile-card { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; padding: 24px 18px; }
-.profile-avatar {
-  width: 76px; height: 76px; border-radius: 50%; display: grid; place-items: center;
-  font-size: 27px; font-weight: 800; color: #eafff3; letter-spacing: .5px;
-  background: linear-gradient(155deg, #17714a 0%, #0c4531 55%, #0a3826 100%);
-  box-shadow: 0 10px 24px -10px rgba(3,26,16,.45), inset 0 1px 0 rgba(255,255,255,.15);
-}
-.profile-who { display: flex; flex-direction: column; gap: 2px; }
-.profile-who b { font-size: 16px; letter-spacing: -.2px; }
-.profile-who-sub { font-size: 12.5px; color: var(--muted); }
-.profile-meta { display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; color: var(--ink2); width: 100%; border-top: 1px solid var(--line); padding-top: 12px; margin-top: 2px; text-align: left; }
-.pf-hint { font-size: 11px; color: var(--muted); font-weight: 500; }
-.profile-form { padding: 18px; }
-.pf-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 13px; }
-.pf-grid label { display: flex; flex-direction: column; gap: 6px; font-size: 12px; font-weight: 700; color: var(--ink2); }
-.pf-grid .pf-wide { grid-column: 1 / -1; }
-.pf-grid input, .pf-grid select, .pf-grid textarea {
-  font: inherit; font-size: 13.5px; font-weight: 500; padding: 10px 12px; width: 100%;
-  border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--bg3); color: var(--ink); resize: vertical;
-}
-.pf-grid input:focus, .pf-grid select:focus, .pf-grid textarea:focus { outline: none; border-color: var(--green); background: var(--card); box-shadow: var(--ring); }
-.profile-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; }
-.nav-profil { margin-top: auto; } /* Profil nav'ın en altına yaslanır */
-
 @media (max-width: 860px) {
-  .profile-grid { grid-template-columns: 1fr; }
   .note-extra-row { grid-template-columns: 1fr 1fr; }
 }
+
+/* ==================== Grafik modalı v2: araç çubuğu · hero seviyeler · çizim ==================== */
+/* Araç çubuğu — segmented (TradingView hissi) */
+.cm-tools { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 10px; overflow: hidden; background: var(--card); }
+.cm-tool {
+  font: inherit; font-size: 12.5px; font-weight: 700; color: var(--ink2);
+  background: transparent; border: none; border-right: 1px solid var(--line);
+  padding: 7px 11px; cursor: pointer; transition: background .13s, color .13s;
+}
+.cm-tool:last-child { border-right: none; }
+.cm-tool:hover { background: var(--bg2); }
+.cm-tool.active { background: var(--green-d); color: #fff; }
+
+/* Çizim katmanı — grafiğin üstünde, araç seçiliyken tıklanabilir */
+.cm-chart { position: relative; }
+.cm-draw-canvas { position: absolute; inset: 0; z-index: 6; pointer-events: none; }
+
+/* Hero seviye şeridi — EN KRİTİK bilgi: hangi fiyat bekleniyor */
+.cm-hero {
+  border-radius: 13px; padding: 12px 13px 11px; margin-bottom: 12px; color: #fff;
+  background: linear-gradient(158deg, #1d2a22 0%, #14201a 55%, #0d1712 100%);
+  border: 1px solid rgba(255,255,255,.07);
+  box-shadow: 0 10px 26px -12px rgba(8,20,14,.5), inset 0 1px 0 rgba(255,255,255,.06);
+}
+.cm-hero.live { background: linear-gradient(158deg, #0d3b28 0%, #14201a 60%, #0d1712 100%); border-color: rgba(74,208,127,.35); }
+.cm-hero-h { font-size: 11.5px; font-weight: 800; letter-spacing: .3px; color: rgba(255,255,255,.85); margin-bottom: 9px; }
+.cm-hero.live .cm-hero-h { color: #7dffb4; }
+.cm-hero-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+.cm-hc { border-radius: 9px; padding: 7px 9px 6px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.07); border-top: 2px solid transparent; min-width: 0; }
+.cm-hc span { display: block; font-size: 9.5px; font-weight: 800; letter-spacing: .5px; color: rgba(255,255,255,.55); }
+.cm-hc b { display: block; font-family: var(--mono); font-size: 15.5px; font-weight: 700; letter-spacing: -.3px; margin: 2px 0 1px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cm-hc i { display: block; font-style: normal; font-size: 10px; color: rgba(255,255,255,.55); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cm-hc.entry  { border-top-color: #4ad07f; } .cm-hc.entry b  { color: #7dffb4; }
+.cm-hc.stop   { border-top-color: #ff7b6e; } .cm-hc.stop b   { color: #ffa89f; }
+.cm-hc.target { border-top-color: #5fb8ff; } .cm-hc.target b { color: #9fd4ff; }
+.cm-hc.cost   { border-top-color: #b39dff; } .cm-hc.cost b   { color: #cfc2ff; }
+.cm-hc.now    { border-top-color: rgba(255,255,255,.35); }
+
+/* Yan panel modernizasyonu */
+.cm-side .cm-sec { border-top: none; margin: 14px 0 7px; padding-top: 0; display: flex; align-items: center; gap: 8px; }
+.cm-side .cm-sec::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.cm-stats-card { background: var(--card); border: 1px solid var(--line); box-shadow: var(--shadow); }
+.cm-pos { background: var(--card); border: 1px solid var(--line); border-left: 3px solid var(--violet); box-shadow: var(--shadow); }
+.cm-qm { border-left: 3px solid var(--green); box-shadow: var(--shadow); }
+.cm-r { border-bottom: 1px dashed var(--line); }
+.cm-r:last-child { border-bottom: none; }
+.cm-v.i-entry { font-weight: 800; color: var(--green-d); }
+
+@media (max-width: 900px) { .cm-hero-row { grid-template-columns: 1fr; } .cm-tools { display: none; } }

@@ -549,7 +549,7 @@ function render() {
   if ($("#view-buyume")?.classList.contains("active")) renderGrowth();
   // ---- Analiz açıksa STATE türevli panelleri tazele (ilk yüklemede hash #analiz olsa bile dolsun; fetch'li paneller view geçişinde yüklenir) ----
   if ($("#view-analiz")?.classList.contains("active")) {
-    renderAnalizSummary(); renderProRisk(); renderRealizeSummary(); renderRisk(); renderPosTech(); renderHeatmap(); renderSector(); renderTax(); renderAiDesk();
+    renderAnalizSummary(); renderProRisk(); renderRealizeSummary(); renderRisk(); renderPosTech(); renderHeatmap(); renderSector(); renderAiDesk();
   }
 
   // ---- Grafik ----
@@ -1893,6 +1893,7 @@ async function openChartModal(sym, ctx = null, fresh = false) {
   });
   candle.setData(d.candles);
   cmCandle = candle; cmCandles = d.candles; resetMeasure(); // ölçüm aracı için referanslar
+  initDrawings(chartEl, chart, candle, d.candles, sym);      // kalıcı trend/yatay çizim katmanı
   if (d.sma20?.length) chart.addLineSeries({ color: "#56b1d6", lineWidth: 1, priceLineVisible: false, lastValueVisible: false }).setData(d.sma20);
   if (d.sma50?.length) chart.addLineSeries({ color: "#d9a92b", lineWidth: 1, priceLineVisible: false, lastValueVisible: false }).setData(d.sma50);
   if (d.sma200?.length) chart.addLineSeries({ color: "#6b5fd0", lineWidth: 1, priceLineVisible: false, lastValueVisible: false }).setData(d.sma200);
@@ -2038,6 +2039,7 @@ async function openChartModal(sym, ctx = null, fresh = false) {
       ${st2.industry ? `<div class="cm-stats-ind">${st2.industry}</div>` : ""}
     </div>` : "";
   sideEl.innerHTML = `
+    ${cmHeroLevels(d, pos, pl)}
     ${statsCard}
     ${posCard}
     <div class="cm-ctx">
@@ -4251,33 +4253,6 @@ function renderSector() {
     </div>`).join("");
 }
 
-function renderTax() {
-  const el = $("#taxBox"); if (!el) return;
-  const trades = STATE?.trades || [];
-  const usdtry = STATE?.fx?.usdtry || 0;
-  if (!trades.length) { el.innerHTML = `<div class="radar-empty">Henüz realize edilmiş işlem yok. Sattığın hisseleri "İşlem Ekle" ile girersen burada yıllık özet çıkar.</div>`; return; }
-  const byYear = {};
-  for (const t of trades) {
-    const y = (t.date || "").slice(0, 4) || "—";
-    const realizedUSD = t.shares * (t.sellUSD - t.buyUSD);
-    const b = (byYear[y] = byYear[y] || { year: y, n: 0, realizedUSD: 0, wins: 0 });
-    b.n++; b.realizedUSD += realizedUSD; if (realizedUSD >= 0) b.wins++;
-  }
-  const years = Object.values(byYear).sort((a, b) => (a.year < b.year ? 1 : -1));
-  el.innerHTML = `
-    <table class="tax-table">
-      <thead><tr><th class="l">Yıl</th><th>İşlem</th><th>İsabet</th><th>Realize K/Z ($)</th><th>≈ ₺</th></tr></thead>
-      <tbody>${years.map((y) => `<tr>
-        <td class="l"><b>${y.year}</b></td>
-        <td>${y.n}</td>
-        <td>${y.n ? Math.round((y.wins / y.n) * 100) : 0}%</td>
-        <td class="${cls(y.realizedUSD)}">${fmtUSD(y.realizedUSD)}</td>
-        <td class="${cls(y.realizedUSD)}">${usdtry ? fmtTRY0(y.realizedUSD * usdtry) : "—"}</td>
-      </tr>`).join("")}</tbody>
-    </table>
-    <p class="modal-note">Realize K/Z = satılan adet × (satış − alış). Bilgilendirme amaçlıdır, resmi vergi beyanı değildir.</p>`;
-}
-
 async function renderWeekly() {
   const el = $("#weeklyBox"); if (!el) return;
   el.innerHTML = `<div class="radar-empty">↻ Hesaplanıyor…</div>`;
@@ -5457,7 +5432,6 @@ function renderAnaliz() {
   renderPosTech();
   renderHeatmap();
   renderSector();
-  renderTax();
   renderAiDesk();
   renderWeekly();
   // Sinyal Karnesi + Sinyal İsabeti kaldırıldı (3 Tem 2026) — Alfa Avı aynı işi yapıyor
@@ -6837,7 +6811,7 @@ function qmSizeLine(qm) {
   return `<div class="cm-qm-size">📐 <b>Boyut:</b> ${parts}${cashWarn}</div>`;
 }
 
-const VIEWS = ["notlar", "genel", "swingdefteri", "buyume", "radar", "analiz", "challenge", "raporlar", "profil"];
+const VIEWS = ["notlar", "genel", "swingdefteri", "buyume", "radar", "analiz", "challenge", "raporlar"];
 const SWING_SEGS = ["swingdefteri", "buyume"]; // ⚡ Swing hub segmentleri (tek nav altında)
 // Eski hash'ler (yer imi/paylaşılan link) → birleşik Radar + ilgili filtre
 let pendingRadarFilter = null;
@@ -6863,7 +6837,6 @@ function showView(name) {
   window.scrollTo(0, 0);
   $("#sidebar")?.classList.remove("open"); const _bd = $("#navBackdrop"); if (_bd) _bd.hidden = true; // mobilde menüyü kapat
   if (name === "notlar") loadNotes();
-  if (name === "profil") renderProfil();
   if (name === "analiz") renderAnaliz();
   if (name === "challenge") renderChallenge();
   if (name === "raporlar") renderDayAnalysis();
@@ -7395,46 +7368,171 @@ document.addEventListener("click", (e) => {
   if (el) openChartModal(el.dataset.chsym, { horizon: "swing" });
 });
 
-/* ====================== Profil (kişisel bilgiler + bildirim e-postası) ====================== */
-const PF_FIELDS = { pfName: "name", pfTitle: "title", pfEmail: "email", pfPhone: "phone", pfAddress: "address", pfBroker: "broker", pfCurrency: "baseCurrency", pfAbout: "about" };
-function pfInitials(name) {
-  const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
-  return parts.length ? parts.slice(0, 2).map((p) => p[0].toUpperCase()).join("") : "?";
+/* ====================== Grafik: hero seviye şeridi ("bu fiyatı bekle") ======================
+ * Yan panelin EN ÜSTÜNDE, en kritik 3 seviye büyük ve renkli: giriş/stop/hedef.
+ * Öncelik: QM kurulumu > açık pozisyon planı > uzun vade biriktirme. */
+function cmHeroLevels(d, pos, pl) {
+  const cur = pl?.currentPrice ?? d.price;
+  const dist = (p) => (cur && p) ? ((p / cur - 1) * 100) : null;
+  const cell = (lbl, price, kind, sub) => price == null ? "" :
+    `<div class="cm-hc ${kind}"><span>${lbl}</span><b>${fmtUSD(price)}</b><i>${sub || ""}</i></div>`;
+  const qm = d.qm;
+  if (qm?.ok && qm.setup !== "none" && qm.entryTrigger != null) {
+    const dd = dist(qm.entryTrigger);
+    const head = qm.stage === "breaking-out"
+      ? "🔥 Tetik AKTİF — pivot kırılıyor, ORH girişini değerlendir"
+      : qm.stage === "extended"
+        ? "⚠️ Gergin — kovalama, geri çekilme bekle"
+        : "⏳ BU FİYATI BEKLE — pivot kırılmadan girme";
+    return `<div class="cm-hero ${qm.stage === "breaking-out" ? "live" : ""}">
+      <div class="cm-hero-h">${head}</div>
+      <div class="cm-hero-row">
+        ${cell("GİRİŞ", qm.entryTrigger, "entry", dd != null ? (dd >= 0 ? `+%${dd.toFixed(1)} uzakta` : "fiyat üstünde") : "")}
+        ${cell("STOP", qm.stop, "stop", qm.stopPct != null ? `girişten −%${qm.stopPct}` : "")}
+        ${cell("HEDEF 2R", qm.rTargets?.r2, "target", qm.rTargets?.r3 ? `3R → ${fmtUSD(qm.rTargets.r3)}` : "")}
+      </div></div>`;
+  }
+  if (pos?.qty > 0 && (pos.guard?.stop != null || pos.guard?.target != null || pos.costUSD != null)) {
+    const sd = dist(pos.guard?.stop);
+    return `<div class="cm-hero pos">
+      <div class="cm-hero-h">📍 Pozisyon planın — bu seviyeleri izle</div>
+      <div class="cm-hero-row">
+        ${cell("MALİYET", pos.costUSD, "cost", pos.profitPct != null ? fmtPct(pos.profitPct) : "")}
+        ${cell("İZ SÜREN STOP", pos.guard?.stop, "stop", pos.guard?.breached ? "İHLAL — çık!" : sd != null ? `%${Math.abs(sd).toFixed(1)} altta` : "")}
+        ${cell("PLAN HEDEF", pos.guard?.target, "target", pos.guard?.targetHit ? "hedefe ULAŞTI" : dist(pos.guard?.target) != null ? `+%${dist(pos.guard?.target).toFixed(1)} yukarıda` : "")}
+      </div></div>`;
+  }
+  const z = pl?.longterm?.zones?.[0];
+  if (z) {
+    return `<div class="cm-hero lt">
+      <div class="cm-hero-h">🌱 Uzun vade — kademeli biriktirme bölgesi</div>
+      <div class="cm-hero-row">
+        ${cell("1. BÖLGE", z.price, "entry", z.isNow ? "ŞİMDİ bölgede" : dist(z.price) != null ? `%${Math.abs(dist(z.price)).toFixed(1)} uzakta` : "")}
+        ${cell("200g DÖNÜŞ", pl?.longterm?.reclaim, "cost", "")}
+        ${cell("FİYAT", cur, "now", "")}
+      </div></div>`;
+  }
+  return "";
 }
-function pfPaint(p) {
-  const av = $("#profileAvatar"); if (av) av.textContent = pfInitials(p.name);
-  const nm = $("#profileWhoName"); if (nm) nm.textContent = p.name || "İsim eklenmedi";
-  const tt = $("#profileWhoTitle"); if (tt) tt.textContent = p.title || "";
-  const meta = $("#profileMeta");
-  if (meta) meta.innerHTML = [
-    p.email ? `<div>📧 ${noteEsc(p.email)} <span class="pf-hint">uyarı mailleri</span></div>` : `<div class="pf-hint">📧 e-posta ekle → Bekçi uyarıları oraya gitsin</div>`,
-    p.broker ? `<div>🏦 ${noteEsc(p.broker)}</div>` : "",
-    `<div>💱 taban: ${noteEsc(p.baseCurrency || "TRY")}</div>`,
-    p.updatedAt ? `<div class="pf-hint">güncelleme: ${noteEsc(String(p.updatedAt).slice(0, 10))}</div>` : "",
-  ].filter(Boolean).join("");
-  const sv = $("#pfSavedAt"); if (sv) sv.textContent = p.updatedAt ? `Son kayıt: ${String(p.updatedAt).slice(0, 16).replace("T", " ")}` : "";
-}
-async function renderProfil() {
-  try {
-    const p = await (await fetch("/api/profile")).json();
-    for (const [inputId, key] of Object.entries(PF_FIELDS)) {
-      const el = document.getElementById(inputId);
-      if (el) el.value = p[key] ?? (key === "baseCurrency" ? "TRY" : "");
+
+/* ====================== Grafik çizim araçları (TradingView tarzı, kalıcı) ======================
+ * ╱ Trend (2 tık) + ─ Yatay seviye (1 tık) → sembol başına localStorage'da saklanır
+ * ("cmDraw:SYM"), grafik her açılışta geri yüklenir. ESC yarım çizimi iptal eder.
+ * Çapalar mum zamanına bağlıdır; 360 günlük pencere kaydıkça çok eskiyen çapalar düşer. */
+const CM_DRAW = { tool: null, canvas: null, ctx: null, chart: null, series: null, sym: null, items: [], pending: null, cleanup: [], redraw: null };
+const cmDrawKey = (sym) => "cmDraw:" + sym;
+function cmDrawLoad(sym) { try { return JSON.parse(localStorage.getItem(cmDrawKey(sym))) || []; } catch { return []; } }
+function cmDrawSave() { try { localStorage.setItem(cmDrawKey(CM_DRAW.sym), JSON.stringify(CM_DRAW.items)); } catch {} }
+
+function initDrawings(chartEl, chart, series, candles, sym) {
+  CM_DRAW.cleanup.forEach((f) => { try { f(); } catch {} });
+  CM_DRAW.cleanup = [];
+  const canvas = document.createElement("canvas");
+  canvas.className = "cm-draw-canvas";
+  chartEl.appendChild(canvas);
+  Object.assign(CM_DRAW, { canvas, ctx: canvas.getContext("2d"), chart, series, sym, tool: null, pending: null });
+  CM_DRAW.timeIdx = new Map(candles.map((c, i) => [c.time, i]));
+  CM_DRAW.idxTime = candles.map((c) => c.time);
+  CM_DRAW.items = cmDrawLoad(sym);
+  cmSetTool(null);
+
+  const logicalOf = (p) => {
+    if (p.ext != null) return CM_DRAW.idxTime.length - 1 + p.ext; // son mumun sağına uzatılmış nokta
+    const i = CM_DRAW.timeIdx.get(p.time);
+    return i == null ? null : i;
+  };
+  function redraw() {
+    const { ctx } = CM_DRAW;
+    const r = chartEl.getBoundingClientRect();
+    ctx.clearRect(0, 0, r.width, r.height);
+    const px = (l) => chart.timeScale().logicalToCoordinate(l);
+    const py = (price) => series.priceToCoordinate(price);
+    const drawTrend = (p1, p2, preview) => {
+      const l1 = logicalOf(p1), l2 = logicalOf(p2);
+      if (l1 == null || l2 == null) return;
+      const x1 = px(l1), x2 = px(l2), y1 = py(p1.price), y2 = py(p2.price);
+      if ([x1, x2, y1, y2].some((v) => v == null)) return;
+      ctx.strokeStyle = "#7c5cff"; ctx.lineWidth = 2; ctx.setLineDash(preview ? [5, 4] : []);
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle = "#7c5cff";
+      [[x1, y1], [x2, y2]].forEach(([x, y]) => { ctx.beginPath(); ctx.arc(x, y, 3, 0, 7); ctx.fill(); });
+    };
+    const drawH = (price) => {
+      const y = py(price); if (y == null) return;
+      ctx.strokeStyle = "#e07b2f"; ctx.lineWidth = 1.5; ctx.setLineDash([7, 5]);
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(r.width, y); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle = "#e07b2f"; ctx.font = "700 11px " + (getComputedStyle(document.body).fontFamily || "sans-serif");
+      ctx.fillText("$" + (+price).toFixed(2), 8, y - 5);
+    };
+    for (const it of CM_DRAW.items) it.t === "trend" ? drawTrend(it.p1, it.p2) : drawH(it.price);
+    if (CM_DRAW.pending?.p1 && CM_DRAW.pending.p2) drawTrend(CM_DRAW.pending.p1, CM_DRAW.pending.p2, true);
+  }
+  CM_DRAW.redraw = redraw;
+
+  function sizeCanvas() {
+    const r = chartEl.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = r.width * dpr; canvas.height = r.height * dpr;
+    canvas.style.width = r.width + "px"; canvas.style.height = r.height + "px";
+    CM_DRAW.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    redraw();
+  }
+  function pointAt(ev) {
+    const r = canvas.getBoundingClientRect();
+    const logical = chart.timeScale().coordinateToLogical(ev.clientX - r.left);
+    const price = series.coordinateToPrice(ev.clientY - r.top);
+    if (logical == null || price == null) return null;
+    const i = Math.round(logical), n = CM_DRAW.idxTime.length;
+    if (i >= n) return { ext: i - (n - 1), price };
+    return { time: CM_DRAW.idxTime[Math.max(0, Math.min(n - 1, i))], price };
+  }
+  canvas.addEventListener("click", (ev) => {
+    if (!CM_DRAW.tool) return;
+    const p = pointAt(ev); if (!p) return;
+    if (CM_DRAW.tool === "hline") {
+      CM_DRAW.items.push({ t: "h", price: p.price });
+      cmDrawSave(); cmSetTool(null); redraw();
+      toast(`Yatay seviye kaydedildi — $${(+p.price).toFixed(2)}`);
+    } else if (CM_DRAW.tool === "trend") {
+      if (!CM_DRAW.pending) CM_DRAW.pending = { p1: p, p2: null };
+      else {
+        CM_DRAW.items.push({ t: "trend", p1: CM_DRAW.pending.p1, p2: p });
+        CM_DRAW.pending = null; cmDrawSave(); cmSetTool(null);
+        toast("Trend çizgisi kaydedildi");
+      }
+      redraw();
     }
-    pfPaint(p || {});
-  } catch {}
+  });
+  canvas.addEventListener("mousemove", (ev) => {
+    if (CM_DRAW.tool === "trend" && CM_DRAW.pending) { const p = pointAt(ev); if (p) { CM_DRAW.pending.p2 = p; redraw(); } }
+  });
+  const esc = (ev) => { if (ev.key === "Escape" && CM_DRAW.tool) { cmSetTool(null); redraw(); } };
+  document.addEventListener("keydown", esc);
+  CM_DRAW.cleanup.push(() => document.removeEventListener("keydown", esc));
+  const sub = () => redraw();
+  chart.timeScale().subscribeVisibleLogicalRangeChange(sub);
+  CM_DRAW.cleanup.push(() => { try { chart.timeScale().unsubscribeVisibleLogicalRangeChange(sub); } catch {} });
+  const ro = new ResizeObserver(sizeCanvas);
+  ro.observe(chartEl);
+  CM_DRAW.cleanup.push(() => ro.disconnect());
+  sizeCanvas();
 }
-$("#profileForm")?.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const body = {};
-  for (const [inputId, key] of Object.entries(PF_FIELDS)) body[key] = document.getElementById(inputId)?.value ?? "";
-  const btn = $("#pfSave"); if (btn) btn.disabled = true;
-  try {
-    const r = await fetch("/api/profile", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    const p = await r.json();
-    if (!r.ok) throw new Error(p.error || "kaydedilemedi");
-    pfPaint(p);
-    toast("Profil kaydedildi");
-  } catch (err) { toast("Profil kaydedilemedi: " + err.message, "warn"); }
-  finally { if (btn) btn.disabled = false; }
+function cmSetTool(tool) {
+  CM_DRAW.tool = tool;
+  CM_DRAW.pending = null;
+  if (CM_DRAW.canvas) {
+    CM_DRAW.canvas.style.pointerEvents = tool ? "auto" : "none";
+    CM_DRAW.canvas.style.cursor = tool ? "crosshair" : "default";
+  }
+  $("#cmToolTrend")?.classList.toggle("active", tool === "trend");
+  $("#cmToolHline")?.classList.toggle("active", tool === "hline");
+}
+$("#cmToolTrend")?.addEventListener("click", () => cmSetTool(CM_DRAW.tool === "trend" ? null : "trend"));
+$("#cmToolHline")?.addEventListener("click", () => cmSetTool(CM_DRAW.tool === "hline" ? null : "hline"));
+$("#cmToolClear")?.addEventListener("click", () => {
+  if (!CM_DRAW.sym) return;
+  CM_DRAW.items = [];
+  cmDrawSave();
+  CM_DRAW.redraw?.();
+  toast("Bu sembolün çizimleri silindi");
 });
