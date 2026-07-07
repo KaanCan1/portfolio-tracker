@@ -1759,15 +1759,19 @@ $("#cmMeasure")?.addEventListener("click", toggleMeasure);
 function openPositionDetail(id) {
   const h = (STATE?.holdings || []).find((x) => x.id === id);
   if (!h) return;
+  const usdtry = STATE?.fx?.usdtry || 0;
   const mvTRY = h.live?.marketValueTRY ?? null;
   const cost = costOf(h);
   const profitTRY = mvTRY != null ? mvTRY - cost : null;
+  // USD-native değerler (pozisyon kartı $ gösterir)
+  const costUSDtot = h.costUSD != null ? Number(h.costUSD) * Number(h.quantity) : (usdtry ? cost / usdtry : null);
+  const mvUSD = h.live?.marketValueUSD ?? (usdtry && mvTRY != null ? mvTRY / usdtry : null);
+  const profitUSD = mvUSD != null && costUSDtot != null ? mvUSD - costUSDtot : null;
   openChartModal(h.symbol, {
     qty: h.quantity,
     costUSD: h.costUSD != null ? Number(h.costUSD) : null,
-    mvTRY,
-    profitTRY,
-    profitPct: cost && profitTRY != null ? (profitTRY / cost) * 100 : null,
+    mvUSD, profitUSD,
+    profitPct: costUSDtot && profitUSD != null ? (profitUSD / costUSDtot) * 100 : (cost && profitTRY != null ? (profitTRY / cost) * 100 : null),
     guard: h.guard || null,
     earnings: h.earnings || null,
     horizon: h.horizon === "swing" ? "swing" : "long",
@@ -1783,14 +1787,15 @@ function resolveChartPosition(sym, ctx) {
   const h = (STATE?.holdings || []).find((x) => x.type === "stock" && x.symbol === S);
   const sws = (STATE?.swingPositions || []).filter((p) => String(p.symbol).toUpperCase() === S);
   if (!h && !sws.length) return ctx;                 // sahip değil → pozisyon kartı yok
-  let qty = 0, costTRY = 0, costUSDw = 0, mvTRY = 0, hasMv = false, guard = null;
+  let qty = 0, costUSDw = 0, mvUSD = 0, hasMv = false, guard = null;
   let horizon = ctx?.horizon, earnings = ctx?.earnings || null;
   if (h) {
     const q = Number(h.quantity) || 0;
-    qty += q; costTRY += costOf(h) || 0;
-    if (h.costUSD != null) costUSDw += Number(h.costUSD) * q;
-    const mv = h.live?.marketValueTRY;
-    if (mv != null) { mvTRY += mv; hasMv = true; }
+    qty += q;
+    const cUSD = h.costUSD != null ? Number(h.costUSD) * q : (fx ? (costOf(h) || 0) / fx : 0);
+    costUSDw += cUSD;
+    const mvU = h.live?.marketValueUSD ?? (fx && h.live?.marketValueTRY != null ? h.live.marketValueTRY / fx : null);
+    if (mvU != null) { mvUSD += mvU; hasMv = true; }
     guard = h.guard || guard;
     horizon = horizon || (h.horizon === "swing" ? "swing" : "long");
     earnings = earnings || h.earnings || null;
@@ -1798,16 +1803,15 @@ function resolveChartPosition(sym, ctx) {
   for (const p of sws) {
     const q = Number(p.qty) || 0;
     qty += q; costUSDw += (Number(p.entry) || 0) * q;
-    if (fx) costTRY += (Number(p.entry) || 0) * q * fx;
-    if (p.valueUSD != null && fx) { mvTRY += p.valueUSD * fx; hasMv = true; }
+    if (p.valueUSD != null) { mvUSD += p.valueUSD; hasMv = true; }
     if (!guard && p.guard) guard = { stop: p.guard.stop, distPct: p.guard.distPct, breached: p.guard.breached, target: p.target ?? null, targetHit: p.guard.targetHit };
     horizon = horizon || "swing";
   }
-  const profitTRY = hasMv ? mvTRY - costTRY : null;
+  const profitUSD = hasMv ? mvUSD - costUSDw : null;
   return {
     qty, costUSD: qty > 0 ? costUSDw / qty : null,
-    mvTRY: hasMv ? mvTRY : null, profitTRY,
-    profitPct: costTRY > 0 && profitTRY != null ? (profitTRY / costTRY) * 100 : null,
+    mvUSD: hasMv ? mvUSD : null, profitUSD,
+    profitPct: costUSDw > 0 && profitUSD != null ? (profitUSD / costUSDw) * 100 : null,
     guard, earnings, horizon,
   };
 }
@@ -2005,8 +2009,8 @@ async function openChartModal(sym, ctx = null, fresh = false) {
       <div class="cm-pos-head">📍 Pozisyonun${pos.horizon ? `<span class="cm-pos-hz">${pos.horizon === "swing" ? "⚡ swing" : "🌱 uzun"}</span>` : ""}</div>
       ${row("Adet", fmtNum(pos.qty, 4))}
       ${row("Ort. maliyet", pos.costUSD != null ? fmtUSD(pos.costUSD) : "—")}
-      ${row("Değer", pos.mvTRY != null ? fmtTRY0(pos.mvTRY) : "—")}
-      ${row("K/Z", pos.profitTRY != null ? `${fmtTRY0(pos.profitTRY)} <span class="muted">${fmtPct(pos.profitPct)}</span>` : "—", pos.profitTRY != null ? cls(pos.profitTRY) : "")}
+      ${row("Değer", pos.mvUSD != null ? fmtUSD(pos.mvUSD) : "—")}
+      ${row("K/Z", pos.profitUSD != null ? `${fmtUSD(pos.profitUSD)} <span class="muted">${fmtPct(pos.profitPct)}</span>` : "—", pos.profitUSD != null ? cls(pos.profitUSD) : "")}
       ${pos.guard ? row("İz süren stop", `${fmtUSD(pos.guard.stop)} <span class="muted">${pos.guard.breached ? "İHLAL — çık!" : "−%" + pos.guard.distPct.toFixed(1) + " mesafe"}</span>`, pos.guard.breached ? "neg" : "") : ""}
       ${pos.guard?.target != null ? row("Plan hedef", fmtUSD(pos.guard.target), pos.guard.targetHit ? "pos" : "") : ""}
       ${pos.earnings ? row("Bilanço", `${fmtDate(pos.earnings.date)} <span class="muted">${pos.earnings.daysLeft === 0 ? "bugün" : pos.earnings.daysLeft + " gün"}${pos.earnings.hour === "bmo" ? " · açılış öncesi" : pos.earnings.hour === "amc" ? " · kapanış sonrası" : ""}</span>`, pos.earnings.daysLeft <= 7 ? "neg" : "") : ""}
@@ -2183,17 +2187,30 @@ function renderGroup(title, rows, groupKey, horizon = "long") {
     const ptChip = sig?.profitTake
       ? `<span class="pt-chip pt-${sig.profitTake.level}" title="${sig.profitTake.text}">✂️ ${sig.profitTake.trim}</span>`
       : "";
-    // Pozisyon Bekçisi: iz süren stop durumu (her zaman mesafeyi göster)
+    // Pozisyon durumu rozeti — uzun vade ile swing FARKLI yönetilir (Kaan'ın kararı):
+    //  • Swing: tam iz süren stop disiplini (stop delindi / hedefte / stopa mesafe).
+    //  • Uzun vade (≥1 yıl niyetle tutulur, satılmaz): iz süren stop uyarısı YOK. Sadece ufak
+    //    "uzun vade" açıklaması; ancak zarar acaip derinleşirse (≤ −25%) "tez gözden geçir" uyarısı.
     const g = h.guard;
-    const guardChip = !g ? "" : g.breached
-      ? `<span class="gd-chip gd-stop" title="İz süren stop ${fmtUSD(g.stop)} altına indi — çıkış/azaltma planını uygula">🛑 stop!</span>`
-      : g.targetHit
-        ? `<span class="gd-chip gd-tgt" title="Hedef ${fmtUSD(g.target)} aşıldı — kâr-al planını uygula">🎯 hedef</span>`
-        : g.near
-          ? `<span class="gd-chip gd-near" title="İz süren stop ${fmtUSD(g.stop)} (3×ATR) — fiyata %${g.distPct.toFixed(1)} mesafe">⚠️ stopa %${g.distPct.toFixed(1)}</span>`
-          : g.distPct != null
-            ? `<span class="gd-chip gd-ok" title="İz süren stop ${fmtUSD(g.stop)} (3×ATR) — fiyata %${g.distPct.toFixed(1)} mesafe">🛡 %${g.distPct.toFixed(0)}</span>`
-            : "";
+    const isSwingHold = h.horizon === "swing" || !!(STATE.swingOpen || {})[String(h.symbol).toUpperCase()];
+    let guardChip = "";
+    if (h.type === "stock") {
+      if (isSwingHold) {
+        guardChip = !g ? "" : g.breached
+          ? `<span class="gd-chip gd-stop" title="İz süren stop ${fmtUSD(g.stop)} altına indi — çıkış/azaltma planını uygula">🛑 stop delindi</span>`
+          : g.targetHit
+            ? `<span class="gd-chip gd-tgt" title="Hedef ${fmtUSD(g.target)} aşıldı — kâr-al planını uygula">🎯 hedefte</span>`
+            : g.near
+              ? `<span class="gd-chip gd-near" title="İz süren stop ${fmtUSD(g.stop)} (3×ATR) — fiyata %${g.distPct.toFixed(1)} mesafe">⚠️ stopa %${g.distPct.toFixed(1)}</span>`
+              : g.distPct != null
+                ? `<span class="gd-chip gd-ok" title="İz süren stop ${fmtUSD(g.stop)} (3×ATR) — fiyata %${g.distPct.toFixed(1)} mesafe">🛡 %${g.distPct.toFixed(0)}</span>`
+                : "";
+      } else {
+        guardChip = (profitPct != null && profitPct <= -25)
+          ? `<span class="gd-chip gd-thesis" title="Pozisyon %${Math.abs(profitPct).toFixed(0)} zararda — hikâye/tez hâlâ geçerli mi gözden geçir. Bozulduysa uzun vadede bile çık; tez sağlamsa panikle satma, bu bir fırsat olabilir.">⚠️ tez gözden geçir · ${profitPct.toFixed(0)}%</span>`
+          : `<span class="gd-chip gd-long" title="Uzun vade pozisyonu — iz süren stop uygulanmaz, ≥1 yıl tutulur. Tez bozulmadıkça (veya zarar %25'i aşmadıkça) satış sinyali verilmez.">🌱 uzun vade</span>`;
+      }
+    }
     // Bilanço Nöbetçisi: yaklaşan bilanço (≤7 gün)
     const e = h.earnings;
     const earnChip = e && e.daysLeft <= 7
@@ -2691,56 +2708,6 @@ async function delHolding(id) {
   toast(`${h?.symbol || "Varlık"} silindi`);
   load();
 }
-
-/* ---- Hızlı ekleme: sembol + adet → anında hisse ekle ---- */
-// Canlı önizleme: sembol adı + adet×fiyat ≈ $/₺. Boşken kısa yönlendirme gösterir.
-function qaUpdatePreview() {
-  const sym = ($("#qaSymbol")?.value || "").trim().toUpperCase();
-  const qty = parseFloat($("#qaQty")?.value);
-  const cost = parseFloat($("#qaCost")?.value);
-  const nameEl = $("#qaName"), prevEl = $("#qaPreview");
-  if (nameEl) nameEl.textContent = sym && SYM_NAMES[sym] ? SYM_NAMES[sym] : "";
-  if (!prevEl) return;
-  if (!sym || !(qty > 0)) {
-    prevEl.className = "qa-preview";
-    prevEl.textContent = "Sembol + adet gir → anında portföye eklenir.";
-    return;
-  }
-  if (cost > 0) {
-    const usd = qty * cost;
-    const rate = STATE?.fx?.usdtry;
-    prevEl.className = "qa-preview ready";
-    prevEl.innerHTML = `<b>${sym}</b> · ${qty} adet × ${fmtUSD(cost)} = <b>${fmtUSD(usd)}</b>${rate ? ` ≈ <b>${fmtTRY(usd * rate)}</b>` : ""} · İşlem Geçmişi'ne “Alış” yazılır`;
-  } else {
-    prevEl.className = "qa-preview ready";
-    prevEl.innerHTML = `<b>${sym}</b> · ${qty} adet — fiyat boş, canlı fiyattan eklenir (işlem geçmişine yazılmaz)`;
-  }
-}
-["#qaSymbol", "#qaQty", "#qaCost"].forEach((sel) => {
-  $(sel)?.addEventListener("input", qaUpdatePreview);
-  $(sel)?.addEventListener("change", qaUpdatePreview);
-});
-
-$("#quickAdd")?.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const sym = ($("#qaSymbol").value || "").trim().toUpperCase();
-  const qty = parseFloat($("#qaQty").value);
-  const cost = parseFloat($("#qaCost").value);
-  if (!sym) { $("#qaSymbol").focus(); return; }
-  if (!(qty > 0)) { toast("Adet gir", "warn"); $("#qaQty").focus(); return; }
-  const body = { type: "stock", symbol: sym, quantity: qty, name: SYM_NAMES[sym] || "" };
-  if (cost > 0) body.costUSD = cost;
-  const btn = $("#qaAdd"); const orig = btn.innerHTML; btn.disabled = true; btn.textContent = "Ekleniyor…";
-  try {
-    const r = await fetch("/api/holdings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    if (!r.ok) throw new Error();
-    $("#qaSymbol").value = ""; $("#qaQty").value = ""; $("#qaCost").value = "";
-    toast(cost > 0 ? `${sym} eklendi · İşlem Geçmişi'ne yazıldı` : `${sym} eklendi`, "ok");
-    await load();
-    qaUpdatePreview();
-  } catch { toast(`${sym} eklenemedi`, "warn"); }
-  finally { btn.disabled = false; btn.innerHTML = orig; $("#qaSymbol").focus(); }
-});
 
 /* ---- Toast bildirimi ---- */
 let toastTimer = null;
@@ -3534,14 +3501,14 @@ function renderTrades() {
   let totUSD = 0, totProceeds = 0, totCost = 0, sellCount = 0;
   const rows = trades.map((t) => {
     if (t.kind === "buy") {
-      return `<tr>
+      return `<tr class="tr-buy">
         <td class="l">${fmtDate(t.date)}</td>
         <td class="l"><span class="sym">${t.symbol}</span> <span class="flow-tag deposit">Alış</span>${t.note ? `<div class="tnote">${t.note}</div>` : ""}</td>
         <td>${fmtNum(t.shares, 4)}</td>
         <td>${fmtUSD(t.buyUSD)}</td>
-        <td>—</td>
+        <td class="muted">—</td>
         <td class="muted">maliyet ${fmtUSD(t.shares * t.buyUSD)}</td>
-        <td>—</td>
+        <td class="muted">—</td>
         <td><button class="btn icon" data-deltrade="${t.id}" title="Sil">🗑</button></td>
       </tr>`;
     }
@@ -3549,13 +3516,13 @@ function renderTrades() {
     const cost = t.shares * t.buyUSD;
     const pct = cost ? (pnl / cost) * 100 : null;
     totUSD += pnl; totProceeds += t.shares * t.sellUSD; totCost += cost; sellCount++;
-    return `<tr>
+    return `<tr class="tr-sell ${pnl >= 0 ? "win" : "loss"}">
       <td class="l">${fmtDate(t.date)}</td>
-      <td class="l"><span class="sym">${t.symbol}</span>${t.note ? `<div class="tnote">${t.note}</div>` : ""}</td>
+      <td class="l"><span class="sym">${t.symbol}</span> <span class="flow-tag sell-tag">Satış</span>${t.note ? `<div class="tnote">${t.note}</div>` : ""}</td>
       <td>${fmtNum(t.shares, 4)}</td>
       <td>${fmtUSD(t.buyUSD)}</td>
       <td>${fmtUSD(t.sellUSD)}</td>
-      <td class="${cls(pnl)}">${fmtUSD(pnl)}</td>
+      <td><span class="tt-pnl ${cls(pnl)}">${pnl >= 0 ? "+" : ""}${fmtUSD(pnl)}</span></td>
       <td class="${pct != null ? cls(pct) : ""}">${fmtPct(pct)}</td>
       <td><button class="btn icon" data-deltrade="${t.id}" title="Sil">🗑</button></td>
     </tr>`;
@@ -3563,12 +3530,12 @@ function renderTrades() {
 
   $("#tradeRows").innerHTML = rows || `<tr><td colspan="8" class="empty-row">${TRADE_SYMBOL ? "Bu hisse için henüz işlem kaydı yok." : "Henüz işlem kaydı yok."}</td></tr>`;
   const totPct = totCost ? (totUSD / totCost) * 100 : 0;
+  const heroTone = totUSD > 0 ? "pos" : totUSD < 0 ? "neg" : "flat";
   $("#tradeSummary").innerHTML = `
-    <div class="ts-item"><span>İşlem</span><b>${trades.length}${sellCount !== trades.length ? ` <span class="muted">(${sellCount} satış)</span>` : ""}</b></div>
-    <div class="ts-item"><span>Toplam Satış</span><b>${fmtUSD(totProceeds)}</b></div>
-    <div class="ts-item"><span>Realize K/Z</span><b class="${cls(totUSD)}">${fmtUSD(totUSD)}</b></div>
-    <div class="ts-item"><span>Getiri %</span><b class="${cls(totUSD)}">${fmtPct(totPct)}</b></div>
-    <div class="ts-item"><span>≈ ₺</span><b class="${cls(totUSD)}">${fmtTRY0(totUSD * usdtry)}</b></div>`;
+    <div class="ts-item ts-count"><span>İşlem</span><b>${trades.length}</b>${sellCount !== trades.length ? `<i>${sellCount} satış</i>` : `<i>&nbsp;</i>`}</div>
+    <div class="ts-item ts-proceeds"><span>Toplam Satış</span><b>${fmtUSD(totProceeds)}</b><i>gerçekleşen ciro</i></div>
+    <div class="ts-item ts-hero ts-${heroTone}"><span>Realize K/Z</span><b>${totUSD > 0 ? "+" : ""}${fmtUSD(totUSD)}</b><i>${totUSD > 0 ? "▲" : totUSD < 0 ? "▼" : ""} ${fmtPct(totPct)} getiri</i></div>
+    <div class="ts-item ts-try"><span>≈ ₺ karşılığı</span><b>${fmtTRY0(totUSD * usdtry)}</b><i>${usdtry ? "kur " + fmtNum(usdtry, 2) : "&nbsp;"}</i></div>`;
 
   document.querySelectorAll("[data-deltrade]").forEach((b) =>
     b.addEventListener("click", async () => {
@@ -4417,21 +4384,13 @@ function renderAnalizSummary() {
 function renderRealizeSummary() {
   const el = $("#realizeSummary"); if (!el) return;
   const usdtry = STATE?.fx?.usdtry || 0;
-  const ovr = STATE?.realizeOverrideTRY || {};      // ground-truth TL (hisse + opsiyon net)
-  const calc = STATE?.realizedBySym || {};          // USD (override olmayan semboller)
-  const rows = {};
-  // 1) Ground-truth override (TL, sabit — kesin)
-  for (const [sym, tl] of Object.entries(ovr)) rows[sym] = { sym, tl: +tl, gt: true };
-  // 2) Override edilmeyen semboller: hesaplanan USD → TL
-  for (const [sym, usd] of Object.entries(calc)) {
-    if (rows[sym]) continue;
-    if (!usdtry) continue;
-    rows[sym] = { sym, tl: usd * usdtry, gt: false };
-  }
-  const edited = STATE?.realizeOverrideEdited || {};   // kullanıcı elle düzelttiği semboller
-  for (const r of Object.values(rows)) r.edited = Object.prototype.hasOwnProperty.call(edited, r.sym);
-  const list = Object.values(rows).sort((a, b) => b.tl - a.tl);
-  if (!list.length) { el.innerHTML = `<div class="radar-empty">Henüz realize edilmiş işlem yok.</div>`; return; }
+  // TEK KAYNAK: realizedBySym (USD) — yalnız portföy kuruluşundan (8 Haz 2026) itibaren işlem geçmişi.
+  const calc = STATE?.realizedBySym || {};
+  const list = Object.entries(calc)
+    .map(([sym, usd]) => ({ sym, usd: +usd, tl: (+usd) * usdtry }))
+    .filter((r) => Math.abs(r.usd) >= 0.005)   // sıfır realize'leri gizle
+    .sort((a, b) => b.usd - a.usd);
+  if (!list.length) { el.innerHTML = `<div class="radar-empty">Portföy kuruluşundan (8 Haz 2026) bu yana realize edilmiş işlem yok.</div>`; return; }
   const pos = list.filter((r) => r.tl >= 0).reduce((s, r) => s + r.tl, 0);
   const neg = list.filter((r) => r.tl < 0).reduce((s, r) => s + r.tl, 0);
   const net = pos + neg;
@@ -4447,10 +4406,11 @@ function renderRealizeSummary() {
     <div class="rz-list">
       ${list.map((r) => `
         <div class="rz-row">
-          <span class="rz-sym">${r.sym}${r.gt ? "" : ` <span class="rz-tag">hesap</span>`}${r.edited ? ` <span class="rz-tag rz-edited" title="Vergi panelinden elle düzeltildi">✓ düzeltildi</span>` : ""}</span>
+          <span class="rz-sym">${r.sym}</span>
           <span class="rz-amt ${cls(r.tl)}">${r.tl >= 0 ? "+" : ""}${fmtTRY0(r.tl)}${usd(r.tl)}</span>
         </div>`).join("")}
-    </div>`;
+    </div>
+    <div class="rz-foot">Portföy kuruluşundan (8 Haz 2026) bu yana · İşlem Geçmişi'ndeki satışlardan hesaplanır.</div>`;
 }
 
 /* ===== Profesyonel Risk Masası — korelasyon · VaR · risk katkısı · boyutlama · tahsis · faktör ===== */

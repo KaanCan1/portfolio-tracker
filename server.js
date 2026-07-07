@@ -3855,24 +3855,6 @@ app.get("/api/portfolio", async (_req, res) => {
       await saveData(data);
     }
 
-    // Realize Özeti override = ground-truth kalemleri (Vergi panelindeki düzeltmeler uygulanmış)
-    // sembol başına toplam. TEK KAYNAK — Vergi'de bir kalemi düzeltince burası da güncellenir.
-    const r26edits = data.realized2026Edits || {};
-    const effOverride = (() => {
-      const o = {};
-      for (const r of realized2026FromTruth()) {
-        const amt = r26edits[r.id] != null ? +r26edits[r.id] : r.amountTRY;
-        o[r.symbol] = +(((o[r.symbol] || 0) + amt)).toFixed(2);
-      }
-      return o;
-    })();
-    // Hangi semboller elle düzeltildi (Realize Özeti'nde "düzeltildi" rozeti için)
-    const editedSyms = (() => {
-      const s = {};
-      for (const r of realized2026FromTruth()) if (r26edits[r.id] != null) s[r.symbol] = true;
-      return s;
-    })();
-
     res.json({
       cash: data.cash,
       fx: { usdtry, eurtry, gram, metals },
@@ -3980,26 +3962,24 @@ app.get("/api/portfolio", async (_req, res) => {
             sr += (Number(t.exitPrice) - Number(t.entry)) * Number(t.qty);
           if (sr) swingReal[sym] = (swingReal[sym] || 0) + sr;
         }
-        const out = {}, postBySym = {}; // postBySym: truth cutoff'tan SONRAKİ satış realize'leri (override sembollerine eklenir)
+        // Realize = YALNIZCA portföy kuruluşundan (8 Haz 2026) sonraki işlem geçmişi satışları.
+        // Eski aracı-kurum realize geçmişi (REALIZED_2026_TRUTH override) artık UYGULANMAZ — Kaan'ın kararı.
+        const out = {};
         for (const tr of data.trades || []) {
           if (tr.kind === "buy" || swingTradeIds.has(tr.id)) continue; // swing-kökenli satışlar swingReal'da sayılır
+          if (tr.date && String(tr.date) < PORTFOLIO_START) continue;  // kuruluş öncesi eski realize'ler hariç
           const sym = String(tr.symbol || "").toUpperCase();
           const pl = (Number(tr.shares) || 0) * ((Number(tr.sellUSD) || 0) - (Number(tr.buyUSD) || 0));
-          if (sym && isFinite(pl)) {
-            out[sym] = (out[sym] || 0) + pl;
-            if (tr.date && String(tr.date) > REALIZE_TRUTH_CUTOFF) postBySym[sym] = (postBySym[sym] || 0) + pl;
-          }
+          if (sym && isFinite(pl)) out[sym] = (out[sym] || 0) + pl;
         }
-        for (const [sym, v] of Object.entries(swingReal)) out[sym] = +(((out[sym] || 0) + v)).toFixed(2);
-        // Ground-truth override (Robinhood "Yatırım geliri" — hisse+opsiyon net, TL): o sembolün TARİHSEL
-        // realize'sini truth'a sabitler, ama truth tarihinden SONRAKİ yeni satışları üstüne EKLER (bayatlamaz).
-        if (usdtry) for (const [sym, tl] of Object.entries(effOverride)) out[sym] = +((tl / usdtry) + (postBySym[sym] || 0)).toFixed(2);
+        for (const [sym, v] of Object.entries(swingReal)) out[sym] = (out[sym] || 0) + v;
+        for (const sym of Object.keys(out)) out[sym] = +out[sym].toFixed(2);
         return out;
       })(),
-      // Ham TL ground-truth realize (sembol özet listesi için — kur dalgalanmasından bağımsız)
-      realizeOverrideTRY: effOverride,
-      // Hangi semboller Vergi panelinden elle düzeltildi — Realize Özeti rozeti için
-      realizeOverrideEdited: editedSyms,
+      // Broker geçmiş override'ı KALDIRILDI — realize artık yalnız işlem geçmişinden (8 Haz'dan itibaren).
+      // Boş bırakılır ki Realize Özeti tek kaynaktan (realizedBySym) tutarlı gösterilsin.
+      realizeOverrideTRY: {},
+      realizeOverrideEdited: {},
       // Midas işlem ücreti özeti (her emir $1.5) — Vergi panelinde bilgi satırı.
       // Yalnız data.trades üzerinden sayılır (her emir bir kez); 2026 ground-truth zaten net.
       midasFees: (() => {
@@ -4026,6 +4006,9 @@ const REALIZED_2026_TRUTH = []; // kendi aracı-kurum realize kalemlerini buraya
 // otomatik satış/swing realize'leri truth'a EKLENİR (yeni işlemler); bu tarih ve öncesi truth'ta
 // zaten var → çift sayım olmaz. Yeni satış yapıldığında İşlem Geçmişi → 2026 Realize'a düşer.
 const REALIZE_TRUTH_CUTOFF = "2026-06-27";
+// Portföyün kurulduğu tarih — Realize K/Z YALNIZCA bu tarih ve sonrası işlem geçmişinden hesaplanır.
+// Kaan'ın kararı (7 Tem 2026): eski (kuruluş öncesi) aracı-kurum realize geçmişi ARTIK gösterilmez.
+const PORTFOLIO_START = "2026-06-08";
 // Realize Özeti override'ı bu kalemlerden sembol başına TÜRETİLİR (opsiyonlar underlying'e toplanır)
 const REALIZE_OVERRIDE_TRY = (() => {
   const o = {};
@@ -5457,7 +5440,19 @@ async function buildThesisContext(data, symbol) {
     gunlukDegisimPct: Number(q.changePct ?? q.dp) || null,
     teknik,
     yaklasanBilanco: earningsFor(symbol),
-    gerceklesmisKarTRY: REALIZE_OVERRIDE_TRY[symbol] ?? null,
+    gerceklesmisKarUSD: (() => { // yalnız portföy kuruluşundan (8 Haz) itibaren işlem geçmişi realize'si
+      let s = 0;
+      for (const tr of data.trades || []) {
+        if (tr.kind === "buy" || String(tr.symbol || "").toUpperCase() !== symbol) continue;
+        if (tr.date && String(tr.date) < PORTFOLIO_START) continue;
+        s += (Number(tr.shares) || 0) * ((Number(tr.sellUSD) || 0) - (Number(tr.buyUSD) || 0));
+      }
+      for (const t of data.swingTrades || []) {
+        if (String(t.symbol || "").toUpperCase() !== symbol) continue;
+        for (const lot of t.realizedLots || []) s += Number(lot.pnlUSD) || 0;
+      }
+      return s ? +s.toFixed(2) : null;
+    })(),
     acikSwingPozisyonlari: swing,
     kaaninNotlari: notes,
     sonHaberBasliklari: haberler,

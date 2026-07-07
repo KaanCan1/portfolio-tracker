@@ -551,29 +551,59 @@ tfoot td.l { text-align: left; }
 
 .foot { text-align: center; color: var(--muted); font-size: 12px; margin-top: 28px; }
 
-/* ---- Trade modal ---- */
-.modal.wide { max-width: 720px; }
+/* ---- Trade modal (Hisse İşlemleri) — geniş + renkli ---- */
+.modal.wide { max-width: min(960px, 96vw); }
 .modal-note { font-size: 12.5px; color: var(--muted); margin: -8px 0 16px; }
-.trade-summary { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
-.ts-item { flex: 1 1 110px; background: var(--bg2); border: 1px solid var(--line); border-radius: 11px; padding: 10px 12px; }
-.ts-item span { display: block; font-size: 11.5px; color: var(--muted); font-weight: 600; margin-bottom: 3px; }
-.ts-item b { font-size: 16px; font-weight: 800; }
-.trade-list-wrap { border: 1px solid var(--line); border-radius: 12px; overflow: auto; max-height: 230px; margin-bottom: 18px; }
-.trade-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 560px; }
-.trade-table thead th { position: sticky; top: 0; background: linear-gradient(180deg, var(--hero) 0%, var(--hero2) 100%); color: rgba(255,255,255,.82); text-align: right; padding: 9px 12px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px; }
+/* Renkli özet kartları */
+.trade-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 18px; }
+.ts-item { position: relative; overflow: hidden; border-radius: 14px; padding: 13px 15px; border: 1px solid var(--line); background: var(--bg2); }
+.ts-item span { display: block; font-size: 11px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .4px; margin-bottom: 5px; }
+.ts-item b { font-size: 20px; font-weight: 800; line-height: 1.05; display: block; letter-spacing: -.4px; }
+.ts-item i { display: block; font-style: normal; font-size: 11px; font-weight: 600; color: var(--muted); margin-top: 4px; }
+.ts-count { background: linear-gradient(160deg, #f2f5f7 0%, #e9eef1 100%); }
+.ts-proceeds { background: linear-gradient(160deg, #eef4fb 0%, #e2edf8 100%); border-color: #d6e6f5; }
+.ts-proceeds b { color: #2f6fb0; }
+.ts-try { background: linear-gradient(160deg, #f4f1fb 0%, #ece6f8 100%); border-color: #e0d8f2; }
+.ts-try b { color: #6b54c9; }
+/* Realize hero kartı — kâr yeşil, zarar kırmızı gradyan */
+.ts-hero { color: #fff; border: none; box-shadow: 0 10px 22px -12px rgba(0,0,0,.35); }
+.ts-hero span { color: rgba(255,255,255,.82); }
+.ts-hero b { color: #fff; font-size: 22px; }
+.ts-hero i { color: rgba(255,255,255,.9); font-weight: 700; }
+.ts-hero.ts-pos { background: linear-gradient(150deg, #2fa869 0%, #1c8250 100%); }
+.ts-hero.ts-neg { background: linear-gradient(150deg, #e0685f 0%, #c23b3b 100%); }
+.ts-hero.ts-flat { background: linear-gradient(150deg, #7c8a83 0%, #5f6d66 100%); }
+/* Tablo */
+.trade-list-wrap { border: 1px solid var(--line); border-radius: 14px; overflow: auto; max-height: 300px; margin-bottom: 18px; box-shadow: var(--shadow-sm, 0 1px 2px rgba(0,0,0,.04)); }
+.trade-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 620px; }
+.trade-table thead th { position: sticky; top: 0; z-index: 1; background: linear-gradient(180deg, var(--hero) 0%, var(--hero2) 100%); color: rgba(255,255,255,.85); text-align: right; padding: 11px 14px; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; }
 .trade-table thead th.l { text-align: left; }
-.trade-table td { padding: 9px 12px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
-.trade-table td.l { text-align: left; }
+.trade-table td { padding: 11px 14px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; vertical-align: middle; }
+.trade-table td.l { text-align: left; white-space: normal; }
 .trade-table tbody tr:last-child td { border-bottom: none; }
-.tnote { font-size: 11px; color: var(--muted); font-weight: 500; }
-.empty-row { text-align: center !important; color: var(--muted); padding: 20px !important; font-style: italic; }
-.trade-form { border-top: 1px solid var(--line); padding-top: 16px; }
-.tf-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 12px; }
-.tf-grid label { display: block; font-size: 12.5px; font-weight: 600; color: var(--muted); margin: 0; }
+.trade-table tbody tr { transition: background .12s ease; }
+.trade-table tbody tr:hover td { background: rgba(46,168,105,.05); }
+/* Sol renk aksanı: alış mavi · kâr yeşil · zarar kırmızı */
+.trade-table tbody tr td:first-child { border-left: 3px solid transparent; }
+.trade-table tr.tr-buy td:first-child { border-left-color: #7aa7d8; }
+.trade-table tr.tr-sell.win td:first-child { border-left-color: var(--green); }
+.trade-table tr.tr-sell.loss td:first-child { border-left-color: var(--red); }
+.trade-table .sym { font-weight: 800; }
+.tt-pnl { display: inline-block; padding: 3px 9px; border-radius: 7px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.tt-pnl.pos { background: var(--green-bg, #e9f5ee); color: var(--green-d); }
+.tt-pnl.neg { background: var(--red-bg); color: var(--red); }
+.flow-tag.sell-tag { background: #fdece7; color: #b4552a; }
+.tnote { font-size: 11px; color: var(--muted); font-weight: 500; margin-top: 2px; }
+.empty-row { text-align: center !important; color: var(--muted); padding: 26px !important; font-style: italic; }
+.trade-form { border-top: 1px solid var(--line); padding-top: 18px; }
+.tf-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 13px; margin-bottom: 12px; }
+.tf-grid label { display: block; font-size: 12px; font-weight: 700; color: var(--ink2); margin: 0; }
 .tf-grid .tf-note { grid-column: 1 / -1; }
-.tf-grid input, .tf-grid select { width: 100%; margin-top: 5px; padding: 10px 12px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); font-family: inherit; font-size: 13.5px; background: var(--bg3); transition: border-color .15s ease, box-shadow .15s ease, background .15s ease; }
+.tf-grid input, .tf-grid select { width: 100%; margin-top: 6px; padding: 10px 12px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); font-family: inherit; font-size: 13.5px; background: var(--bg3); transition: border-color .15s ease, box-shadow .15s ease, background .15s ease; }
 .tf-grid input:focus, .tf-grid select:focus { outline: none; border-color: var(--green-l); box-shadow: var(--ring); background: #fff; }
-.tf-preview { font-size: 13.5px; font-weight: 600; color: var(--muted); margin-bottom: 12px; }
+.tf-preview { font-size: 14px; font-weight: 700; color: var(--ink); margin-bottom: 14px; padding: 11px 14px; background: var(--bg2); border: 1px solid var(--line); border-radius: 11px; }
+@media (max-width: 720px) { .trade-summary { grid-template-columns: repeat(2, 1fr); } .tf-grid { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 480px) { .trade-summary { grid-template-columns: 1fr; } .tf-grid { grid-template-columns: 1fr; } }
 
 /* ---- Modal ---- */
 .modal-bg { position: fixed; inset: 0; background: rgba(14,24,18,.5); display: grid; place-items: center; z-index: var(--z-modal); padding: 20px; animation: modalFade .18s ease; }
@@ -1176,12 +1206,16 @@ tfoot td.l { text-align: left; }
 .cm-pos-head { font-size: 12px; font-weight: 700; color: var(--muted); margin-bottom: 6px; }
 
 /* Pozisyon Bekçisi & Bilanço Nöbetçisi rozetleri */
-.gd-chip { display: inline-block; font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px; margin-left: 6px; white-space: nowrap; cursor: help; vertical-align: middle; }
-.gd-chip.gd-stop { background: var(--red-bg); color: var(--red); animation: gd-pulse 1.6s ease-in-out infinite; }
-.gd-chip.gd-near { background: #fdf0dc; color: #b9871f; }
-.gd-chip.gd-tgt  { background: #e9f5ee; color: var(--green-d); }
-.gd-chip.gd-earn { background: #eef0fb; color: #5b4fd0; }
-.gd-chip.gd-earn-hot { background: var(--red-bg); color: var(--red); }
+.gd-chip { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; margin-left: 6px; white-space: nowrap; cursor: help; vertical-align: middle; border: 1px solid transparent; letter-spacing: .1px; }
+.gd-chip.gd-stop { background: var(--red-bg); color: var(--red); border-color: rgba(200,40,40,.22); animation: gd-pulse 1.6s ease-in-out infinite; }
+.gd-chip.gd-near { background: #fdf0dc; color: #b9871f; border-color: #f0dcb4; }
+.gd-chip.gd-tgt  { background: #e9f5ee; color: var(--green-d); border-color: #cfe8d9; }
+.gd-chip.gd-earn { background: #eef0fb; color: #5b4fd0; border-color: #dcdefa; }
+.gd-chip.gd-earn-hot { background: var(--red-bg); color: var(--red); border-color: rgba(200,40,40,.22); }
+/* Uzun vade: iz süren stop yerine ufak, sakin "tutuluyor" açıklaması */
+.gd-chip.gd-long { background: #f1f5f2; color: #5a7565; border-color: #dde7e0; font-weight: 600; }
+/* Tez gözden geçir: zarar %25'i aştı — dikkat çeker ama stop gibi panik/pulse yok */
+.gd-chip.gd-thesis { background: #fdeee0; color: #b45a12; border-color: #f2d3ad; }
 @keyframes gd-pulse { 50% { opacity: .55; } }
 
 /* Sinyal Karnesi durum etiketleri */
@@ -1499,30 +1533,19 @@ tfoot td.l { text-align: left; }
 .adv-body { padding: 4px 14px 2px; border-top: 1px solid var(--line); }
 .adv-body label { margin-top: 12px; }
 
-/* ===================== Hızlı ekleme satırı ===================== */
-.quick-add { background: var(--bg3); border: 1px solid var(--line); border-radius: 14px; padding: 14px 14px 12px; margin-bottom: 16px; }
-.qa-fields { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
-.qa-field { display: flex; flex-direction: column; gap: 5px; position: relative; }
-.qa-field-sym { flex: 1; min-width: 170px; }
-.qa-lbl { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); padding-left: 2px; }
-.qa-lbl i { font-style: normal; font-weight: 600; text-transform: none; letter-spacing: 0; opacity: .7; }
-.qa-icon { font-size: 14px; }
-.qa-input { font-family: inherit; font-size: 14px; padding: 10px 12px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--card); transition: border-color .15s ease, box-shadow .15s ease; width: 100%; }
-.qa-input:focus { outline: none; border-color: var(--green-l); box-shadow: var(--ring); }
-.qa-field-sym .qa-input { text-transform: uppercase; font-weight: 700; }
-.qa-num { width: 124px; }
-.qa-name { position: absolute; left: 2px; bottom: -16px; font-size: 11px; color: var(--green-d); font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.qa-submit { height: 40px; white-space: nowrap; }
-.qa-foot { display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 14px; padding-top: 11px; border-top: 1px dashed var(--line-strong); }
-.qa-preview { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
-.qa-preview.ready { color: var(--ink); }
-.qa-preview b { color: var(--ink); font-weight: 700; }
-.qa-hint { font-size: 11.5px; color: var(--muted); }
+/* ===================== Varlık Ekle — belirgin ana buton ===================== */
+.btn.primary.add-cta {
+  padding: 11px 22px;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: .1px;
+  border-radius: 12px;
+  box-shadow: 0 10px 22px -9px rgba(28,106,64,.65), inset 0 1px 0 rgba(255,255,255,.22);
+}
+.btn.primary.add-cta:hover { transform: translateY(-1.5px); box-shadow: 0 14px 26px -8px rgba(28,106,64,.7), inset 0 1px 0 rgba(255,255,255,.25); }
 @media (max-width: 560px) {
-  .qa-fields { gap: 10px; }
-  .qa-field { flex: 1 1 100%; }
-  .qa-num { width: 100%; }
-  .qa-submit { width: 100%; }
+  .head-actions { flex-wrap: wrap; }
+  .btn.primary.add-cta { flex: 1 1 100%; }
 }
 
 /* ===================== Toast ===================== */
@@ -2110,6 +2133,7 @@ button.sw-goal-target:hover { background: var(--bg2); border-color: var(--line);
 .rz-amt { font-weight: 800; font-variant-numeric: tabular-nums; font-size: 14px; white-space: nowrap; }
 .rz-amt.pos { color: var(--green-d); }
 .rz-amt.neg { color: var(--red); }
+.rz-foot { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--line-strong, #d7dde3); font-size: 11.5px; color: var(--muted); }
 @media (max-width: 640px) { .rz-head { grid-template-columns: repeat(2, 1fr); } }
 
 /* ── 2026 Realize: sembol başına grup (açılır) ── */
@@ -2903,7 +2927,11 @@ ul.sw-qm-list li b { font-weight: 700; color: var(--ink); }
 .cm-side .cm-sec { border-top: none; margin: 14px 0 7px; padding-top: 0; display: flex; align-items: center; gap: 8px; }
 .cm-side .cm-sec::after { content: ""; flex: 1; height: 1px; background: var(--line); }
 .cm-stats-card { background: var(--card); border: 1px solid var(--line); box-shadow: var(--shadow); }
-.cm-pos { background: var(--card); border: 1px solid var(--line); border-left: 3px solid var(--violet); box-shadow: var(--shadow); }
+.cm-pos { background: linear-gradient(165deg, #faf9ff 0%, #f2eefb 100%); border: 1px solid #e6def6; border-left: 3px solid var(--violet); box-shadow: var(--shadow); }
+.cm-pos-head { font-size: 13px; font-weight: 800; color: #6b54c9; }
+.cm-pos .cm-r { border-bottom: 1px dashed #e6def6; }
+.cm-pos .cm-v.pos { color: var(--green-d); font-weight: 800; }
+.cm-pos .cm-v.neg { color: var(--red); font-weight: 800; }
 .cm-qm { border-left: 3px solid var(--green); box-shadow: var(--shadow); }
 .cm-r { border-bottom: 1px dashed var(--line); }
 .cm-r:last-child { border-bottom: none; }

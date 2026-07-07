@@ -63,6 +63,7 @@ const holdings = [
   hold("h-nbis", "NBIS", "Nebius Group", 120, 28.4, 34.1, null, null, 33.0),  // ana paranın ~yarısı geri alınmış
   hold("h-nvda", "NVDA", "NVIDIA", 35, 130, 141.2, 122, 150, 137.0), // realize > maliyet → BEDAVA
   hold("h-aapl", "AAPL", "Apple", 30, 188, 197, null, null, 195.0),  // kârda, henüz geri alım yok
+  hold("h-sofi", "SOFI", "SoFi Technologies", 90, 24.5, 17.9, null, null, 18.3), // uzun vade, ~-27% → "tez gözden geçir" testi
 ];
 // Mock teknik sinyaller — Pozisyon Teknikleri panelini test etmek için (üretimde server.js buildSignal üretir)
 const mkSig = (h, rsi, sma50, sma200, w52High, w52Low, targetMean, tone) => {
@@ -81,6 +82,8 @@ const mkSig = (h, rsi, sma50, sma200, w52High, w52Low, targetMean, tone) => {
   };
 };
 holdings[1].horizon = "swing"; // NVDA → swing (stop/hedef) — uzun-vade/swing ayrımı testi
+// NVDA (swing) iz süren stop durumu — tabloda stop chip'i test edilsin
+holdings[1].guard = { stop: 128, chandelier: 128, distPct: 9.5, breached: false, near: false, targetHit: false };
 // Bilanço Nöbeti testi: NVDA(swing) 2 gün sonra, AAPL 6 gün sonra
 holdings[1].earnings = { date: iso(Y, M, new Date().getDate() + 2), daysLeft: 2, hour: "amc", expectedMovePct: 8.5 };
 holdings[2].earnings = { date: iso(Y, M, new Date().getDate() + 6), daysLeft: 6, hour: "bmo" };
@@ -90,10 +93,10 @@ holdings[2].sig = mkSig(holdings[2], 49, 200, 205, 233, 164, 210, "neutral"); //
 // Realize işlemleri (sells) — REALIZED_USD + aylık büyüme barları için (son aylara yayılı)
 const monthAgo = (back) => { const d = new Date(); d.setMonth(d.getMonth() - back); return d.toISOString().slice(0, 10); };
 const sells = [
-  { kind: "sell", symbol: "NBIS", shares: 50, buyUSD: 28.4, sellUSD: 64, date: monthAgo(1) }, // +1780
-  { kind: "sell", symbol: "NVDA", shares: 185, buyUSD: 130, sellUSD: 155, date: monthAgo(3) }, // +4625 → NVDA bedava
-  { kind: "sell", symbol: "SMCI", shares: 60, buyUSD: 38, sellUSD: 46, date: monthAgo(2) },    // +480
-  { kind: "sell", symbol: "PLTR", shares: 100, buyUSD: 24, sellUSD: 30.5, date: monthAgo(0) }, // +650 bu ay
+  { kind: "sell", symbol: "NBIS", shares: 50, buyUSD: 28.4, sellUSD: 64, date: "2026-05-20" },  // ESKİ (kuruluş öncesi) → realize'e DAHİL EDİLMEMELİ
+  { kind: "sell", symbol: "NVDA", shares: 185, buyUSD: 130, sellUSD: 155, date: "2026-06-20" }, // +4625 → NVDA bedava
+  { kind: "sell", symbol: "SMCI", shares: 60, buyUSD: 38, sellUSD: 46, date: "2026-07-01" },    // +480
+  { kind: "sell", symbol: "PLTR", shares: 100, buyUSD: 24, sellUSD: 30.5, date: monthAgo(0) },  // +650 bu ay
 ];
 // Net değer geçmişi (GÜNLÜK ~45 nokta) — Risk Karnesi (Sharpe/vol/drawdown) test edilebilsin
 const history = [];
@@ -193,16 +196,16 @@ function portfolioPayload() {
       if ((!t.realizedLots || !t.realizedLots.length) && t.status === "closed" && t.exitPrice != null && t.qty > 0) sr += (t.exitPrice - t.entry) * t.qty;
       if (sr) swReal[sym] = (swReal[sym] || 0) + sr;
     }
+    // Server mantığı: realize YALNIZCA portföy kuruluşundan (8 Haz 2026) sonraki satışlardan. Override YOK.
+    const PORT_START = "2026-06-08";
     const out = {};
-    for (const tr of sells) { if (tr.kind === "buy" || swIds.has(tr.id)) continue; const sym = (tr.symbol || "").toUpperCase(); const pl = (tr.shares || 0) * ((tr.sellUSD || 0) - (tr.buyUSD || 0)); if (sym) out[sym] = (out[sym] || 0) + pl; }
+    for (const tr of sells) { if (tr.kind === "buy" || swIds.has(tr.id)) continue; if (tr.date && tr.date < PORT_START) continue; const sym = (tr.symbol || "").toUpperCase(); const pl = (tr.shares || 0) * ((tr.sellUSD || 0) - (tr.buyUSD || 0)); if (sym) out[sym] = (out[sym] || 0) + pl; }
     for (const [s, v] of Object.entries(swReal)) out[s] = +(((out[s] || 0) + v)).toFixed(2);
+    for (const s of Object.keys(out)) out[s] = +out[s].toFixed(2);
     return out;
   })();
-  const effOvr = (() => { const o = {}; for (const r of REALIZED_2026_TRUTH.map((x, i) => ({ ...x, id: "r26-truth-" + i }))) { const amt = MOCK_R26_EDITS[r.id] != null ? +MOCK_R26_EDITS[r.id] : r.amountTRY; o[r.symbol] = +(((o[r.symbol] || 0) + amt)).toFixed(2); } return o; })();
-  const editedSyms = (() => { const s = {}; REALIZED_2026_TRUTH.forEach((r, i) => { if (MOCK_R26_EDITS["r26-truth-" + i] != null) s[r.symbol] = true; }); return s; })();
-  for (const [s, tl] of Object.entries(effOvr)) realizedBySym[s] = +(tl / FX).toFixed(2);
   const truthItems = REALIZED_2026_TRUTH.map((r, i) => { const id = "r26-truth-" + i; return MOCK_R26_EDITS[id] != null ? { id, symbol: r.symbol, label: r.label, amountTRY: +MOCK_R26_EDITS[id], date: null, year: 2026, auto: true, source: "truth", edited: true } : { id, symbol: r.symbol, label: r.label, amountTRY: r.amountTRY, date: null, year: 2026, auto: true, source: "truth" }; });
-  return { holdings, options: MOCK_OPTIONS, cash: CASH, flows: [], trades: [...sells, ...DA_TRADES], realized2026: truthItems, watchlist: [], realizedBySym, realizeOverrideTRY: effOvr, realizeOverrideEdited: editedSyms,
+  return { holdings, options: MOCK_OPTIONS, cash: CASH, flows: [], trades: [...sells, ...DA_TRADES], realized2026: truthItems, watchlist: [], realizedBySym, realizeOverrideTRY: {}, realizeOverrideEdited: {},
     history, fx: { usdtry: FX, eurtry: +(FX * 1.083).toFixed(4), gram: 4500 }, // gram → healthy=true (Toplam Getiri/donut dolsun)
     meta: { totals: { grandTRY }, summaryText: "Portföy bugün +%1,36 yukarıda. 🛡 1 pozisyon ağırlık uyarısı (AAPL). 📈 2 hissede aktif swing." },
     alerts: ALERTS.map(evalAlertMock),

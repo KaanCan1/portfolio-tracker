@@ -142,31 +142,9 @@
             <h2><svg class="h2-ic" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>Varlıklar <span class="tip" data-tip="İpucu: Maliyetler işlemlerle otomatik senkron — alış ortalama maliyeti ağırlıklı günceller, satış pozisyondan düşer. Bir hissede plan stop girersen Pozisyon Bekçisi onu asla aşağı çekmez, sadece yukarı taşır.">?</span></h2>
             <div class="head-actions">
               <button class="btn ghost sm" id="addOptionBtn">+ Opsiyon</button>
-              <button class="btn primary sm" id="addBtn">+ Varlık Ekle</button>
+              <button class="btn primary add-cta" id="addBtn">+ Varlık Ekle</button>
             </div>
           </div>
-          <form class="quick-add" id="quickAdd">
-            <div class="qa-fields">
-              <label class="qa-field qa-field-sym">
-                <span class="qa-lbl">Sembol</span>
-                <input id="qaSymbol" class="qa-input" placeholder="NVDA" list="symbolSuggestions" autocomplete="off" />
-                <span class="qa-name" id="qaName"></span>
-              </label>
-              <label class="qa-field">
-                <span class="qa-lbl">Adet</span>
-                <input id="qaQty" class="qa-input qa-num" type="number" step="any" placeholder="0" />
-              </label>
-              <label class="qa-field">
-                <span class="qa-lbl">Fiyat $ <i>ops.</i></span>
-                <input id="qaCost" class="qa-input qa-num" type="number" step="any" placeholder="canlı fiyat" />
-              </label>
-              <button type="submit" class="btn primary qa-submit" id="qaAdd"><span class="qa-icon">⚡</span> Hızlı ekle</button>
-            </div>
-            <div class="qa-foot">
-              <span class="qa-preview" id="qaPreview">Sembol + adet gir → anında portföye eklenir.</span>
-              <span class="qa-hint">Fiyat girersen İşlem Geçmişi'ne “Alış” olarak da yazılır · detay için “+ Varlık Ekle”.</span>
-            </div>
-          </form>
           <div id="tables"></div>
         </section>
 
