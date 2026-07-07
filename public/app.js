@@ -4904,15 +4904,7 @@ CHALLENGE.indexSym = "QQQ";
  * ücretsiz planlarda yok, bu onun likit vekili) · HYG/IEF = kredi iştahı · XLY/XLP = rotasyon */
 CHALLENGE.raiSyms = ["VIXY", "HYG", "IEF", "XLY", "XLP"];
 async function chLoadIndex() {
-  const need = [CHALLENGE.indexSym, ...CHALLENGE.raiSyms].filter((s) => !CHALLENGE._sym[s]);
-  await Promise.all(need.map(async (sym) => {
-    try {
-      const d = await (await fetch(`/api/chart?symbol=${encodeURIComponent(sym)}`)).json();
-      const v = Array.isArray(d.candles) ? d.candles : [];
-      if (v.length < 30) return;
-      CHALLENGE._sym[sym] = { v, ema8: chEMA(v, 8), ema21: chEMA(v, 21), ema50: chEMA(v, 50), vma: chVMA(v, 20), idx: Object.fromEntries(v.map((c, i) => [c.time, i])) };
-    } catch {}
-  }));
+  await chFetchCandles([CHALLENGE.indexSym, ...CHALLENGE.raiSyms]);
   // Oran serileri (kredi/rotasyon) — pay serisi omurga, payda en yakın önceki bar
   CHALLENGE._credit = chRatioSer(CHALLENGE._sym.HYG, CHALLENGE._sym.IEF);
   CHALLENGE._rot = chRatioSer(CHALLENGE._sym.XLY, CHALLENGE._sym.XLP);
@@ -5056,6 +5048,22 @@ const chADR = (v, i, p = 20) => { let s = 0, k = 0; for (let j = i - p + 1; j <=
 const chFmtD = (d) => { if (!d) return "—"; const x = new Date(d); return `${x.getUTCDate()} ${["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"][x.getUTCMonth()]}`; };
 const chSize = (entry, stop) => { const frac = (entry - stop) / entry; const riskUSD = CHALLENGE.startCapital * CHALLENGE.riskPct / 100; return Math.max(CHALLENGE.minNotional, Math.min(CHALLENGE.maxNotional, riskUSD / Math.max(0.001, frac))); };
 
+// TOPLU mum çek — tüm evreni TEK istekte sunucu önbelleğinden (66 gidiş-dönüş → 1).
+// Zaten yüklenmiş sembolleri atlar; eksikleri sunucu arka planda ısıtır.
+async function chFetchCandles(syms) {
+  const need = [...new Set(syms.map((s) => String(s || "").toUpperCase()))].filter((s) => s && !CHALLENGE._sym[s]);
+  if (!need.length) return { missing: [] };
+  try {
+    const r = await (await fetch(`/api/candles?symbols=${need.map(encodeURIComponent).join(",")}`)).json();
+    const cand = r.candles || {};
+    for (const [sym, v] of Object.entries(cand)) {
+      if (!Array.isArray(v) || v.length < 60) continue;
+      CHALLENGE._sym[sym] = { v, ema8: chEMA(v, 8), ema21: chEMA(v, 21), ema50: chEMA(v, 50), vma: chVMA(v, 20), idx: Object.fromEntries(v.map((c, i) => [c.time, i])) };
+    }
+    return { missing: r.missing || need.filter((s) => !cand[s]) };
+  } catch { return { missing: need }; }
+}
+
 async function chLoad() {
   // Donmuş defter (immutable açılışlar) — evrenden önce gelsin ki sembolleri de yüklensin
   try {
@@ -5071,18 +5079,23 @@ async function chLoad() {
   } catch {}
   const universe = await chUniverse();
   for (const t of CHALLENGE._frozen.values()) if (!universe.includes(t.sym)) universe.push(t.sym);
-  await chLoadIndex(); // QQQ rejim filtresi — evrenle birlikte yüklenir (watch'a girmez)
-  // Parti parti yükle (5'erli) — 30+ sembolde API'yi boğmadan; mum çoğunlukla sunucu önbelleğinden gelir
-  const one = async (sym) => {
-    try {
-      const d = await (await fetch(`/api/chart?symbol=${encodeURIComponent(sym)}`)).json();
-      const v = Array.isArray(d.candles) ? d.candles : [];
-      if (v.length < 60) return;
-      CHALLENGE._sym[sym] = { v, ema8: chEMA(v, 8), ema21: chEMA(v, 21), ema50: chEMA(v, 50), vma: chVMA(v, 20), idx: Object.fromEntries(v.map((c, i) => [c.time, i])) };
-    } catch {}
-  };
-  for (let i = 0; i < universe.length; i += 5) await Promise.all(universe.slice(i, i + 5).map(one));
+  CHALLENGE._universe = universe;
+  // Tüm evren + endeks (QQQ) + RAI ETF'leri TEK toplu istekte
+  const { missing } = await chFetchCandles([...universe, CHALLENGE.indexSym, ...CHALLENGE.raiSyms]);
+  CHALLENGE._credit = chRatioSer(CHALLENGE._sym.HYG, CHALLENGE._sym.IEF);
+  CHALLENGE._rot = chRatioSer(CHALLENGE._sym.XLY, CHALLENGE._sym.XLP);
   CHALLENGE.watch = universe.filter((s) => CHALLENGE._sym[s]); // sadece verisi olanlar
+  // Soğuk semboller sunucuda ısınıyor (fresh deploy sonrası) → bir kez gecikmeli tazele
+  if (missing.length && !CHALLENGE._topupDone) {
+    CHALLENGE._topupDone = true;
+    setTimeout(async () => {
+      await chFetchCandles([...(CHALLENGE._universe || []), CHALLENGE.indexSym, ...CHALLENGE.raiSyms]);
+      CHALLENGE._credit = chRatioSer(CHALLENGE._sym.HYG, CHALLENGE._sym.IEF);
+      CHALLENGE._rot = chRatioSer(CHALLENGE._sym.XLY, CHALLENGE._sym.XLP);
+      CHALLENGE.watch = (CHALLENGE._universe || []).filter((s) => CHALLENGE._sym[s]);
+      renderChallenge(); renderHuntStrip();
+    }, 9000);
+  }
 }
 
 // Birleşik giriş sinyali (EMA 8/21/50 + QM teyidi) — belirli bir barda tetik

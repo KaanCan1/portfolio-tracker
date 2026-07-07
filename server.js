@@ -3313,6 +3313,33 @@ app.get("/api/chart", async (req, res) => {
   }
 });
 
+/* ----- API: TOPLU mum serisi — Alfa Avı 60+ sembolü TEK istekte yükler -----
+ * Mumları YALNIZ önbellekten döndürür (TD çağrısı YOK → anında). 66 gidiş-dönüş → 1.
+ * Önbellekte olmayanlar 'missing' listelenir + arka planda ısıtılır (kota-dostu, yanıtı
+ * bekletmeden) → sonraki tazelemede dolar. Böylece pano ısınmış sembollerle ANINDA açılır. */
+const _warmQ = new Set();
+async function queueWarmCandles(syms) {
+  const fresh = syms.filter((s) => !_warmQ.has(s)).slice(0, 24); // nazik: turda en fazla 24 soğuk sembol
+  if (!fresh.length) return;
+  fresh.forEach((s) => _warmQ.add(s));
+  try {
+    await pool(fresh, 3, async (sym) => { try { await getCandles(sym, { bg: true }); } catch {} });
+    await persistCandleCache().catch(() => {});
+  } finally { fresh.forEach((s) => _warmQ.delete(s)); }
+}
+app.get("/api/candles", (req, res) => {
+  const syms = String(req.query.symbols || "").toUpperCase().split(",").map((s) => s.trim()).filter(Boolean).slice(0, 80);
+  const bars = Math.min(400, Math.max(60, Number(req.query.bars) || 300));
+  const out = {}, missing = [];
+  for (const sym of syms) {
+    const c = candleCache[sym]?.candles;
+    if (c && c.length >= 60) out[sym] = c.length > bars ? c.slice(-bars) : c;
+    else missing.push(sym);
+  }
+  res.json({ candles: out, missing, asOf: Date.now() });
+  if (missing.length) queueWarmCandles(missing); // yanıttan SONRA, arka planda ısıt (bloklamaz)
+});
+
 /* ----- API: piyasa duygusu (VIX + Fear&Greed) — hızlı, hafif endpoint -----
  * Ağır /api/portfolio çağrısını beklemeden duygu kartları anında çizilebilsin
  * diye ayrı tutulur. VIX/F&G zaten bellekten anında döner (SWR). */

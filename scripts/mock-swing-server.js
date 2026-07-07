@@ -619,6 +619,20 @@ const server = createServer(async (req, res) => {
       positions: pos.sort((a, b) => b.rcPct - a.rcPct), correlation: { syms, matrix } }));
     return;
   }
+  if (url.startsWith("/api/candles")) {
+    const syms = ((req.url.split("symbols=")[1] || "").split("&")[0] || "").split(",").map((s) => decodeURIComponent(s).trim().toUpperCase()).filter(Boolean).slice(0, 80);
+    const genFor = (sym) => {
+      if (REAL_CANDLES[sym]?.candles?.length) return REAL_CANDLES[sym].candles;
+      let seed = [...sym].reduce((a, c) => a + c.charCodeAt(0), 0) || 7;            // sembole göre tohum → tutarlı
+      const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+      const closes = []; let p = 40 + (seed % 120);
+      for (let i = 0; i < 160; i++) { p += p * (Math.sin(i / 9) * 0.012 + (rnd() - 0.44) * 0.02); closes.push(+p.toFixed(2)); }
+      return qCandles(closes, { adr: 5 });
+    };
+    const out = {}, missing = [];
+    for (const sym of syms) { const c = genFor(sym); if (c && c.length >= 60) out[sym] = c; else missing.push(sym); }
+    res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify({ candles: out, missing, asOf: Date.now() })); return;
+  }
   if (url.startsWith("/api/chart")) {
     const sym = ((req.url.split("symbol=")[1] || "NVDA").split("&")[0] || "NVDA").toUpperCase();
     let candles;
