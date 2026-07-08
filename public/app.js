@@ -5153,6 +5153,32 @@ function chExitWhy(p) {
   return `<b>Çıkış — neden?</b><ul class="ch-ev">${evs}</ul><b>Sonuç: ${verdict}</b> — net ${p.realized >= 0 ? "+" : ""}${fmtUSD0(p.realized)} (${pct >= 0 ? "+" : ""}${pct.toFixed(1)}% · ${p.R >= 0 ? "+" : ""}${p.R}R).`;
 }
 
+// Açık pozisyon için görsel fiyat merdiveni — stop · giriş · TP1 · TP2 tek eksende, canlı fiyat işaretçisi kayar.
+// Sol (kırmızı) = risk bölgesi (giriş→stop), sağ (yeşil) = ödül bölgesi (giriş→hedefler). Vurulan hedefler ✓ ile işaretli.
+function chLadder(p) {
+  const lo = Math.min(p.stop, p.entry, p.mark), hi = Math.max(p.tp2, p.mark), span = (hi - lo) || 1;
+  const at = (x) => Math.max(1.5, Math.min(98.5, ((x - lo) / span) * 100));
+  const sA = at(p.stop), eA = at(p.entry), t1 = at(p.tp1), t2 = at(p.tp2), mA = at(p.mark);
+  const up = p.mark >= p.entry, done1 = p.tp1hit, done2 = p.tp2hit;
+  return `<div class="chl">
+    <div class="chl-bar">
+      <div class="chl-seg risk" style="left:${sA}%;width:${(eA - sA).toFixed(1)}%"></div>
+      <div class="chl-seg reward" style="left:${eA}%;width:${(t2 - eA).toFixed(1)}%"></div>
+      <span class="chl-t stop" style="left:${sA}%"></span>
+      <span class="chl-t entry" style="left:${eA}%"></span>
+      <span class="chl-t tp ${done1 ? "done" : ""}" style="left:${t1}%"></span>
+      <span class="chl-t tp ${done2 ? "done" : ""}" style="left:${t2}%"></span>
+      <span class="chl-now ${up ? "up" : "dn"}" style="left:${mA}%"><b>$${p.mark.toFixed(2)}</b></span>
+    </div>
+    <div class="chl-lg">
+      <span class="chl-l stop"><i>🛑 STOP</i><b>${fmtUSD(p.stop)}</b></span>
+      <span class="chl-l entry"><i>◆ GİRİŞ</i><b>${fmtUSD(p.entry)}</b></span>
+      <span class="chl-l tp"><i>🎯 TP1${done1 ? " ✓" : ` +%${CHALLENGE.tp1}`}</i><b>${fmtUSD(p.tp1)}</b></span>
+      <span class="chl-l tp"><i>🎯 TP2${done2 ? " ✓" : ` +%${CHALLENGE.tp2}`}</i><b>${fmtUSD(p.tp2)}</b></span>
+    </div>
+  </div>`;
+}
+
 // SUNUCU-PANOSU: tek doğruluk kaynağı. Varsa sunucunun hesabından çizeriz (istemci/sunucu ayrışmaz),
 // yoksa yerel motora (chLoad+chRun+chWatch) düşeriz — regresyon riski yok.
 async function chLoadBoard() {
@@ -5189,12 +5215,27 @@ async function renderChallenge() {
 
   const setup = () => `<span class="ch-setup brk">EMA 8/21/50</span><span class="ch-setup pb">QM</span>`;
 
-  // OPEN kartları
-  const openCards = open.length ? open.slice().sort((a, b) => new Date(b.date) - new Date(a.date)).map((p) => `
-    <div class="ch-card open" data-chsym="${p.sym}" title="Grafiği aç — ${p.sym}"><div class="ch-card-top"><div class="ch-card-sym"><b>${p.sym}</b> ${setup()}</div>
-      <div class="ch-card-r"><span class="ch-pill open">Açık</span><span class="ch-card-pnl ${cls(p.unreal)}">${p.unreal >= 0 ? "+" : ""}${fmtUSD0(p.unreal)}</span><span class="ch-card-rr ${cls(p.R)}">${p.R >= 0 ? "+" : ""}${p.R}R</span></div></div>
-    <div class="ch-card-dt">${chFmtD(p.date)} → açık · ~${fmtUSD0(p.notional)} pozisyon</div>
-    <div class="ch-why">${chEntryWhy(p)}</div><div class="ch-why">${chExitWhy(p)}</div></div>`).join("") : "";
+  // OPEN kartları — görsel fiyat merdiveni + belirgin seviyeler + katlanır gerekçe
+  const openCards = open.length ? open.slice().sort((a, b) => new Date(b.date) - new Date(a.date)).map((p) => {
+    const pct = ((p.mark - p.entry) / p.entry) * 100;
+    const nextTgt = p.tp1hit ? p.tp2 : p.tp1, nextLbl = p.tp1hit ? `TP2 +%${CHALLENGE.tp2}` : `TP1 +%${CHALLENGE.tp1}`;
+    const effStop = p.tp1hit ? p.entry : p.stop;
+    const toTgt = ((nextTgt - p.mark) / p.mark) * 100, toStop = ((effStop - p.mark) / p.mark) * 100;
+    return `
+    <div class="ch-card open ch-pos" data-chsym="${p.sym}" title="Grafiği aç — ${p.sym}">
+      <div class="ch-card-top"><div class="ch-card-sym"><b>${p.sym}</b> ${setup()}</div>
+        <div class="ch-card-r"><span class="ch-pill open">Açık</span><span class="ch-card-pnl ${cls(p.unreal)}">${p.unreal >= 0 ? "+" : ""}${fmtUSD0(p.unreal)}</span><span class="ch-card-rr ${cls(p.R)}">${p.R >= 0 ? "+" : ""}${p.R}R</span></div></div>
+      <div class="ch-card-dt">${chFmtD(p.date)} → açık · ~${fmtUSD0(p.notional)} pozisyon · %${(p.rem * 100).toFixed(0)} taşınıyor${p.initRisk ? ` · risk ${fmtUSD0(p.initRisk)}` : ""}</div>
+      ${chLadder(p)}
+      <div class="ch-dist">
+        <span class="cd now ${pct >= 0 ? "up" : "dn"}">${pct >= 0 ? "▲" : "▼"} Şimdi <b>${fmtUSD(p.mark)}</b> · ${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%</span>
+        <span class="cd tp">🎯 ${nextLbl} <s>+${Math.max(0, toTgt).toFixed(1)}% uzak</s></span>
+        <span class="cd stop">🛑 stop <s>${toStop.toFixed(1)}% uzak</s></span>
+      </div>
+      <details class="ch-det"><summary>Gerekçe & durum <span class="ch-det-h">giriş nedeni · olaylar · plan</span></summary>
+        <div class="ch-why">${chEntryWhy(p)}</div><div class="ch-why">${chExitWhy(p)}</div></details>
+    </div>`;
+  }).join("") : "";
 
   // İZLEME LİSTESİ (kurulum oluşuyor mu?) — trend dışılar tek satırda toplanır (evren geniş)
   const wl = D.watch;
@@ -7290,6 +7331,7 @@ document.addEventListener("click", (e) => {
 
 /* Alfa Avı: izleme listesi satırı / açık pozisyon kartı → grafik modalı (QM analiziyle) */
 document.addEventListener("click", (e) => {
+  if (e.target.closest("summary")) return; // katlanır gerekçe aç/kapa — grafik açma
   const el = e.target.closest("[data-chsym]");
   if (el) openChartModal(el.dataset.chsym, { horizon: "swing" });
 });

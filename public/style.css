@@ -2610,6 +2610,43 @@ ul.sw-qm-list li b { font-weight: 700; color: var(--ink); }
 .ch-ev { margin: 5px 0 3px; padding-left: 18px; }
 .ch-ev li { margin: 2px 0; }
 .win-c { color: var(--green-d); font-weight: 700; } .loss-c { color: var(--red-d); font-weight: 700; }
+
+/* Alfa Avı — açık pozisyon: görsel fiyat merdiveni (stop · giriş · TP1 · TP2 + kayan canlı fiyat) */
+.ch-pos { border-left-width: 4px; }
+.chl { margin: 6px 0 10px; }
+.chl-bar { position: relative; height: 12px; border-radius: 999px; background: var(--bg2); margin-top: 34px; }
+.chl-seg { position: absolute; top: 0; height: 100%; }
+.chl-seg.risk { background: linear-gradient(90deg, var(--red-d), color-mix(in srgb, var(--red) 30%, var(--card))); border-radius: 999px 0 0 999px; }
+.chl-seg.reward { background: linear-gradient(90deg, color-mix(in srgb, var(--green-d) 28%, var(--card)), var(--green-d)); border-radius: 0 999px 999px 0; }
+.chl-t { position: absolute; top: 50%; width: 3px; height: 18px; transform: translate(-50%, -50%); border-radius: 2px; z-index: 1; }
+.chl-t.stop { background: var(--red-d); }
+.chl-t.entry { width: 12px; height: 12px; border-radius: 3px; background: var(--ink); transform: translate(-50%, -50%) rotate(45deg); box-shadow: 0 0 0 3px var(--card); }
+.chl-t.tp { background: color-mix(in srgb, var(--green-d) 40%, var(--card)); }
+.chl-t.tp.done { width: 4px; background: var(--green-d); box-shadow: 0 0 0 3px color-mix(in srgb, var(--green-d) 25%, transparent); }
+.chl-now { position: absolute; top: -30px; transform: translateX(-50%); white-space: nowrap; z-index: 3; }
+.chl-now b { display: inline-block; font-family: var(--mono); font-size: 12px; font-weight: 700; color: #fff; padding: 3px 9px; border-radius: 7px; box-shadow: 0 4px 12px -4px rgba(16, 30, 22, .4); }
+.chl-now::after { content: ""; position: absolute; left: 50%; bottom: -16px; width: 2px; height: 16px; transform: translateX(-50%); }
+.chl-now.up b { background: var(--green-d); } .chl-now.up::after { background: var(--green-d); }
+.chl-now.dn b { background: var(--red-d); } .chl-now.dn::after { background: var(--red-d); }
+.chl-lg { display: flex; justify-content: space-between; gap: 6px; margin-top: 13px; }
+.chl-l { display: flex; flex-direction: column; gap: 1px; align-items: center; }
+.chl-l:first-child { align-items: flex-start; } .chl-l:last-child { align-items: flex-end; }
+.chl-l i { font-style: normal; color: var(--muted); font-size: 10px; font-weight: 600; letter-spacing: .2px; }
+.chl-l b { font-family: var(--mono); font-size: 12.5px; color: var(--ink); }
+.chl-l.stop b { color: var(--red-d); } .chl-l.tp b { color: var(--green-d); }
+/* mesafe şeridi: hedefe / stopa uzaklık + canlı fiyat */
+.ch-dist { display: flex; flex-wrap: wrap; gap: 5px 16px; font-size: 12px; margin: 0 0 4px; }
+.ch-dist .cd { color: var(--ink2); } .ch-dist .cd b { font-family: var(--mono); color: var(--ink); font-weight: 700; }
+.ch-dist .cd s { text-decoration: none; color: var(--muted); font-size: 11px; }
+.ch-dist .cd.now.up, .ch-dist .cd.now.up b { color: var(--green-d); }
+.ch-dist .cd.now.dn, .ch-dist .cd.now.dn b { color: var(--red-d); }
+/* katlanır gerekçe */
+.ch-det { margin-top: 8px; border-top: 1px dashed var(--line); padding-top: 7px; }
+.ch-det > summary { cursor: pointer; font-size: 12px; font-weight: 700; color: var(--ink2); list-style: none; display: flex; align-items: center; gap: 8px; }
+.ch-det > summary::-webkit-details-marker { display: none; }
+.ch-det > summary::before { content: "▸"; color: var(--muted); font-size: 10px; transition: transform .15s ease; }
+.ch-det[open] > summary::before { transform: rotate(90deg); }
+.ch-det-h { font-weight: 400; color: var(--muted); font-size: 11px; }
 @media (max-width: 860px) { .ch-kpis { grid-template-columns: repeat(2, 1fr); } .ch-grid { grid-template-columns: 1fr; } }
 
 /* ===== Swing Defteri — aylık bar balonu + pozisyon kartı vurguları ===== */
