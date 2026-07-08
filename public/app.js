@@ -5179,6 +5179,37 @@ function chLadder(p) {
   </div>`;
 }
 
+// Kapanan işlem için KOMPAKT sonuç merdiveni — canlı fiyat yok; onun yerine çıkış işaretleri
+// (nerede TP alındı 🟢, nerede stop/gap yendi 🔴, iz süren stop nerede kapandı) bar üzerinde işaretlenir.
+function chLadderMini(p) {
+  const evs = (p.events || []).filter((e) => e.px != null);
+  const pxs = evs.map((e) => e.px);
+  const lo = Math.min(p.stop, p.entry, p.tp1, p.tp2, ...pxs), hi = Math.max(p.stop, p.entry, p.tp1, p.tp2, ...pxs), span = (hi - lo) || 1;
+  const at = (x) => Math.max(1.5, Math.min(98.5, ((x - lo) / span) * 100));
+  const sA = at(p.stop), eA = at(p.entry), t1 = at(p.tp1), t2 = at(p.tp2);
+  const evX = evs.map((e) => {
+    const cl = (e.k === "tp1" || e.k === "tp2") ? "win" : (e.k === "stop" || e.k === "gap") ? "loss" : e.pnl > 0.5 ? "win" : e.pnl < -0.5 ? "loss" : "neu";
+    return `<span class="chlm-x ${cl}" style="left:${at(e.px)}%" title="${e.k} · $${e.px.toFixed(2)} (${e.pnl >= 0 ? "+" : ""}${fmtUSD0(e.pnl)})"></span>`;
+  }).join("");
+  return `<div class="chl chl-mini">
+    <div class="chl-bar">
+      <div class="chl-seg risk" style="left:${sA}%;width:${(eA - sA).toFixed(1)}%"></div>
+      <div class="chl-seg reward" style="left:${eA}%;width:${(t2 - eA).toFixed(1)}%"></div>
+      <span class="chl-t stop" style="left:${sA}%"></span>
+      <span class="chl-t entry" style="left:${eA}%"></span>
+      <span class="chl-t tp ${p.tp1hit ? "done" : ""}" style="left:${t1}%"></span>
+      <span class="chl-t tp ${p.tp2hit ? "done" : ""}" style="left:${t2}%"></span>
+      ${evX}
+    </div>
+    <div class="chl-lg">
+      <span class="chl-l stop"><i>🛑 STOP</i><b>${fmtUSD(p.stop)}</b></span>
+      <span class="chl-l entry"><i>◆ GİRİŞ</i><b>${fmtUSD(p.entry)}</b></span>
+      <span class="chl-l tp"><i>🎯 TP1${p.tp1hit ? " ✓" : ""}</i><b>${fmtUSD(p.tp1)}</b></span>
+      <span class="chl-l tp"><i>🎯 TP2${p.tp2hit ? " ✓" : ""}</i><b>${fmtUSD(p.tp2)}</b></span>
+    </div>
+  </div>`;
+}
+
 // SUNUCU-PANOSU: tek doğruluk kaynağı. Varsa sunucunun hesabından çizeriz (istemci/sunucu ayrışmaz),
 // yoksa yerel motora (chLoad+chRun+chWatch) düşeriz — regresyon riski yok.
 async function chLoadBoard() {
@@ -5300,7 +5331,13 @@ async function renderChallenge() {
     <div class="ch-jrnl">${closed.slice().sort((a, b) => new Date(b.exitDate) - new Date(a.exitDate)).map((p) => {
       const st = p.realized > 1 ? "win" : p.realized < -1 ? "loss" : "neu";
       const pill = st === "win" ? `<span class="ch-pill win">Kâr</span>` : st === "loss" ? `<span class="ch-pill loss">Zarar</span>` : `<span class="ch-pill neu">Başa-baş</span>`;
-      return `<div class="ch-card ${st}"><div class="ch-card-top"><div class="ch-card-sym"><b>${p.sym}</b> ${setup()}</div><div class="ch-card-r">${pill}<span class="ch-card-pnl ${cls(p.realized)}">${p.realized >= 0 ? "+" : ""}${fmtUSD0(p.realized)}</span><span class="ch-card-rr ${cls(p.R)}">${p.R >= 0 ? "+" : ""}${p.R}R</span></div></div><div class="ch-card-dt">${chFmtD(p.date)} → ${chFmtD(p.exitDate)}</div><div class="ch-why">${chEntryWhy(p)}</div><div class="ch-why">${chExitWhy(p)}</div></div>`;
+      const pct = p.notional ? (p.realized / p.notional) * 100 : 0;
+      return `<div class="ch-card ${st} ch-pos" data-chsym="${p.sym}" title="Grafiği aç — ${p.sym}">
+        <div class="ch-card-top"><div class="ch-card-sym"><b>${p.sym}</b> ${setup()}</div><div class="ch-card-r">${pill}<span class="ch-card-pnl ${cls(p.realized)}">${p.realized >= 0 ? "+" : ""}${fmtUSD0(p.realized)}</span><span class="ch-card-rr ${cls(p.R)}">${p.R >= 0 ? "+" : ""}${p.R}R</span></div></div>
+        <div class="ch-card-dt">${chFmtD(p.date)} → ${chFmtD(p.exitDate)} · ~${fmtUSD0(p.notional)} pozisyon · sonuç ${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%</div>
+        ${chLadderMini(p)}
+        <details class="ch-det"><summary>Gerekçe & durum <span class="ch-det-h">giriş nedeni · çıkış olayları</span></summary>
+          <div class="ch-why">${chEntryWhy(p)}</div><div class="ch-why">${chExitWhy(p)}</div></details></div>`;
     }).join("")}</div>` : ""}
 
     <div class="ch-note">Oyun parasıdır, gerçek portföyden bağımsızdır, <b>kâr garantisi değildir</b>. Hesap <b>bugün $${CHALLENGE.startCapital} ile başlar</b> ve ileriye doğru işler: kurallar sağlanınca (tetik) pozisyon açılır, <b>her işlemde stop vardır</b>, riske göre boyutlanır; hedef→sat, stop→kes, nakit serbest kalınca yeni işlem. Kazanç da kayıp da dürüst gösterilir.</div>`;
