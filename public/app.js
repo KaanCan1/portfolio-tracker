@@ -5273,13 +5273,30 @@ function chExitWhy(p) {
   return `<b>Çıkış — neden?</b><ul class="ch-ev">${evs}</ul><b>Sonuç: ${verdict}</b> — net ${p.realized >= 0 ? "+" : ""}${fmtUSD0(p.realized)} (${pct >= 0 ? "+" : ""}${pct.toFixed(1)}% · ${p.R >= 0 ? "+" : ""}${p.R}R).`;
 }
 
-async function renderChallenge() {
-  const el = $("#challengeBox"); if (!el) return;
+// SUNUCU-PANOSU: tek doğruluk kaynağı. Varsa sunucunun hesabından çizeriz (istemci/sunucu ayrışmaz),
+// yoksa yerel motora (chLoad+chRun+chWatch) düşeriz — regresyon riski yok.
+async function chLoadBoard() {
+  try {
+    const r = await fetch("/api/challenge/board");
+    if (!r.ok) return null;
+    const b = await r.json();
+    if (!b || !Array.isArray(b.positions) || !Array.isArray(b.watch) || !b.regime) return null;
+    return { positions: b.positions, cash: b.cash, watch: b.watch, regime: b.regime, rai: b.rai, universeCount: b.universeCount, vixReal: !!b.vixReal, source: "server" };
+  } catch { return null; }
+}
+async function chLocalBoard(el) {
   if (!CHALLENGE._loaded) {
     el.innerHTML = `<div class="rk-empty">Alfa Avı — Radar + Swing evreni toplanıyor, kurulumlar gerçek mumlarda taranıyor…</div>`;
     await chLoad(); CHALLENGE._loaded = true;
   }
-  const { positions, equity, cash } = chRun();
+  const { positions, cash } = chRun();
+  return { positions, cash, watch: chWatch(new Set(positions.filter((p) => p.open).map((p) => p.sym))), regime: chRegimeToday(), rai: chRaiToday(), universeCount: CHALLENGE.watch.length, vixReal: !!CHALLENGE._vixSer, source: "client" };
+}
+
+async function renderChallenge() {
+  const el = $("#challengeBox"); if (!el) return;
+  const D = (await chLoadBoard()) || (await chLocalBoard(el));
+  const positions = D.positions, cash = D.cash;
   const closed = positions.filter((p) => !p.open), open = positions.filter((p) => p.open);
   const realized = positions.reduce((s, p) => s + p.realized, 0);
   const unreal = open.reduce((s, p) => s + (p.unreal || 0), 0);
@@ -5300,7 +5317,7 @@ async function renderChallenge() {
     <div class="ch-why">${chEntryWhy(p)}</div><div class="ch-why">${chExitWhy(p)}</div></div>`).join("") : "";
 
   // İZLEME LİSTESİ (kurulum oluşuyor mu?) — trend dışılar tek satırda toplanır (evren geniş)
-  const wl = chWatch(new Set(open.map((p) => p.sym)));
+  const wl = D.watch;
   const wlAct = wl.filter((w) => w.status !== "off");
   const wlOff = wl.filter((w) => w.status === "off");
   const wpill = (st) => st === "ready" ? `<span class="ch-pill win">Tetik bölgesi</span>` : st === "forming" ? `<span class="ch-pill open">Oluşuyor</span>` : `<span class="ch-pill neu">Trendde</span>`;
@@ -5313,7 +5330,7 @@ async function renderChallenge() {
     || `<tr><td colspan="7" class="ch-none">Şu an trendde aday yok — evren taranmaya devam ediyor.</td></tr>`;
   const wlOffLine = wlOff.length ? `<div class="wl-off-line">Trend dışı (aday değil): ${wlOff.map((w) => w.sym).join(" · ")}</div>` : "";
 
-  const regNow = chRegimeToday();
+  const regNow = D.regime;
   const regBadge = regNow.state === "off"
     ? `<div class="ch-regime off">⛔ <b>Rejim filtresi: YENİ GİRİŞ KAPALI.</b> ${regNow.txt}.${open.length ? ` <b>🛡 Savunma modu:</b> açık ${open.length} pozisyonda kârdakilerin stopu başa-başa kilitlendi (hedeften önce zorla çıkış yok, ama piyasa dönerse kâr korunuyor).` : ""} Koşullar düzelince girişler otomatik açılır.</div>`
     : regNow.state === "caution"
@@ -5325,7 +5342,7 @@ async function renderChallenge() {
     const band = chRaiBand(rai.score);
     const [lbl, expl] = chRaiBandTR[band];
     const tone = band === "riskon" ? "on" : band === "notr" ? "neu" : band === "temkin" ? "warn" : "off";
-    const compLbl = { trend: "Endeks trendi · QQQ", vol: CHALLENGE._vixSer ? "Volatilite · VIX (FRED)" : "Volatilite · VIXY", credit: "Kredi iştahı · HYG/IEF", rot: "Rotasyon · XLY/XLP", breadth: "Genişlik · evren" };
+    const compLbl = { trend: "Endeks trendi · QQQ", vol: D.vixReal ? "Volatilite · VIX (FRED)" : "Volatilite · VIXY", credit: "Kredi iştahı · HYG/IEF", rot: "Rotasyon · XLY/XLP", breadth: "Genişlik · evren" };
     const chip = (k) => rai.comps[k] == null ? "" : `<span class="rai-chip ${rai.comps[k] >= 65 ? "pos" : rai.comps[k] >= 45 ? "neu" : rai.comps[k] >= 30 ? "warn" : "neg"}" title="${compLbl[k]}"><i>${compLbl[k]}</i><b>${rai.comps[k]}</b></span>`;
     return `<div class="rai-panel ${tone}">
       <div class="rai-left"><div class="rai-score">${rai.score}</div><div class="rai-score-l">RİSK İŞTAHI<span>/100</span></div></div>
@@ -5338,7 +5355,7 @@ async function renderChallenge() {
     </div>`;
   })() : "";
   el.innerHTML = `
-    <div class="ch-strat">Strateji: <b>Swing Momentum (8/21/50 EMA)</b> + <b>Qullamaggie</b> teyidi · <b>bugünden ileri</b> canlı hesap · evren: <b>Radar + Swing defteri (${CHALLENGE.watch.length} hisse)</b> · sadece tetikte açar (asla stop'suz değil) · riske göre ~%${CHALLENGE.riskPct}/işlem · kademeli kâr-al (TP1 +%${CHALLENGE.tp1}/TP2 +%${CHALLENGE.tp2}, sonra ${CHALLENGE.trailEma} iz süren stop) · <b>rejim kapısı: QQQ &lt; EMA21 veya risk iştahı &lt; 30 → giriş yok</b> · aynı gün çok tetikte <b>göreli güç</b> önce · <b>bilanço karartması</b>: bilançoya ≤3 gün kala giriş yok · <b>sektör tavanı</b>: sektör başına 1 pozisyon.</div>
+    <div class="ch-strat">Strateji: <b>Swing Momentum (8/21/50 EMA)</b> + <b>Qullamaggie</b> teyidi · <b>bugünden ileri</b> canlı hesap · evren: <b>Radar + Swing defteri (${D.universeCount} hisse)</b> · sadece tetikte açar (asla stop'suz değil) · riske göre ~%${CHALLENGE.riskPct}/işlem · kademeli kâr-al (TP1 +%${CHALLENGE.tp1}/TP2 +%${CHALLENGE.tp2}, sonra ${CHALLENGE.trailEma} iz süren stop) · <b>rejim kapısı: QQQ &lt; EMA21 veya risk iştahı &lt; 30 → giriş yok</b> · aynı gün çok tetikte <b>göreli güç</b> önce · <b>bilanço karartması</b>: bilançoya ≤3 gün kala giriş yok · <b>sektör tavanı</b>: sektör başına 1 pozisyon.</div>
     ${raiPanel}
     ${regBadge}
     <div class="ch-kpis">

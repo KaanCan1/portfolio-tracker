@@ -235,6 +235,25 @@ app.get("/api/challenge", async (_req, res) => {
   }
   catch (e) { res.status(500).json({ error: String(e.message || e) }); }
 });
+/* ===== SUNUCU-PANOSU — Alfa Avı'nın TEK doğruluk kaynağı =====
+ * Sunucu motoru (chEngineTick) hesapladığı tam panoyu (pozisyonlar/izleme/rejim/RAI) döndürür.
+ * Client bunu çizer, kendi motorunu çalıştırmaz → istemci/sunucu asla ayrışmaz. Önbellekli board
+ * ANINDA döner; bayatsa (>20 dk) arka planda tazelenir. İlk açılışta Postgres warm-cache'ten yüklenir,
+ * yoksa bir tik çalıştırılır. Board hazır değilse 503 → client kendi motoruna (fallback) düşer. */
+app.get("/api/challenge/board", async (_req, res) => {
+  try {
+    if (CH_ENG.lastBoard) {
+      res.json(CH_ENG.lastBoard);
+      if (Date.now() - (CH_ENG.lastBoard.asOf || 0) > 20 * 60_000 && !CH_ENG._running) chEngineTick("board-refresh").catch(() => {});
+      return;
+    }
+    const saved = await kvLoad("challenge_board").catch(() => null);
+    if (saved && Array.isArray(saved.positions)) { CH_ENG.lastBoard = saved; return res.json(saved); }
+    if (!CH_ENG._running) { try { await chEngineTick("board-init"); } catch {} }
+    if (CH_ENG.lastBoard) return res.json(CH_ENG.lastBoard);
+    res.status(503).json({ error: "board hazır değil — motor ısınıyor, birazdan tekrar dene" });
+  } catch (e) { res.status(500).json({ error: String(e.message || e) }); }
+});
 app.post("/api/challenge/open", async (req, res) => {
   try {
     const b = req.body || {};
@@ -270,7 +289,7 @@ const CH_ENG = {
   core: ["NVDA", "AMD", "MU", "NBIS", "INTC", "SNDK", "TSLA", "SOFI", "NOW"],
   startDate: "2026-07-01", startCapital: 1500, riskPct: 3, tp1: 6, tp2: 12,
   minNotional: 350, maxNotional: 850, maxSyms: 60, indexSym: "QQQ", // 40→60: QM evreni bağlandı
-  _running: false, lastRun: null, lastSummary: null,
+  _running: false, lastRun: null, lastSummary: null, lastBoard: null,
 };
 const chEmaArr = (v, p) => { const k = 2 / (p + 1); let e = null; return v.map((c) => (e = e == null ? c.close : c.close * k + e * (1 - k))); };
 const chVmaArr = (v, p) => v.map((c, i) => i < p - 1 ? null : v.slice(i - p + 1, i + 1).reduce((a, b) => a + b.volume, 0) / p);
@@ -426,6 +445,88 @@ async function chSendMail(subject, html) {
   } catch (e) { console.error("Alfa Avı mail hatası:", e.message); return false; }
 }
 
+// ── Sunucu-panosu yardımcıları (client parite) — /api/challenge/board için ──
+const chRaiBandTR = {
+  riskon: ["risk-on", "piyasa iştahlı — girişler normal boyutta"],
+  notr: ["nötr", "ne korku ne coşku — normal kurallar, fiyat kapısı belirleyici"],
+  temkin: ["temkin", "iştah zayıflıyor — yeni girişler YARIM boyut"],
+  riskoff: ["risk-off", "korku baskın — YENİ GİRİŞ YOK"],
+};
+const chFmtDSrv = (d) => { if (!d) return "—"; const x = new Date(d); return `${x.getUTCDate()} ${["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"][x.getUTCMonth()]}`; };
+const chUSD = (n) => n == null ? "—" : `$${Number(n).toFixed(2)}`;
+const chUSD0 = (n) => n == null ? "—" : `$${Math.round(Number(n)).toLocaleString("en-US")}`;
+// Bugünkü rejim + açıklama metni (client chRegimeToday ile birebir)
+function chRegimeTodaySrv(Q, raiToday) {
+  const rai = raiToday;
+  if (!Q) return { state: "on", txt: "endeks verisi yok — filtre pasif", qqq: null, rai, emaState: "on" };
+  const i = Q.v.length - 1, c = Q.v[i].close;
+  const emaSt = c < Q.ema21[i] ? "off" : c < Q.ema8[i] ? "caution" : "on";
+  const rb = chRaiBand(rai?.score);
+  const st = chWorse(emaSt, rb === "riskoff" ? "off" : rb === "temkin" ? "caution" : "on");
+  let txt = emaSt === "off" ? `QQQ ${c.toFixed(2)} < EMA21 ${Q.ema21[i].toFixed(2)} — piyasa riskli, YENİ GİRİŞ KAPALI`
+    : emaSt === "caution" ? `QQQ ${c.toFixed(2)} < EMA8 ${Q.ema8[i].toFixed(2)} (EMA21 üstünde) — dikkat, yarım boyut`
+      : `QQQ ${c.toFixed(2)} > EMA8 & EMA21 — piyasa sağlıklı`;
+  if (rai) { txt += ` · risk iştahı ${rai.score}/100 (${chRaiBandTR[rb][0]})`; if (st !== emaSt) txt += " — kısıt RAI'den geliyor"; }
+  return { state: st, txt, qqq: c, rai, emaState: emaSt };
+}
+// İzleme listesi (server) — client chWatch ile birebir mantık + "neden bekliyor?" gerekçesi
+function chWatchSrv(S, watch, held, reg, startDate) {
+  const out = [], today = new Date().toISOString().slice(0, 10);
+  for (const sym of watch) {
+    const s = S[sym]; if (!s) continue;
+    const v = s.v, i = v.length - 1, c = v[i];
+    const up = c.close > s.ema50[i] && s.ema21[i] > s.ema50[i] && s.ema50[i] > s.ema50[i - 10];
+    const hi60 = Math.max(...v.slice(i - 60, i + 1).map((x) => x.high));
+    const nearHigh = c.close >= 0.82 * hi60;
+    const adr = chAdrAt(v, i);
+    const low7 = Math.min(...v.slice(i - 6, i + 1).map((x) => x.low));
+    const pulled = low7 <= s.ema8[i] * 1.02;
+    const trig = s.ema8[i];
+    const distPct = (trig - c.close) / c.close * 100;
+    const above = c.close > trig;
+    let status;
+    if (!up) status = "off";
+    else if (above && pulled) status = "ready";
+    else if (nearHigh && pulled && distPct <= 4) status = "forming";
+    else status = "watch";
+    const entry = above ? c.close : trig;
+    const stop = Math.max(Math.min(c.low, v[i - 1].low), entry - 1.2 * (adr / 100) * entry);
+    const notional = chSizeSrv(entry, stop);
+    let why = "";
+    if (held.has(sym)) why = "pozisyon zaten açık";
+    else if (status === "off") why = "trend filtresi dışı (EMA dizilimi bozuk)";
+    else if (!above) why = `tetik bekleniyor: EMA8 ${chUSD(trig)} hacimle geri alınmalı (+%${Math.max(0, distPct).toFixed(1)})`;
+    else {
+      let cross = null;
+      for (let j = i; j > Math.max(60, i - 45); j--) {
+        if (v[j].close > s.ema8[j] && v[j - 1].close <= s.ema8[j - 1]) {
+          const volOkJ = s.vma[j] != null && v[j].volume > s.vma[j];
+          const hi60J = Math.max(...v.slice(j - 60, j + 1).map((x) => x.high));
+          const upJ = v[j].close > s.ema50[j] && s.ema21[j] > s.ema50[j] && s.ema50[j] > s.ema50[j - 10];
+          cross = { date: v[j].time, volOk: volOkJ, nearHigh: v[j].close >= 0.8 * hi60J, up: upJ, isToday: j === i && v[j].time >= today };
+          break;
+        }
+      }
+      if (!cross) why = "uzun süredir EMA8 üstünde — giriş için yeni geri çekilme → kırılım döngüsü gerek";
+      else if (cross.date < startDate) why = `kırılım ${chFmtDSrv(cross.date)}'de, hesap başlamadan önce — geçmişe girilmez; sıradaki döngü beklenir`;
+      else if (cross.isToday) why = "kırılım BUGÜN — bar kapanınca (gün sonu) koşullar tutuyorsa otomatik açılır";
+      else if (!cross.volOk) why = `${chFmtDSrv(cross.date)} kırılımı hacimsizdi (20g ort. altı) — hacimsiz kırılıma girilmez`;
+      else if (!cross.nearHigh) why = `${chFmtDSrv(cross.date)} kırılımında fiyat 6-ay zirvesinden çok uzaktı — QM filtresi pas dedi`;
+      else if (!cross.up) why = `${chFmtDSrv(cross.date)} kırılımında trend filtresi (EMA50 eğimi) sağlanmadı`;
+      else why = `${chFmtDSrv(cross.date)} kırılımında nakit/eşzamanlılık ya da rejim filtresi (endeks/risk iştahı) müsait değildi`;
+    }
+    if (!held.has(sym) && status !== "off") {
+      const eDate = CH_EARN.map[sym];
+      if (eDate && chEarnBlocked(sym, today)) why = `📊 bilanço karartması: bilanço ${chFmtDSrv(eDate)} (≤3 gün) — bilanço gecesine pozisyon taşınmaz` + (why ? ` · ${why}` : "");
+      else { const sct = CH_SECT.map[sym]; const clash = sct && [...held].find((h) => CH_SECT.map[h] === sct); if (clash) why = `sektör tavanı: ${clash} aynı sektörde açık (${sct}) — sektör başına 1 pozisyon` + (why ? ` · ${why}` : ""); }
+    }
+    if (reg.state === "off" && !held.has(sym) && status !== "off") why = `⛔ REJİM KAPALI: ${reg.txt}` + (why ? ` · ayrıca: ${why}` : "");
+    out.push({ sym, status, close: c.close, trig, distPct, adr, nearHigh, up, entry, stop, tp2: entry * (1 + CH_ENG.tp2 / 100), notional, riskUSD: notional * (entry - stop) / entry, why });
+  }
+  const rank = { ready: 0, forming: 1, watch: 2, off: 3 };
+  return out.sort((a, b) => rank[a.status] - rank[b.status] || a.distPct - b.distPct);
+}
+
 function chSrvSignal(S, sym, i) {
   const s = S[sym]; if (!s || i < 60) return null;
   const v = s.v, c = v[i];
@@ -513,17 +614,17 @@ async function chEngineTick(trigger = "timer") {
         // (bir sonraki barı etkiler — aynı bar içi lookahead yok). Backtest: iz süren EMA'yı
         // EMA8'e sıkıştırmak choppy off-günlerinde whipsaw → DD arttı; sadece stop-yukarı korur+getiriyi artırır.
         const effStop = p.tp1hit ? p.entry : p.stop;
-        if (c.low <= effStop) { const fr = p.rem, gap = c.open != null && c.open < effStop, px = gap ? c.open : effStop, pnl = fr * p.shares * (px - p.entry); cash += fr * p.shares * px; p.realized += pnl; p.rem = 0; p.open = false; p.exitDate = d; p.exitKind = gap ? "gap ile stop (açılışta boşluk — gerçek fiyattan)" : (p.stop >= p.entry && !p.tp1hit) ? "savunma stopu (başa-baş kilidi)" : p.tp1hit ? "başa-baş stop" : "stop"; continue; }
-        if (!p.tp1hit && c.high >= p.tp1) { const fr = 0.25; cash += fr * p.shares * p.tp1; p.realized += fr * p.shares * (p.tp1 - p.entry); p.rem -= fr; p.tp1hit = true; }
-        if (p.tp1hit && !p.tp2hit && c.high >= p.tp2) { const fr = 0.25; cash += fr * p.shares * p.tp2; p.realized += fr * p.shares * (p.tp2 - p.entry); p.rem -= fr; p.tp2hit = true; }
-        if (p.open && p.rem > 0 && c.close < s.ema21[i]) { const fr = p.rem, pnl = fr * p.shares * (c.close - p.entry); cash += fr * p.shares * c.close; p.realized += pnl; p.rem = 0; p.open = false; p.exitDate = d; p.exitKind = "EMA21 iz süren stop"; }
+        if (c.low <= effStop) { const fr = p.rem, gap = c.open != null && c.open < effStop, px = gap ? c.open : effStop, pnl = fr * p.shares * (px - p.entry); cash += fr * p.shares * px; p.realized += pnl; (p.events ||= []).push({ d, k: gap ? "gap" : (p.stop >= p.entry && !p.tp1hit) ? "def" : p.tp1hit ? "be" : "stop", px, fr, pnl }); p.rem = 0; p.open = false; p.exitDate = d; p.exitKind = gap ? "gap ile stop (açılışta boşluk — gerçek fiyattan)" : (p.stop >= p.entry && !p.tp1hit) ? "savunma stopu (başa-baş kilidi)" : p.tp1hit ? "başa-baş stop" : "stop"; continue; }
+        if (!p.tp1hit && c.high >= p.tp1) { const fr = 0.25, pnl = fr * p.shares * (p.tp1 - p.entry); cash += fr * p.shares * p.tp1; p.realized += pnl; p.rem -= fr; p.tp1hit = true; (p.events ||= []).push({ d, k: "tp1", px: p.tp1, fr, pnl }); }
+        if (p.tp1hit && !p.tp2hit && c.high >= p.tp2) { const fr = 0.25, pnl = fr * p.shares * (p.tp2 - p.entry); cash += fr * p.shares * p.tp2; p.realized += pnl; p.rem -= fr; p.tp2hit = true; (p.events ||= []).push({ d, k: "tp2", px: p.tp2, fr, pnl }); }
+        if (p.open && p.rem > 0 && c.close < s.ema21[i]) { const fr = p.rem, pnl = fr * p.shares * (c.close - p.entry); cash += fr * p.shares * c.close; p.realized += pnl; (p.events ||= []).push({ d, k: "trail", px: c.close, fr, pnl }); p.rem = 0; p.open = false; p.exitDate = d; p.exitKind = "EMA21 iz süren stop"; }
         if (defensive && p.open && !p.tp1hit && c.close > p.entry) p.stop = Math.max(p.stop, p.entry); // bar sonu başa-baş ratchet
       }
       const held = new Set(positions.filter((x) => x.open).map((x) => x.sym));
       for (const f of frozenByDate[d] || []) {
         if (held.has(f.sym) || positions.some((p) => p.id === f.id)) continue;
         cash -= f.notional;
-        positions.push({ ...f, rem: 1, tp1hit: false, tp2hit: false, realized: 0, open: true });
+        positions.push({ ...f, rem: 1, tp1hit: false, tp2hit: false, realized: 0, open: true, events: [] });
         held.add(f.sym);
       }
       // Savunma modu bildirimi — rejim İLK kez off'a geçtiği barda açık pozisyon varsa (idempotent)
@@ -558,7 +659,7 @@ async function chEngineTick(trigger = "timer") {
         cash -= notional;
         const t = { id, sym: sig.sym, date: sig.date, entry: +sig.entry.toFixed(4), stop: +sig.stop.toFixed(4), tp1: +(sig.entry * (1 + CH_ENG.tp1 / 100)).toFixed(4), tp2: +(sig.entry * (1 + CH_ENG.tp2 / 100)).toFixed(4), notional: +notional.toFixed(2), shares: +(notional / sig.entry).toFixed(6), rai: raiD ? raiD.score : null, frozenAt: new Date().toISOString(), by: "server" };
         led.trades.push(t); (frozenByDate[t.date] ||= []).push(t);
-        positions.push({ ...t, rem: 1, tp1hit: false, tp2hit: false, realized: 0, open: true });
+        positions.push({ ...t, rem: 1, tp1hit: false, tp2hit: false, realized: 0, open: true, events: [] });
         held.add(t.sym); dirty = true;
         if (!led.notified[`open:${id}`]) {
           led.notified[`open:${id}`] = new Date().toISOString();
@@ -622,12 +723,42 @@ async function chEngineTick(trigger = "timer") {
     CH_ENG.lastRun = new Date().toISOString();
     CH_ENG.lastSummary = { trigger, universe: watch.length, ledger: led.trades.length, open: openN, cash: +cash.toFixed(2), mailsSent: mails.length, regimeToday: regimeAt(todayISO), rai: raiToday ? raiToday.score : null };
     console.log("Alfa Avı motor:", JSON.stringify(CH_ENG.lastSummary));
+
+    // ── SUNUCU-PANOSU (tek doğruluk kaynağı) — client bunu çizer, kendi motorunu çalıştırmaz ──
+    for (const p of positions) {
+      p.initRisk = p.shares * (p.entry - p.stop);
+      p.R = p.initRisk > 0 ? +(p.realized / p.initRisk).toFixed(2) : 0;
+      if (p.open) { const s = S[p.sym]; const mark = s ? s.v[s.v.length - 1].close : p.entry; p.mark = mark; p.unreal = +(p.rem * p.shares * (mark - p.entry)).toFixed(2); }
+    }
+    const heldNow = new Set(positions.filter((x) => x.open).map((x) => x.sym));
+    const regTodayObj = chRegimeTodaySrv(Q, raiToday);
+    const board = {
+      asOf: Date.now(),
+      startCapital: CH_ENG.startCapital, goal: 2500, riskPct: CH_ENG.riskPct, tp1: CH_ENG.tp1, tp2: CH_ENG.tp2, trailEma: "EMA21", startDate: CH_ENG.startDate,
+      universeCount: watch.length,
+      cash: +cash.toFixed(2),
+      positions: positions.map((p) => ({
+        sym: p.sym, open: !!p.open, date: p.date, exitDate: p.exitDate || null,
+        entry: p.entry, stop: p.stop, tp1: p.tp1, tp2: p.tp2, notional: p.notional, shares: p.shares,
+        rem: p.rem, tp1hit: !!p.tp1hit, tp2hit: !!p.tp2hit, realized: +(+p.realized).toFixed(2),
+        R: p.R, unreal: p.unreal ?? 0, mark: p.mark ?? null, initRisk: p.initRisk ?? null,
+        rai: p.rai ?? null, frozen: true, events: p.events || [],
+      })),
+      regime: regTodayObj,
+      rai: raiToday ? { score: raiToday.score, comps: raiToday.comps } : null,
+      vixReal: !!VIXSER,
+      watch: chWatchSrv(S, watch, heldNow, regTodayObj, CH_ENG.startDate),
+    };
+    CH_ENG.lastBoard = board;
+    kvSave("challenge_board", board).catch(() => {});
     return CH_ENG.lastSummary;
   } catch (e) {
     console.error("Alfa Avı motor hatası:", e.message);
     return (CH_ENG.lastSummary = { trigger, error: String(e.message || e) });
   } finally { CH_ENG._running = false; }
 }
+// Boot'ta panoyu Postgres warm-cache'ten yükle → ilk istek anında dolu döner (motor tiki beklemez)
+kvLoad("challenge_board").then((b) => { if (b && Array.isArray(b.positions) && !CH_ENG.lastBoard) CH_ENG.lastBoard = b; }).catch(() => {});
 setTimeout(() => chEngineTick("startup").catch(() => {}), 90_000);
 setInterval(() => chEngineTick("timer").catch(() => {}), 30 * 60_000);
 // Elle tetikleme + durum (test için): POST tarar, GET son özeti döner
