@@ -1656,6 +1656,10 @@ tbody tr:hover .row-actions .btn.icon { color: var(--ink2); }
 .db-card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 15px 17px; box-shadow: var(--shadow-md); transition: border-color .16s, box-shadow .16s, transform .16s; }
 .db-card:hover { border-color: var(--line-strong); box-shadow: 0 12px 30px -16px rgba(16,30,22,.26); transform: translateY(-2px); }
 .db-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.db-grid-solo { grid-template-columns: 1fr; }
+/* Tek başına Yaklaşan Bilançolar — sade, hafif kart (minimalist) */
+.db-grid-solo .db-card { box-shadow: none; background: var(--bg2); }
+.db-grid-solo .db-card:hover { transform: none; box-shadow: none; border-color: var(--line-strong); }
 @media (max-width: 820px) { .db-grid { grid-template-columns: 1fr; } }
 
 /* başlık + ikon rozeti */

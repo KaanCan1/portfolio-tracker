@@ -3061,36 +3061,6 @@ function renderDailyBoard() {
     </div>`;
   }
 
-  /* ========== Getiri Kaynağı ========== */
-  let fxCard;
-  const contribStat = topC ? stat("En çok katkı", `${topC.sym} ${sUSD(topC.chg)}`, cls(topC.chg)) : stat("Pozisyon", String(stocks.length));
-  if (!haveAsset || !stocks.length) {
-    fxCard = `<div class="db-card">${head("💱", "b", "Getiri Kaynağı", "USD sepet")}<div class="db-empty">USD hisse pozisyonu yok.</div></div>`;
-  } else if (fxTRY == null) {
-    const assetUSD = usdtry ? assetTRY / usdtry : null;
-    fxCard = `<div class="db-card db-fx">${head("💱", "b", "Getiri Kaynağı", "Bugün · USD sepet")}
-      <div class="db-big ${cls(assetTRY)}">${sUSD(assetUSD)}</div>
-      <div class="db-big-sub">≈ ${assetTRY >= 0 ? "+" : ""}${fmtTRY0(assetTRY)} · hisse hareketi</div>
-      <div class="db-stats">${stat("Kazanan", String(gainers), "pos")}${stat("Kaybeden", String(losers), losers ? "neg" : "")}${contribStat}</div>
-      <div class="db-foot">Kur etkisi için dünkü USD/TRY snapshot'ı gerekiyor — yarın hesaplanır.</div></div>`;
-  } else {
-    const totalTRY = assetTRY + fxTRY;
-    const totUSD = usdtry ? totalTRY / usdtry : null;
-    const assetUSD = usdtry ? assetTRY / usdtry : null;
-    const aAbs = Math.abs(assetTRY), fAbs = Math.abs(fxTRY), tot = aAbs + fAbs || 1;
-    const aPct = Math.round((aAbs / tot) * 100), fPct = 100 - aPct;
-    const note = fAbs > aAbs * 1.5 ? "Kazancın çoğu kurdan — hisse performansını ayrı değerlendir."
-      : aAbs > fAbs * 1.5 ? "Değişim ağırlıkla hisseden — gerçek performans." : "Hisse ve kur dengeli.";
-    fxCard = `<div class="db-card db-fx">${head("💱", "b", "Getiri Kaynağı", "Bugün · USD sepet")}
-      <div class="db-big ${cls(totalTRY)}">${sUSD(totUSD)}</div>
-      <div class="db-big-sub">≈ ${totalTRY >= 0 ? "+" : ""}${fmtTRY0(totalTRY)} · ₺ karşılığı</div>
-      <div class="db-bar"><span class="db-bar-a" style="width:${aPct}%"></span><span class="db-bar-f" style="width:${fPct}%"></span></div>
-      <div class="db-attr-row"><span><i class="db-dot a"></i> Hisse hareketi</span><b class="${cls(assetTRY)}">${sUSD(assetUSD)} <small>${aPct}%</small></b></div>
-      <div class="db-attr-row"><span><i class="db-dot f"></i> USD/TRY kuru</span><b class="${cls(fxTRY)}">${fxTRY >= 0 ? "+" : ""}${fmtTRY0(fxTRY)} <small>${fPct}%</small></b></div>
-      <div class="db-stats">${stat("Kazanan", String(gainers), "pos")}${stat("Kaybeden", String(losers), losers ? "neg" : "")}${contribStat}</div>
-      <div class="db-foot">${note}</div></div>`;
-  }
-
   /* ========== Yaklaşan Bilançolar ========== */
   const earn = [];
   for (const h of stocks) {
@@ -3115,51 +3085,6 @@ function renderDailyBoard() {
       : `<div class="db-empty">Önümüzdeki 21 günde tuttuğun hisselerde bilanço yok. 🟢</div>`}
   </div>`;
 
-  /* ========== Bedava Pozisyon (house-money) + Sıradaki Hamle ========== */
-  let houseStrip = "", nextMoveCard = "";
-  if (frList.length) {
-    houseStrip = `<div class="db-card db-house">${head("🎁", "g", "Bedava Pozisyon", "Ana parası çıkmış · risksiz")}
-      <div class="db-house-top">
-        <div class="db-ring" style="--p:${Math.max(0, Math.min(100, freePct)).toFixed(0)}"><span class="db-ring-v">${freePct.toFixed(0)}<i>%</i></span></div>
-        <div class="db-house-nums">
-          <div><span>Bedava değer</span><b class="pos">${fmtUSD0(freeValue)}</b></div>
-          <div><span>Riskteki ana para</span><b>${fmtUSD0(totalAtRisk)}</b></div>
-          <div><span>Kilitli kâr (Σ realize)</span><b class="${cls(totalLocked)}">${fmtUSD0(totalLocked)}</b></div>
-        </div>
-      </div>
-      <div class="db-split"><span class="db-split-risk" style="width:${atRiskPct.toFixed(1)}%"></span><span class="db-split-free" style="width:${(100 - atRiskPct).toFixed(1)}%"></span></div>
-      <div class="db-stats">${stat("Pozisyon", String(frList.length))}${stat("Riskini sıfırlayan", String(freeCount), freeCount ? "pos" : "")}${stat("Ort. geri-alım", avgRecovered != null ? `%${avgRecovered.toFixed(0)}` : "—")}</div>
-      <div class="db-foot"><a class="db-link" data-goview="buyume">Büyüme'de detaylar →</a></div>
-    </div>`;
-
-    // Sıradaki Hamle: ana para çekmeye en yakın / hazır pozisyon
-    const ready = frList.filter((x) => !x.fr.free && x.fr.sellShares != null && x.fr.unreal > 0)
-      .sort((a, b) => (b.fr.recovered || 0) - (a.fr.recovered || 0) || (b.fr.unreal || 0) - (a.fr.unreal || 0));
-    if (ready.length) {
-      const { h, fr } = ready[0];
-      const sym = h.symbol.toUpperCase();
-      const nSell = Math.min(fr.qty, Math.ceil(fr.sellShares));
-      const cashOut = nSell * fr.price;
-      const nRemain = +(fr.qty - nSell).toFixed(2);
-      const remainVal = nRemain * fr.price;
-      nextMoveCard = `<div class="db-card db-move">${head("🎯", "v", "Sıradaki Hamle", "Ana parayı çek")}
-        <div class="db-move-sym"><b>${sym}</b> <span class="pos">${sUSD(fr.unreal)}</span> kârda · maliyetin %${(fr.recovered || 0).toFixed(0)} kadarı geri alındı</div>
-        <div class="db-prog"><i class="db-prog-fill" style="width:${Math.max(3, Math.min(100, fr.recovered || 0)).toFixed(0)}%"></i></div>
-        <div class="db-move-act"><b>${fmtNum(nSell, 2)} adet</b> sat → ana paran <b class="pos">${fmtUSD0(cashOut)}</b> cebe,<br>kalan <b>${fmtNum(nRemain, 2)} adet</b> 🎁 bedava biner</div>
-        <div class="db-stats">${stat("Cebe (ana para)", fmtUSD0(cashOut), "pos")}${stat("Bedava binecek", fmtUSD0(remainVal), "pos")}${stat("Açık kâr", sUSD(fr.unreal), cls(fr.unreal))}</div>
-        <button class="db-move-btn" data-goview="buyume">Büyüme'de göster →</button>
-      </div>`;
-    } else {
-      const closest = frList.filter((x) => !x.fr.free && x.fr.recovered != null)
-        .sort((a, b) => (b.fr.recovered || 0) - (a.fr.recovered || 0))[0];
-      nextMoveCard = `<div class="db-card db-move">${head("🎯", "v", "Sıradaki Hamle", "Ana parayı çek")}
-        <div class="db-move-wait">Şu an ana para çekmeye hazır pozisyon yok — kâr büyüsün, zorlama.</div>
-        ${closest ? `<div class="db-prog"><i class="db-prog-fill" style="width:${Math.max(3, Math.min(100, closest.fr.recovered || 0)).toFixed(0)}%"></i></div>
-        <div class="db-move-rec">En yakını <b>${closest.h.symbol.toUpperCase()}</b>: maliyetin %${(closest.fr.recovered || 0).toFixed(0)} kadarı geri alındı. ${closest.fr.unreal > 0 ? "Biraz daha kâr, sonra ana parayı çek." : "Önce kâra geçmeli (Kural 1)."}</div>` : ""}
-      </div>`;
-    }
-  }
-
   /* ========== Swing Nöbeti: açık swing'lerde stop/hedef tetik (Kural 1) ========== */
   let swingStrip = "";
   const swAlerts = (SWINGDECK.trades || []).filter((t) => t.status === "open")
@@ -3178,54 +3103,7 @@ function renderDailyBoard() {
     swingStrip = `<div class="db-card db-swstrip">${head("📈", "a", "Swing Nöbeti", `${swAlerts.length} açık uyarı · Kural 1`)}${rows}</div>`;
   }
 
-  /* ========== Bu Ay Realize ========== */
-  const goalTone = thisMonth >= gMin ? "ok" : thisMonth > 0 ? "warm" : "zero";
-  const goalCard = `<div class="db-card db-goal">${head("📊", "g", "Bu Ay Realize", `Hedef $${gMin}–${gMax}/ay`)}
-    <div class="db-big ${cls(thisMonth)}">${fmtUSD0(thisMonth)}</div>
-    <div class="sw-goal-bar">
-      <div class="sw-goal-band" style="left:${((gMin / gMax) * 100).toFixed(1)}%;right:0"></div>
-      <div class="sw-goal-fill ${goalTone}" style="width:${Math.max(0, Math.min(100, (thisMonth / gMax) * 100)).toFixed(1)}%"></div>
-    </div>
-    <div class="db-stats">${stat("Geçen ay", fmtUSD0(lastMonth), cls(lastMonth))}${stat("Bu yıl", fmtUSD0(ytdRealize), cls(ytdRealize))}${stat("Günlük gereken", thisMonth >= gMin ? "✓ tamam" : fmtUSD0(dailyNeeded))}</div>
-    <div class="db-foot">${thisMonth >= gMin ? `<span class="pos">✓ Aylık hedef tutturuldu</span>` : `hedefe <b>${fmtUSD0(gMin - thisMonth)}</b> kaldı`} · ${daysLeft} gün · <a class="db-link" data-goview="swingdefteri">defter →</a></div>
-  </div>`;
-
-  /* ========== Net Değer Kilometre Taşı ========== */
-  let mileCard = "";
-  if (totalUSD != null && totalUSD > 0) {
-    const MILES = [10000, 25000, 50000, 100000, 250000, 500000, 1000000, 2500000, 5000000];
-    const next = MILES.find((m) => m > totalUSD) || Math.ceil(totalUSD / 1e6 + 1) * 1e6;
-    const prev = [...MILES].reverse().find((m) => m <= totalUSD) || 0;
-    const milePct = next > prev ? ((totalUSD - prev) / (next - prev)) * 100 : 0;
-    let delta30 = null, ytdNW = null;
-    const mhist = (S.history || []).filter((s) => s.total != null);
-    if (mhist.length) {
-      const cut = new Date(); cut.setDate(cut.getDate() - 30);
-      const cutISO = cut.toISOString().slice(0, 10);
-      const past = [...mhist].reverse().find((s) => s.date <= cutISO) || mhist[0];
-      if (past) delta30 = totalUSD - (past.usdtry ? past.total / past.usdtry : past.total / usdtry);
-      const yStart = `${dNow.getFullYear()}-01-01`;
-      const base = mhist.find((s) => s.date >= yStart) || mhist[0];
-      if (base) ytdNW = totalUSD - (base.usdtry ? base.total / base.usdtry : base.total / usdtry);
-    }
-    let etaTxt = null;
-    if (delta30 != null && delta30 > 0) {
-      const months = (next - totalUSD) / delta30;
-      etaTxt = months <= 1 ? `~${Math.max(1, Math.round(months * 4.3))} hf` : months <= 18 ? `~${Math.round(months)} ay` : `~${(months / 12).toFixed(1)} yıl`;
-    }
-    const nwPts = mhist.map((s) => (s.usdtry ? s.total / s.usdtry : s.total / usdtry));
-    mileCard = `<div class="db-card db-mile">${head("🚀", "b", "Net Değer Kilometre Taşı", "Büyüme hedefi")}
-      <div class="db-mile-head"><div class="db-big">${fmtUSD0(totalUSD)}</div>${delta30 != null ? delta(delta30) : ""}</div>
-      ${dbSpark(nwPts)}
-      <div class="db-mile-bar"><div class="db-mile-fill" style="width:${Math.max(2, Math.min(100, milePct)).toFixed(1)}%"></div></div>
-      <div class="db-stats">${stat("Sıradaki eşik", fmtUSD0(next))}${stat("Kalan", fmtUSD0(next - totalUSD))}${stat("Tahmini süre", etaTxt || "—")}</div>
-      <div class="db-foot">%${milePct.toFixed(0)} yolda${ytdNW != null ? ` · yıl başından <b class="${cls(ytdNW)}">${ytdNW >= 0 ? "+" : ""}${fmtUSD0(ytdNW)}</b>` : ""}</div>
-    </div>`;
-  }
-  const progressRow = `<div class="db-grid">${goalCard}${mileCard}</div>`;
-
-  const thesisRow = (houseStrip || nextMoveCard) ? `<div class="db-grid db-grid-thesis">${houseStrip}${nextMoveCard}</div>` : "";
-  el.innerHTML = `${kpiStrip}${swingStrip}${thesisRow}${progressRow}<div class="db-grid">${fxCard}${earnCard}</div>`;
+  el.innerHTML = `${kpiStrip}${swingStrip}<div class="db-grid db-grid-solo">${earnCard}</div>`;
 
   // Yeni kartlardaki sekme bağlantıları (async re-render'da kopmasın diye #dailyBoard'a tek seferlik delege)
   if (!el._boundNav) {
