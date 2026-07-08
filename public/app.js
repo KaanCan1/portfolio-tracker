@@ -5110,9 +5110,11 @@ function chSignal(sym, i) {
   const hi60 = Math.max(...v.slice(i - 60, i + 1).map((x) => x.high));
   const nearHigh = c.close >= 0.8 * hi60;
   const adr = chADR(v, i);
-  if (!(up && pullback && crossover && volOk && nearHigh && adr >= 3)) return null;
+  const priorLeg = (c.close / Math.min(...v.slice(i - 40, i - 10).map((x) => x.close)) - 1) * 100;
+  // QM giriş kalitesi: konsolidasyon öncesi ≥%10 momentum hamlesi şart (server chSrvSignal ile PARİTE).
+  if (!(up && pullback && crossover && volOk && nearHigh && adr >= 3 && priorLeg >= 10)) return null;
   const stop = Math.max(Math.min(c.low, v[i - 1].low), c.close - 1.2 * (adr / 100) * c.close);
-  return { sym, i, date: c.time, entry: c.close, stop, ema8: s.ema8[i], ema21: s.ema21[i], ema50: s.ema50[i], volRatio: c.volume / s.vma[i], adr, nearHighPct: (c.close / hi60 - 1) * 100, priorLeg: (c.close / Math.min(...v.slice(i - 40, i - 10).map((x) => x.close)) - 1) * 100 };
+  return { sym, i, date: c.time, entry: c.close, stop, ema8: s.ema8[i], ema21: s.ema21[i], ema50: s.ema50[i], volRatio: c.volume / s.vma[i], adr, nearHighPct: (c.close / hi60 - 1) * 100, priorLeg };
 }
 
 // BUGÜNDEN ileri: $1.500 nakit ile kronolojik sim (tetikte aç, kademeli çıkış + iz süren stop)

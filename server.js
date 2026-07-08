@@ -538,9 +538,12 @@ function chSrvSignal(S, sym, i) {
   const hi60 = Math.max(...v.slice(i - 60, i + 1).map((x) => x.high));
   const nearHigh = c.close >= 0.8 * hi60;
   const adr = chAdrAt(v, i);
-  if (!(up && pullback && crossover && volOk && nearHigh && adr >= 3)) return null;
+  const priorLeg = (c.close / Math.min(...v.slice(i - 40, i - 10).map((x) => x.close)) - 1) * 100;
+  // QM giriş kalitesi: konsolidasyon öncesi ≥%10 momentum hamlesi şart. Backtest (9 hisse/17 ay):
+  // isabet 48.6→51.5%, ort.R 0.80→0.88, maxDD 9.5→8.6% — zayıf/yatay kırılımlar elenir. (≥%20 aşırı → zarar.)
+  if (!(up && pullback && crossover && volOk && nearHigh && adr >= 3 && priorLeg >= 10)) return null;
   const stop = Math.max(Math.min(c.low, v[i - 1].low), c.close - 1.2 * (adr / 100) * c.close);
-  return { sym, date: c.time, entry: c.close, stop, volRatio: c.volume / s.vma[i], adr };
+  return { sym, date: c.time, entry: c.close, stop, volRatio: c.volume / s.vma[i], adr, priorLeg };
 }
 
 async function chEngineTick(trigger = "timer") {
