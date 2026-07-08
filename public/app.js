@@ -5133,7 +5133,7 @@ function chRun() {
       const s = P._sym[p.sym], i = s.idx[d]; if (i == null) continue; const c = s.v[i];
       const te = P.trailEma === "EMA8" ? s.ema8[i] : s.ema21[i];
       const effStop = p.tp1hit ? p.entry : p.stop;
-      if (c.low <= effStop) { const fr = p.rem, px = effStop, pnl = fr * p.shares * (px - p.entry); cash += fr * p.shares * px; p.realized += pnl; p.events.push({ d, k: (p.stop >= p.entry && !p.tp1hit) ? "def" : p.tp1hit ? "be" : "stop", px, fr, pnl }); p.rem = 0; p.open = false; p.exitDate = d; continue; }
+      if (c.low <= effStop) { const fr = p.rem, gap = c.open != null && c.open < effStop, px = gap ? c.open : effStop, pnl = fr * p.shares * (px - p.entry); cash += fr * p.shares * px; p.events.push({ d, k: gap ? "gap" : (p.stop >= p.entry && !p.tp1hit) ? "def" : p.tp1hit ? "be" : "stop", px, fr, pnl }); p.realized += pnl; p.rem = 0; p.open = false; p.exitDate = d; continue; }
       if (!p.tp1hit && c.high >= p.tp1) { const fr = 0.25, pnl = fr * p.shares * (p.tp1 - p.entry); cash += fr * p.shares * p.tp1; p.realized += pnl; p.rem -= fr; p.tp1hit = true; p.events.push({ d, k: "tp1", px: p.tp1, fr, pnl }); }
       if (p.tp1hit && !p.tp2hit && c.high >= p.tp2) { const fr = 0.25, pnl = fr * p.shares * (p.tp2 - p.entry); cash += fr * p.shares * p.tp2; p.realized += pnl; p.rem -= fr; p.tp2hit = true; p.events.push({ d, k: "tp2", px: p.tp2, fr, pnl }); }
       if (p.open && p.rem > 0 && c.close < te) { const fr = p.rem, pnl = fr * p.shares * (c.close - p.entry); cash += fr * p.shares * c.close; p.realized += pnl; p.events.push({ d, k: "trail", px: c.close, fr, pnl }); p.rem = 0; p.open = false; p.exitDate = d; }
@@ -5261,6 +5261,7 @@ function chExitWhy(p) {
     if (e.k === "trail") return li(`İz süren stop ${chFmtD(e.d)}: kalan %${(e.fr * 100).toFixed(0)}, ${CHALLENGE.trailEma} altında $${e.px.toFixed(2)}'de çıktı (${e.pnl >= 0 ? "+" : ""}${fmtUSD0(e.pnl)}).`);
     if (e.k === "def") return li(`<span class="neu-c">🛡 Savunma stopu</span> ${chFmtD(e.d)}: piyasa risk-off'a geçince stop başa-başa çekilmişti, $${e.px.toFixed(2)}'de risksiz kapandı (kâr kilidi korudu, ${e.pnl >= 0 ? "+" : ""}${fmtUSD0(e.pnl)}).`);
     if (e.k === "be") return li(`<span class="neu-c">Başa-baş stop</span> ${chFmtD(e.d)}: kalan %${(e.fr * 100).toFixed(0)} risksiz kapandı (±$0).`);
+    if (e.k === "gap") return li(`<span class="loss-c">Gap ile stop</span> ${chFmtD(e.d)}: fiyat açılışta stopun <b>altında boşluk (gap)</b> yaptı — gerçek çıkış stop fiyatından DEĞİL, açılış $${e.px.toFixed(2)}'den (dürüst ölçüm, ${fmtUSD0(e.pnl)}).`);
     return li(`<span class="loss-c">Stop</span> ${chFmtD(e.d)}: stop $${e.px.toFixed(2)} deldi, kapatıldı (${fmtUSD0(e.pnl)}).`);
   }).join("");
   if (p.open) {

@@ -513,7 +513,7 @@ async function chEngineTick(trigger = "timer") {
         // (bir sonraki barı etkiler — aynı bar içi lookahead yok). Backtest: iz süren EMA'yı
         // EMA8'e sıkıştırmak choppy off-günlerinde whipsaw → DD arttı; sadece stop-yukarı korur+getiriyi artırır.
         const effStop = p.tp1hit ? p.entry : p.stop;
-        if (c.low <= effStop) { const fr = p.rem, px = effStop, pnl = fr * p.shares * (px - p.entry); cash += fr * p.shares * px; p.realized += pnl; p.rem = 0; p.open = false; p.exitDate = d; p.exitKind = (p.stop >= p.entry && !p.tp1hit) ? "savunma stopu (başa-baş kilidi)" : p.tp1hit ? "başa-baş stop" : "stop"; continue; }
+        if (c.low <= effStop) { const fr = p.rem, gap = c.open != null && c.open < effStop, px = gap ? c.open : effStop, pnl = fr * p.shares * (px - p.entry); cash += fr * p.shares * px; p.realized += pnl; p.rem = 0; p.open = false; p.exitDate = d; p.exitKind = gap ? "gap ile stop (açılışta boşluk — gerçek fiyattan)" : (p.stop >= p.entry && !p.tp1hit) ? "savunma stopu (başa-baş kilidi)" : p.tp1hit ? "başa-baş stop" : "stop"; continue; }
         if (!p.tp1hit && c.high >= p.tp1) { const fr = 0.25; cash += fr * p.shares * p.tp1; p.realized += fr * p.shares * (p.tp1 - p.entry); p.rem -= fr; p.tp1hit = true; }
         if (p.tp1hit && !p.tp2hit && c.high >= p.tp2) { const fr = 0.25; cash += fr * p.shares * p.tp2; p.realized += fr * p.shares * (p.tp2 - p.entry); p.rem -= fr; p.tp2hit = true; }
         if (p.open && p.rem > 0 && c.close < s.ema21[i]) { const fr = p.rem, pnl = fr * p.shares * (c.close - p.entry); cash += fr * p.shares * c.close; p.realized += pnl; p.rem = 0; p.open = false; p.exitDate = d; p.exitKind = "EMA21 iz süren stop"; }
