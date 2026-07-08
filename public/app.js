@@ -5317,18 +5317,39 @@ const RI_KIND = {
   denge:   { icon: "⚖️", lbl: "Denge",   cls: "ri-denge" },
   rejim:   { icon: "🌡️", lbl: "Rejim",   cls: "ri-rejim" },
 };
+// Sade dille "bu ne demek?" açıklaması — tür + başlık kalıbına göre (karta tıklayınca açılır)
+const RI_EXPLAIN = {
+  risk: "Sermayeni tehdit eden bir durum. Kural 1 (para kaybetme) burada devreye girer: planını uygula — ya çık ya küçült. Borsada en pahalı cümle 'belki döner'dir; zarar büyümeden aksiyon al.",
+  "kar-al": "Pozisyon kâr-al bölgesine geldi. Bir kısmını (%25–33) satıp kârı cebe koy, kalanı trende bırak. Böylece hem kazancı realize edersin hem yukarı potansiyeli kaçırmazsın (ana parayı çek, kârı bedava bırak felsefen).",
+  firsat: "Teknik bir alım/ekleme sinyali — fırsat OLABİLİR, garanti değil. Fiyat kısa vadede aşırı düşmüş olabilir ve bir tepki yükselişi gelebilir. Girersen mutlaka stop ile gir; olasılık oynuyoruz, kesinlik değil.",
+  denge: "Portföyünün çok büyük kısmı tek bir hisseye bağlı. O hisse kötü bir haber alırsa TÜM portföyün sarsılır — 'çok hisse ama tek bahis' tuzağı. Kademeli azaltıp riski birkaç pozisyona yay.",
+  rejim: "Piyasanın genel havası (VIX = korku endeksi). Sakinken (düşük VIX) nakit oranın düşük olabilir; gerginken nakit hem sigorta hem alım gücüdür. Öneri: hedef nakit bandına göre pozisyonunu ayarla.",
+};
+function riExplain(x) {
+  const t = (x.title || "").toLowerCase();
+  if (/iz süren stop/.test(t)) return "Fiyat, kârını koruyan 'iz süren stop' çizgisinin altına indi. Bu çizgi kâr arttıkça yukarı taşınan otomatik bir koruma seviyesidir; altına inmesi trendin zayıfladığına işarettir. Planına göre azalt ya da çık — kazandığın kârı geri verme.";
+  if (/zararda/.test(t)) return "Pozisyon, maliyetine göre derin zararda. Kendine sor: bu hisseyi neden aldın (tezin) hâlâ geçerli mi? Bozulduysa çık; bozulmadıysa net bir stop belirle ve ZARARDAYKEN ekleme yapma (ortalama düşürme tuzağı).";
+  if (/aşırı sat|sıçrama/.test(t)) return "RSI göstergesi çok düşük — hisse kısa vadede aşırı satılmış. Böyle noktalardan genelde teknik bir tepki (sıçrama) gelebilir. Bu bir OLASILIK, kesinlik değil; girersen stop ile gir, küçük başla.";
+  if (/kurulum/.test(t)) return "Teknik bir alım kurulumu oluşmuş (parantez içindeki harf güven derecesi: A en güçlü, C zayıf). Trend + geri çekilme + kırılım gibi şartların hizalandığı anlamına gelir. Yine de tetik ve stop ile hareket et.";
+  if (/yoğunlaş|portföyün %/.test(t)) return RI_EXPLAIN.denge;
+  if (/kâr-al|kar al|azalt/.test(t)) return RI_EXPLAIN["kar-al"];
+  return RI_EXPLAIN[x.kind] || "";
+}
 function renderRule1() { // panel: "Portföy Önerileri" (#rule1Panel id'si korunur)
   const el = $("#rule1Panel");
   if (!el) return;
   const ins = STATE?.insights;
   if (!ins || !ins.items) { el.innerHTML = ""; return; }
-  const rows = ins.items.map((x) => {
+  const cards = ins.items.map((x) => {
     const k = RI_KIND[x.kind] || RI_KIND.denge;
-    return `<li class="ri-row ${k.cls}">
-      <span class="ri-tag">${k.icon} ${k.lbl}</span>
-      <span class="ri-body"><b class="ri-title">${x.title}</b>${x.detail ? `<span class="ri-detail">${x.detail}</span>` : ""}</span>
+    const exp = riExplain(x);
+    return `<div class="ri-card ${k.cls}" role="button" tabindex="0" aria-expanded="false">
+      <div class="ri-card-top"><span class="ri-tag">${k.icon} ${k.lbl}</span>${exp ? `<span class="ri-q" aria-hidden="true">ⓘ ne demek?</span>` : ""}</div>
+      <b class="ri-title">${x.title}</b>
+      ${x.detail ? `<span class="ri-detail">${x.detail}</span>` : ""}
       ${x.action ? `<span class="ri-act">→ ${x.action}</span>` : ""}
-    </li>`;
+      ${exp ? `<div class="ri-explain"><b>Bu ne demek?</b> ${exp}</div>` : ""}
+    </div>`;
   }).join("");
   const tone = ins.grade === "saglam" ? "pos" : ins.grade === "dikkat" ? "mid" : "neg";
   const collapsed = collapseSavedCollapsed("insightsPanel");
@@ -5339,17 +5360,35 @@ function renderRule1() { // panel: "Portföy Önerileri" (#rule1Panel id'si koru
           <span class="collapse-chev" aria-hidden="true">▸</span>
           <div>
             <h2>${svgIcon("lightbulb", "h2-ic")}Portföy Önerileri ${tipIcon("Portföyünden derlenen, önceliklendirilmiş eylem önerileri: önce sermayeyi koruyan riskler, sonra kâr-al, fırsat ve denge. Skor sermaye sağlığını özetler (yüksek = düşük risk). Öneridir, emir değildir — kararı sen verirsin.")}</h2>
-            <span class="chart-sub">Önce risk, sonra fırsat — portföyüne özel ${ins.items.length} öneri</span>
+            <span class="chart-sub">Önce risk, sonra fırsat · her kartın üstüne tıkla → ne demek olduğunu açar</span>
           </div>
         </div>
         <div class="r1-score ${tone}"><span class="r1-num">${ins.score}</span><span class="r1-lbl">/100</span></div>
       </div>
       <div class="panel-body">
       ${ins.items.length
-        ? `<ul class="ri-list">${rows}</ul>`
+        ? `<div class="ri-grid">${cards}</div>`
         : `<div class="r1-clean">✓ Belirgin bir aksiyon yok — pozisyonların stop'lu ve dengeli. İzlemede kal.</div>`}
       </div>
     </section>`;
+  // Karta tıkla → açıklamayı aç/kapat (bir kez delege; re-render'da innerHTML değişse de el sabit)
+  if (!el._riBound) {
+    el._riBound = true;
+    el.addEventListener("click", (ev) => {
+      const c = ev.target.closest(".ri-card");
+      if (!c || !c.querySelector(".ri-explain")) return;
+      const open = c.classList.toggle("open");
+      c.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+    el.addEventListener("keydown", (ev) => {
+      if (ev.key !== "Enter" && ev.key !== " ") return;
+      const c = ev.target.closest(".ri-card");
+      if (!c || !c.querySelector(".ri-explain")) return;
+      ev.preventDefault();
+      const open = c.classList.toggle("open");
+      c.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+  }
 }
 
 /* ====================== En Büyük 3 Pozisyon (olumlu/olumsuz + haber) ============ */
@@ -5370,12 +5409,28 @@ function renderTopPicks() {
       : (p.news && p.news.length
           ? `<p class="tp-news-summary">${(p.news || []).map((n) => n.headline.replace(/\.+$/, "")).join(". ")}.</p>`
           : `<span class="tp-na">Güncel haber yok</span>`);
+    const tgtBlock = (() => {
+      const price = p.priceUSD;
+      if (price == null) return "";
+      const tp1 = price * 1.10, tp2 = price * 1.20;
+      const hasTgt = p.targetMean != null && p.upsidePct != null;
+      return `<div class="tp-target">
+        <div class="tp-h">🎯 Hedef &amp; kâr-al seviyeleri</div>
+        ${hasTgt ? `<div class="tp-trow tp-tgt"><span>Analist hedefi</span><b>${fmtUSD(p.targetMean)} <span class="pill ${cls(p.upsidePct)}">${p.upsidePct >= 0 ? "+" : ""}${p.upsidePct.toFixed(0)}% potansiyel</span></b></div>` : ""}
+        <div class="tp-trow"><span>Kâr-al 1 · %25 sat</span><b>${fmtUSD(tp1)} <span class="pill pos">+10%</span></b></div>
+        <div class="tp-trow"><span>Kâr-al 2 · %25 sat</span><b>${fmtUSD(tp2)} <span class="pill pos">+20%</span></b></div>
+        ${p.costUSD != null
+          ? `<div class="tp-tnote">Maliyetin <b>${fmtUSD(p.costUSD)}</b> · şu an <b class="${cls(p.gainPct)}">${p.gainPct >= 0 ? "+" : ""}${(p.gainPct || 0).toFixed(1)}%</b> — kademelerde kısmi sat, kalanı trende bırak (kâr cebe, potansiyel açık).</div>`
+          : `<div class="tp-tnote">Kademeli kâr-al: fiyat yükseldikçe bir kısmını sat, kalanı trende bırak — hem kâr realize hem yukarı açık kalır.</div>`}
+      </div>`;
+    })();
     return `<div class="tp-card">
       <div class="tp-head">
         <div><span class="tp-sym">${p.symbol}</span> <span class="tp-w">%${p.weightPct} portföy</span></div>
         <div class="tp-price">${fmtUSD(p.priceUSD)}${dc != null ? ` <span class="chip ${cls(dc)}">${fmtPct(dc)}</span>` : ""}</div>
       </div>
       <div class="tp-meta"><span class="chip ${recoCls}">Analist: ${recoLbl}${p.recoTotal ? ` · ${p.recoTotal}` : ""}</span>${p.rsi != null ? `<span class="tp-rsi">RSI ${p.rsi}</span>` : ""}</div>
+      ${tgtBlock}
       <div class="tp-cols">
         <ul class="tp-list tp-pros"><li class="tp-h">Olumlu</li>${pros}</ul>
         <ul class="tp-list tp-cons"><li class="tp-h">Olumsuz</li>${cons}</ul>

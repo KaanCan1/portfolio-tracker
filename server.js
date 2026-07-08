@@ -3914,6 +3914,10 @@ app.get("/api/portfolio", async (_req, res) => {
           dayChangePct: h.live?.dayChangePct ?? null,
           reco: sig.reco || null, recoTotal: sig.recoTotal || null,
           rsi: rsi != null ? Math.round(rsi) : null,
+          targetMean: sig.targetMean ?? null,          // analist ortalama hedef fiyatı
+          upsidePct: sig.upsidePct ?? null,            // hedefe potansiyel %
+          costUSD: h.costUSD ?? null,                  // senin ort. maliyetin
+          gainPct: sig.gainPct ?? null,                // pozisyonun mevcut K/Z %
           pros: pros.slice(0, 4), cons: cons.slice(0, 4),
           news: (news || []).slice(0, 3),
           newsSummary,

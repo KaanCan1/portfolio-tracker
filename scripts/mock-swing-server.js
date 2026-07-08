@@ -214,8 +214,8 @@ function portfolioPayload() {
       { kind: "firsat", title: "NVDA biriktirme bölgesinde", detail: "20g ortalamaya yakın", action: "kademeli ekle" },
     ] },
     topPicks: [
-      { symbol: "AAPL", weightPct: 40, priceUSD: 197, dayChangePct: 1.2, reco: "buy", recoTotal: 32, rsi: 58, pros: ["Güçlü nakit akışı"], cons: ["Yüksek değerleme"], newsSummary: "Servis gelirleri rekor." },
-      { symbol: "NBIS", weightPct: 28, priceUSD: 283, dayChangePct: -1.1, reco: "strong_buy", recoTotal: 12, rsi: 62, pros: ["AI altyapı talebi"], cons: ["Oynak"], newsSummary: "Yeni veri merkezi anlaşması." },
+      { symbol: "AAPL", weightPct: 40, priceUSD: 197, dayChangePct: 1.2, reco: "buy", recoTotal: 32, rsi: 58, targetMean: 224, upsidePct: 13.7, costUSD: 188, gainPct: 4.8, pros: ["Güçlü nakit akışı"], cons: ["Yüksek değerleme"], newsSummary: "Servis gelirleri rekor." },
+      { symbol: "NBIS", weightPct: 28, priceUSD: 283, dayChangePct: -1.1, reco: "strong_buy", recoTotal: 12, rsi: 62, targetMean: 340, upsidePct: 20.1, costUSD: 210, gainPct: 34.8, pros: ["AI altyapı talebi"], cons: ["Oynak"], newsSummary: "Yeni veri merkezi anlaşması." },
     ],
     dayOpen: { date: today, total: grandTRY - 8200 }, regime: REGIME, fearGreed: FNG, // dayTRY=+8200 → ~+$200 günlük · regime/fearGreed → render() sentiment satırı (eziyordu)
     swingOpen: swingOpenMap(),
