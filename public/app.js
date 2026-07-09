@@ -68,7 +68,7 @@ const ALLOC_COLORS = {
   stock: "#2f8f57",   // hisse — yeşil (marka aksanı)
   fund: "#3fa7b8",    // fon — turkuaz
   gold: "#d9a92b",    // altın — altın sarısı
-  option: "#7c6cf0",  // opsiyon — mor
+  option: "#8b7fd6",  // opsiyon — mor
   cash: "#9aa394",    // nakit — adaçayı grisi
 };
 const ALLOC_LABELS = { stock: "Hisse", fund: "Fon", gold: "Altın", option: "Opsiyon", cash: "Nakit" };
@@ -265,7 +265,7 @@ function buildCompare(history, current, dayOpenTotal) {
 
 // Aç Gözlülük endeksinin 5 bölgesi (CNN ölçeği, 0–100)
 const FNG_ZONES = [
-  { from: 0,  to: 25,  color: "#e8473c", label: "Aşırı Korku" },
+  { from: 0,  to: 25,  color: "#d8442f", label: "Aşırı Korku" },
   { from: 25, to: 45,  color: "#ef8e3a", label: "Korku" },
   { from: 45, to: 55,  color: "#e8c042", label: "Nötr" },
   { from: 55, to: 75,  color: "#86c060", label: "Açgözlülük" },
@@ -848,7 +848,7 @@ function drawChart() {
   const py = (v) => pad.t + (1 - (v - min) / (max - min)) * (H - pad.t - pad.b);
 
   const up = change >= 0;
-  const color = up ? "#1f8a4e" : "#d24437";
+  const color = up ? "#1f8a4e" : "#d8442f";
   const lastX = px(pts.length - 1), lastY = py(last);
   const lineD = smoothPath(pts.map((p, i) => [px(i), py(p.total)]));
   const areaD = `${lineD} L ${(W - pad.r).toFixed(1)} ${(H - pad.b).toFixed(1)} L ${pad.l.toFixed(1)} ${(H - pad.b).toFixed(1)} Z`;
@@ -1723,7 +1723,7 @@ function installMeasureCatch() {
     const dPrice = p2 - p1, pct = p1 ? dPrice / p1 * 100 : 0, up = dPrice >= 0;
     box.classList.toggle("up", up); box.classList.toggle("down", !up);
     // Sağ fiyat eksenine hizalı çizgiler (TradingView gibi): başlangıç (gri) + hedef (yön rengi) — sağda fiyat etiketi
-    const col = up ? "#2f8f57" : "#cf473d";
+    const col = up ? "#2f8f57" : "#d8442f";
     if (!MEASURE.l1) MEASURE.l1 = cmCandle.createPriceLine({ price: p1, color: "#8a93a0", lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: "" });
     else MEASURE.l1.applyOptions({ price: p1 });
     if (!MEASURE.l2) MEASURE.l2 = cmCandle.createPriceLine({ price: p2, color: col, lineWidth: 2, lineStyle: 0, axisLabelVisible: true, title: (up ? "▲" : "▼") + "%" + Math.abs(pct).toFixed(1) });
@@ -1865,10 +1865,11 @@ async function openChartModal(sym, ctx = null, fresh = false) {
   chartEl.innerHTML = "";
   const LC = window.LightweightCharts;
   const chart = LC.createChart(chartEl, {
-    layout: { background: { color: "#ffffff" }, textColor: "#3a4a3f", fontFamily: "inherit" },
-    grid: { vertLines: { color: "#eef1ee" }, horzLines: { color: "#eef1ee" } },
-    rightPriceScale: { borderColor: "#dfe5df" },
-    timeScale: { borderColor: "#dfe5df", timeVisible: false },
+    // open-design: sıcak kağıt ailesiyle hizalı grafik yüzeyi — ılık ızgara/metin
+    layout: { background: { color: "#ffffff" }, textColor: "#4a4f45", fontFamily: "inherit" },
+    grid: { vertLines: { color: "#f1efe9" }, horzLines: { color: "#f1efe9" } },
+    rightPriceScale: { borderColor: "#e5e2d9" },
+    timeScale: { borderColor: "#e5e2d9", timeVisible: false },
     crosshair: { mode: LC.CrosshairMode.Normal },
     autoSize: true,
   });
@@ -1882,7 +1883,7 @@ async function openChartModal(sym, ctx = null, fresh = false) {
     const tmap21 = new Map(d.ema21.map((p) => [p.time, p.value]));
     const last8 = d.ema8[d.ema8.length - 1];
     const bull = last8.value >= (tmap21.get(last8.time) ?? last8.value);
-    const cloudCol = bull ? "rgba(16,185,129,.16)" : "rgba(220,68,61,.15)";
+    const cloudCol = bull ? "rgba(16,185,129,.16)" : "rgba(216,68,47,.14)";
     const lo = [], hi = [];
     for (const p of d.ema8) { const v21 = tmap21.get(p.time); if (v21 == null) continue; lo.push({ time: p.time, value: Math.min(p.value, v21) }); hi.push({ time: p.time, value: Math.max(p.value, v21) }); }
     // hi: bulut rengiyle scale-altına kadar dolu · lo: arka plan rengiyle üstünü kapatır → sadece 8↔21 arası renkli kalır
@@ -1892,23 +1893,24 @@ async function openChartModal(sym, ctx = null, fresh = false) {
   }
 
   const candle = chart.addCandlestickSeries({
-    upColor: "#2f8f57", downColor: "#cf473d", borderVisible: false,
-    wickUpColor: "#2f8f57", wickDownColor: "#cf473d",
+    upColor: "#2f8f57", downColor: "#d8442f", borderVisible: false,
+    wickUpColor: "#2f8f57", wickDownColor: "#d8442f",
   });
   candle.setData(d.candles);
   cmCandle = candle; cmCandles = d.candles; resetMeasure(); // ölçüm aracı için referanslar
   initDrawings(chartEl, chart, candle, d.candles, sym);      // kalıcı trend/yatay çizim katmanı
-  if (d.sma20?.length) chart.addLineSeries({ color: "#56b1d6", lineWidth: 1, priceLineVisible: false, lastValueVisible: false }).setData(d.sma20);
-  if (d.sma50?.length) chart.addLineSeries({ color: "#d9a92b", lineWidth: 1, priceLineVisible: false, lastValueVisible: false }).setData(d.sma50);
-  if (d.sma200?.length) chart.addLineSeries({ color: "#6b5fd0", lineWidth: 1, priceLineVisible: false, lastValueVisible: false }).setData(d.sma200);
+  // MA paleti — sakin veri tonları (aksan değil): SMA'lar ince/soluk, EMA'lar işlevsel vurgulu
+  if (d.sma20?.length) chart.addLineSeries({ color: "#7fa8c9", lineWidth: 1, priceLineVisible: false, lastValueVisible: false }).setData(d.sma20);
+  if (d.sma50?.length) chart.addLineSeries({ color: "#cfa143", lineWidth: 1, priceLineVisible: false, lastValueVisible: false }).setData(d.sma50);
+  if (d.sma200?.length) chart.addLineSeries({ color: "#9a8fd8", lineWidth: 1, priceLineVisible: false, lastValueVisible: false }).setData(d.sma200);
   // EMA çizgileri EN ÜSTTE (bulutun ve mumların üstünde)
-  if (d.ema21?.length) chart.addLineSeries({ color: "#f59e0b", lineWidth: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false }).setData(d.ema21);
-  if (d.ema8?.length) chart.addLineSeries({ color: "#0ea5a0", lineWidth: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false }).setData(d.ema8);
+  if (d.ema21?.length) chart.addLineSeries({ color: "#e0940f", lineWidth: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false }).setData(d.ema21);
+  if (d.ema8?.length) chart.addLineSeries({ color: "#0f9d8f", lineWidth: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false }).setData(d.ema8);
 
   // Hacim histogramı (alt %18'lik bantta)
   const volData = d.candles.filter((c) => c.volume != null).map((c) => ({
     time: c.time, value: c.volume,
-    color: c.close >= c.open ? "rgba(47,143,87,.35)" : "rgba(207,71,61,.35)",
+    color: c.close >= c.open ? "rgba(47,143,87,.35)" : "rgba(216,68,47,.32)",
   }));
   if (volData.length) {
     const vol = chart.addHistogramSeries({ priceFormat: { type: "volume" }, priceScaleId: "vol", lastValueVisible: false });
@@ -1925,12 +1927,12 @@ async function openChartModal(sym, ctx = null, fresh = false) {
   // Güncel fiyat referansı (gri ince) — giriş seviyelerinden ayırt etmek için
   if (pl.currentPrice != null) line(pl.currentPrice, "#94a39a", DS.Dotted, "Fiyat", 1);
   // 52 hafta zirve/dip (TradingView tarzı High/Low çizgileri)
-  if (d.stats?.w52High != null) line(d.stats.w52High, "#cf473d", DS.Dashed, "52h Zirve", 1);
+  if (d.stats?.w52High != null) line(d.stats.w52High, "#d8442f", DS.Dashed, "52h Zirve", 1);
   if (d.stats?.w52Low != null) line(d.stats.w52Low, "#5a8fb0", DS.Dashed, "52h Dip", 1);
   // ── SWING (Qullamaggie) — tek giriş otoritesi: pivot kırılımı + stop + R hedef
   if (d.qm?.ok && d.qm.setup !== "none") {
     line(d.qm.entryTrigger, "#0a8f6e", DS.Solid, "Swing Giriş", 2);
-    line(d.qm.stop, "#b8281f", DS.Dashed, "Swing Stop", 2);
+    line(d.qm.stop, "#ab272c", DS.Dashed, "Swing Stop", 2);
     if (d.qm.rTargets?.r2) line(d.qm.rTargets.r2, "#1f7a48", DS.Dashed, "Hedef 2R", 1);
     if (d.qm.rTargets?.r3) line(d.qm.rTargets.r3, "#1f7a48", DS.Dotted, "Hedef 3R", 1);
   }
@@ -1942,7 +1944,7 @@ async function openChartModal(sym, ctx = null, fresh = false) {
   (d.levels?.support || []).forEach((v, i) => line(v, "#9aa7a0", DS.Dotted, i === 0 ? "Destek" : "", 1));
   (d.levels?.resistance || []).forEach((v, i) => line(v, "#c98a3a", DS.Dotted, i === 0 ? "Direnç" : "", 1));
   // Pozisyon: ortalama maliyet çizgisi (mor)
-  if (pos?.costUSD != null && isFinite(pos.costUSD)) line(pos.costUSD, "#7c6cf0", DS.Solid, "Maliyet", 1);
+  if (pos?.costUSD != null && isFinite(pos.costUSD)) line(pos.costUSD, "#8b7fd6", DS.Solid, "Maliyet", 1);
   // Pozisyon Bekçisi: iz süren stop (turuncu) + manuel hedef
   if (pos?.guard?.stop != null) line(pos.guard.stop, "#e07b2f", DS.Dashed, "İz süren stop");
   if (pos?.guard?.target != null) line(pos.guard.target, "#1f7a48", DS.Solid, "Plan hedef", 1);
@@ -1967,7 +1969,7 @@ async function openChartModal(sym, ctx = null, fresh = false) {
   // Formasyon çizgileri (bayrak/üçgen/boyun) — tona göre renk, daha kalın
   if (pats.pattern?.lines?.length) {
     const pt = pats.pattern.tone;
-    const col = pt === "bull" ? "#1f7a48" : pt === "bear" ? "#cf473d" : "#7c6cf0";
+    const col = pt === "bull" ? "#1f7a48" : pt === "bear" ? "#d8442f" : "#8b7fd6";
     pats.pattern.lines.forEach((ln) => tline(ln, col, ln.role === "pole" ? DS.Solid : DS.Dashed, ln.role === "pole" ? 3 : 2));
     if (pats.pattern.breakout != null) line(pats.pattern.breakout, col, DS.Dashed, "Kırılım", 1);
   }
@@ -2064,7 +2066,7 @@ async function openChartModal(sym, ctx = null, fresh = false) {
 
   legEl.innerHTML = `
     <span class="lg"><i style="background:#0a8f6e"></i> Swing Giriş</span>
-    <span class="lg"><i style="background:#b8281f"></i> Swing Stop</span>
+    <span class="lg"><i style="background:#ab272c"></i> Swing Stop</span>
     <span class="lg"><i style="background:#1f7a48"></i> Hedef 2R/3R</span>
     <span class="lg"><i style="background:#7fae8e"></i> Biriktir (uzun vade)</span>
     <span class="lg"><i style="background:#56b1d6"></i> SMA20</span>
@@ -2075,7 +2077,7 @@ async function openChartModal(sym, ctx = null, fresh = false) {
     <span class="lg"><i style="background:rgba(16,185,129,.45)"></i> EMA Bulutu</span>
     <span class="lg"><i style="background:#c98a3a"></i> Direnç</span>
     <span class="lg"><i style="background:#9aa7a0"></i> Destek</span>
-    <span class="lg"><i style="background:#7c6cf0"></i> Maliyet</span>`;
+    <span class="lg"><i style="background:#8b7fd6"></i> Maliyet</span>`;
 }
 
 async function addWatch() {
@@ -4082,7 +4084,7 @@ function renderSector() {
   const rows = Object.entries(map).map(([title, v]) => ({ title, ...v, pct: (v.value / totalStock) * 100 }))
     .sort((a, b) => b.value - a.value);
   const top = rows[0];
-  const PALETTE = ["#2f8f57", "#3fa7b8", "#d9a92b", "#7c6cf0", "#cf7a3d", "#5b8def", "#9aa394"];
+  const PALETTE = ["#2f8f57", "#3fa7b8", "#d9a92b", "#8b7fd6", "#cf7a3d", "#5b8def", "#9aa394"];
   const warn = top && top.pct >= 40
     ? `<div class="sector-warn">⚠️ Yoğunlaşma: portföy hisselerinin <b>%${top.pct.toFixed(0)}</b>'i tek temada (<b>${top.title}</b>). Riski dağıtmayı düşün.</div>`
     : top && top.pct >= 30
@@ -5422,7 +5424,7 @@ function renderRule1() { // panel: "Portföy Önerileri" (#rule1Panel id'si koru
     const k = RI_KIND[x.kind] || RI_KIND.denge;
     const exp = riExplain(x);
     return `<div class="ri-card ${k.cls}" role="button" tabindex="0" aria-expanded="false">
-      <div class="ri-card-top"><span class="ri-tag">${k.icon} ${k.lbl}</span>${exp ? `<span class="ri-q" aria-hidden="true">ⓘ ne demek?</span>` : ""}</div>
+      <div class="ri-card-top"><span class="ri-tag">${k.lbl}</span>${exp ? `<span class="ri-q" aria-hidden="true">ⓘ ne demek?</span>` : ""}</div>
       <b class="ri-title">${x.title}</b>
       ${x.detail ? `<span class="ri-detail">${x.detail}</span>` : ""}
       ${x.action ? `<span class="ri-act">→ ${x.action}</span>` : ""}
