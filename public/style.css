@@ -3058,3 +3058,64 @@ ul.sw-qm-list li b { font-weight: 700; color: var(--ink); }
 .cm-v.i-entry { font-weight: 800; color: var(--green-d); }
 
 @media (max-width: 900px) { .cm-hero-row { grid-template-columns: 1fr; } .cm-tools { display: none; } }
+
+/* ============================ FX — animasyon katmanı ============================
+ * Sekme giriş koreografisi + hero three.js sahnesi + dolum/pop animasyonları.
+ * fx.js sınıfları yönetir; prefers-reduced-motion tümünü kapatır. */
+
+/* Kademeli blok girişi (blur→net, hafif yüksel) — --fx-d gecikmesini fx.js verir */
+@keyframes fxIn {
+  from { opacity: 0; transform: translateY(14px) scale(.988); filter: blur(7px); }
+  60%  { filter: blur(0); }
+  to   { opacity: 1; transform: none; filter: none; }
+}
+.fx-in { animation: fxIn .62s cubic-bezier(.22,1,.36,1) both; animation-delay: var(--fx-d, 0ms); will-change: transform, opacity, filter; }
+
+/* Kart içi büyük rakamlar: bloktan bir tık sonra netleşir (elit "settle" hissi) */
+.fx-in .value, .fx-in .db-big, .fx-in .ch-k-v, .fx-in .sx-stat b, .fx-in .dj-cell b {
+  animation: fxNum .7s cubic-bezier(.22,1,.36,1) both;
+  animation-delay: calc(var(--fx-d, 0ms) + 140ms);
+}
+@keyframes fxNum {
+  from { opacity: 0; transform: translateY(7px); filter: blur(5px); }
+  to   { opacity: 1; transform: none; filter: none; }
+}
+
+/* Donut & gösterge girişi: yumuşak dönüş + büyüme */
+@keyframes fxPop {
+  from { opacity: 0; transform: scale(.92) rotate(-8deg); }
+  to   { opacity: 1; transform: none; }
+}
+svg.fx-pop { animation: fxPop .7s cubic-bezier(.22,1,.36,1) both; transform-origin: 50% 50%; }
+
+/* Modal içeriği: zarif yay açılışı (modal-bg fade'i zaten var) */
+.modal-bg:not([hidden]) .modal { animation: fxModal .34s cubic-bezier(.22,1.25,.36,1) both; }
+@keyframes fxModal {
+  from { opacity: 0; transform: translateY(16px) scale(.965); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Hero three.js tuvali — içerik üstte, dalga altta */
+.fx-hero-host { position: relative; overflow: hidden; }
+.fx-hero-canvas { position: absolute; inset: 0; width: 100% !important; height: 100% !important; pointer-events: none; z-index: 0; }
+.fx-hero-host > *:not(.fx-hero-canvas) { position: relative; z-index: 1; }
+
+/* Sidebar aurora — çok yavaş nefes alan yeşil ışıma (elit ambiyans) */
+@keyframes fxAurora { 0%,100% { opacity: .55; } 50% { opacity: 1; } }
+.sidebar::before {
+  content: ""; position: absolute; inset: 0 0 auto 0; height: 46%; pointer-events: none;
+  background: radial-gradient(120% 60% at 50% -12%, rgba(53,190,120,.16) 0%, transparent 62%);
+  animation: fxAurora 9s ease-in-out infinite;
+}
+.sidebar { position: sticky; } /* ::before konumu için mevcut position korunur */
+
+/* Nav & çip mikro yayları */
+.nav-item, .vj-chip { transition: background .18s ease, color .18s ease, transform .16s cubic-bezier(.22,1,.36,1), box-shadow .18s ease; }
+.nav-item:active, .vj-chip:active { transform: scale(.965); }
+
+/* Erişilebilirlik: hareket azaltma → koreografi tamamen kapalı */
+@media (prefers-reduced-motion: reduce) {
+  .fx-in, .fx-in .value, .fx-in .db-big, .fx-in .ch-k-v, .fx-in .sx-stat b, .fx-in .dj-cell b,
+  svg.fx-pop, .modal-bg:not([hidden]) .modal { animation: none !important; }
+  .sidebar::before { animation: none; }
+}
