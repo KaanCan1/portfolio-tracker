@@ -5143,6 +5143,12 @@ function normalizeSwing(s, id) {
     exitUsdtry: status === "closed" ? num(s.exitUsdtry) : null, // kapanış anı USDTRY (TL realize sabit kalsın)
     realizedLots: Array.isArray(s.realizedLots) ? s.realizedLots : [], // kısmi satışlar (ana para çekme)
     note: s.note || "",
+    // ── Karar Defteri (opsiyonel) — giriş tezi + güven + setup; kapanışta plana-uyum ──
+    thesis: String(s.thesis || "").slice(0, 200),
+    conf: ["A", "B", "C"].includes(s.conf) ? s.conf : null,          // güven: A güçlü / B orta / C zayıf
+    setupKind: ["breakout", "ep", "pullback"].includes(s.setupKind) ? s.setupKind : null, // Qullamaggie
+    planFollow: ["yes", "partial", "no"].includes(s.planFollow) ? s.planFollow : null,      // kapanışta plana uyum
+    mistakeTag: String(s.mistakeTag || "").slice(0, 40) || null,     // partial/no ise itiraf etiketi
   };
 }
 
@@ -5303,7 +5309,12 @@ app.post("/api/swing-trades/:id/sell", async (req, res) => {
     // pnlUSD Midas satış komisyonu ($1.5) düşülmüş NET — swing getirisi gerçek eline geçen
     sw.realizedLots.push({ shares: sell, exitPrice, pnlUSD: +(((exitPrice - sw.entry) * sell) - MIDAS_FEE).toFixed(2), date, tradeId: trade.id, feeUSD: MIDAS_FEE });
     sw.qty = +(sw.qty - sell).toFixed(9);
-    if (sw.qty <= 1e-6) { sw.status = "closed"; sw.closedAt = date; sw.exitPrice = exitPrice; }
+    if (sw.qty <= 1e-6) {
+      sw.status = "closed"; sw.closedAt = date; sw.exitPrice = exitPrice;
+      // Karar Defteri: tam kapanışta plana-uyum self-tag (varsa) kalıcılaşır
+      if (["yes", "partial", "no"].includes(req.body.planFollow)) sw.planFollow = req.body.planFollow;
+      if (req.body.mistakeTag != null) sw.mistakeTag = String(req.body.mistakeTag).slice(0, 40) || null;
+    }
     await saveData(data);
     res.json({ ok: true, sync, swing: sw, tradeId: trade.id });
   } catch (e) { res.status(500).json({ error: e.message }); }

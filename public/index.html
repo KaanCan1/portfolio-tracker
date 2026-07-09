@@ -593,6 +593,31 @@
         <label>Not (opsiyonel)
           <input name="note" placeholder="örn. 50g ortalama üstü kırılım" />
         </label>
+        <div class="sw-journal">
+          <div class="sw-journal-h">📓 Karar defteri <i>karar kalitesi karnene girer · opsiyonel</i></div>
+          <label class="sw-jthesis">Tez <i>neden giriyorsun?</i>
+            <input name="thesis" maxlength="200" placeholder="örn. kırılım + hacim teyidi, EMA8 üstü, önceki hamle güçlü" />
+          </label>
+          <div class="sw-jrow">
+            <div class="sw-jfield">
+              <span class="sw-jlbl">Güven</span>
+              <div class="pill-group" id="swConf" role="radiogroup" aria-label="Güven">
+                <button type="button" class="pill-opt" data-conf="A">A · güçlü</button>
+                <button type="button" class="pill-opt" data-conf="B">B · orta</button>
+                <button type="button" class="pill-opt" data-conf="C">C · zayıf</button>
+              </div>
+            </div>
+            <div class="sw-jfield">
+              <span class="sw-jlbl">Setup <i>Qullamaggie</i></span>
+              <div class="pill-group" id="swSetup" role="radiogroup" aria-label="Setup">
+                <button type="button" class="pill-opt" data-setup="breakout">Kırılım</button>
+                <button type="button" class="pill-opt" data-setup="ep">EP</button>
+                <button type="button" class="pill-opt" data-setup="pullback">Geri-çekilme</button>
+              </div>
+            </div>
+          </div>
+          <input type="hidden" name="conf" /><input type="hidden" name="setupKind" />
+        </div>
         <div class="sw-calc">
           <div class="sw-calc-head">
             <span>💰 Pozisyon boyutu</span>
@@ -660,6 +685,26 @@
           </label>
         </div>
         <p class="modal-note" id="swingCloseNote">Realize ettiğin kâr/zarar aylık kazanca eklenir.</p>
+        <div class="sw-planfollow" id="swPlanFollow" hidden>
+          <div class="sw-journal-h">🎯 Plana uydun mu? <i>karar karnene işlenir</i></div>
+          <div class="pill-group" id="swFollow" role="radiogroup" aria-label="Plana uyum">
+            <button type="button" class="pill-opt pf-yes" data-follow="yes">Evet</button>
+            <button type="button" class="pill-opt pf-part" data-follow="partial">Kısmen</button>
+            <button type="button" class="pill-opt pf-no" data-follow="no">Hayır</button>
+          </div>
+          <div class="sw-mistake" id="swMistake" hidden>
+            <span class="sw-jlbl">Sebep <i>tek tık</i></span>
+            <div class="pill-group wrap" id="swMistakeTags">
+              <button type="button" class="pill-opt sm" data-mtag="early-fear">korkuyla erken sattım</button>
+              <button type="button" class="pill-opt sm" data-mtag="moved-stop">stopu kaydırdım</button>
+              <button type="button" class="pill-opt sm" data-mtag="no-confirm">teyitsiz girdim</button>
+              <button type="button" class="pill-opt sm" data-mtag="target-close">hedef fazla yakındı</button>
+              <button type="button" class="pill-opt sm" data-mtag="fomo">FOMO ile girdim</button>
+              <button type="button" class="pill-opt sm" data-mtag="oversize">fazla büyük girdim</button>
+            </div>
+          </div>
+          <input type="hidden" name="planFollow" /><input type="hidden" name="mistakeTag" />
+        </div>
         <div class="modal-actions">
           <button type="button" class="btn ghost" id="swingCloseCancelBtn">İptal</button>
           <button type="submit" class="btn primary">Kapat &amp; Kaydet</button>

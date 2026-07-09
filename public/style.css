@@ -1848,6 +1848,70 @@ tbody tr:hover .row-actions .btn.icon { color: var(--ink2); }
 .sx-bar-l { font-size: 10px; color: var(--muted); white-space: nowrap; }
 @media (max-width: 860px) { .sx-grid { grid-template-columns: repeat(2, 1fr); } }
 
+/* ===== Karar Defteri: form alanları + pil grupları ===== */
+.sw-journal, .sw-planfollow { margin-top: 12px; padding-top: 11px; border-top: 1px dashed var(--line); }
+.sw-journal-h { font-size: 12.5px; font-weight: 700; color: var(--ink2); margin-bottom: 8px; }
+.sw-journal-h i { font-weight: 400; font-style: normal; color: var(--muted); font-size: 11px; }
+.sw-jthesis { display: block; }
+.sw-jrow { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 9px; }
+@media (max-width: 560px) { .sw-jrow { grid-template-columns: 1fr; } }
+.sw-jfield { display: flex; flex-direction: column; gap: 5px; }
+.sw-jlbl { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .3px; }
+.sw-jlbl i { font-weight: 400; font-style: normal; text-transform: none; letter-spacing: 0; color: var(--muted); }
+.pill-group { display: flex; gap: 6px; }
+.pill-group.wrap { flex-wrap: wrap; }
+.pill-opt { font: inherit; font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line-strong); background: var(--bg2); color: var(--ink2); cursor: pointer; transition: all .13s ease; white-space: nowrap; }
+.pill-opt.sm { font-size: 11.5px; padding: 5px 10px; }
+.pill-opt:hover { border-color: var(--green-line); color: var(--ink); }
+.pill-opt.on { background: var(--green-d); border-color: var(--green-d); color: #fff; box-shadow: 0 3px 10px -4px rgba(27,106,64,.5); }
+.pill-opt.pf-yes.on { background: var(--green-d); border-color: var(--green-d); }
+.pill-opt.pf-part.on { background: var(--amber-d); border-color: var(--amber-d); box-shadow: 0 3px 10px -4px rgba(180,120,20,.4); }
+.pill-opt.pf-no.on { background: var(--red-d); border-color: var(--red-d); box-shadow: 0 3px 10px -4px rgba(180,40,30,.4); }
+.sw-mistake { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+
+/* ===== Karar Kalitesi karnesi ===== */
+.dj-panel .sw-chip { font-size: 11px; }
+.dj-empty-note { font-size: 12.5px; color: var(--ink2); line-height: 1.6; margin: 4px 0 0; }
+.dj-small { font-size: 11.5px; color: var(--muted); background: var(--bg2); border: 1px dashed var(--line-strong); border-radius: 8px; padding: 7px 11px; margin-bottom: 12px; }
+.dj-block { margin-bottom: 14px; }
+.dj-block-h { font-size: 12px; font-weight: 700; color: var(--ink2); margin-bottom: 9px; }
+.dj-block-h .sw-muted { font-weight: 400; }
+.dj-matrix { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+.dj-cell { border-radius: 11px; padding: 12px 13px; border: 1px solid var(--line); display: flex; flex-direction: column; gap: 2px; }
+.dj-cell b { font-size: 24px; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1; }
+.dj-cell-l { font-size: 13px; font-weight: 700; margin-top: 3px; }
+.dj-cell-s { font-size: 11px; color: var(--muted); }
+.dj-cell.skill { background: var(--green-soft); border-color: color-mix(in srgb, var(--green-d) 30%, transparent); }
+.dj-cell.skill b, .dj-cell.skill .dj-cell-l { color: var(--green-d); }
+.dj-cell.lucky { background: var(--amber-bg); border-color: color-mix(in srgb, var(--amber-d) 30%, transparent); }
+.dj-cell.lucky b, .dj-cell.lucky .dj-cell-l { color: var(--amber-d); }
+.dj-cell.right { background: color-mix(in srgb, var(--sky) 12%, var(--card)); border-color: color-mix(in srgb, var(--sky) 35%, transparent); }
+.dj-cell.right b, .dj-cell.right .dj-cell-l { color: color-mix(in srgb, var(--sky) 78%, #123); }
+.dj-cell.mistake { background: var(--red-bg); border-color: color-mix(in srgb, var(--red-d) 30%, transparent); }
+.dj-cell.mistake b, .dj-cell.mistake .dj-cell-l { color: var(--red-d); }
+.dj-insight { font-size: 12.5px; line-height: 1.55; color: var(--ink2); background: var(--bg2); border-radius: 9px; padding: 9px 12px; margin-top: 10px; }
+.dj-insight b { color: var(--ink); }
+.dj-follow { font-size: 12.5px; color: var(--ink2); margin-top: 9px; }
+.dj-follow b { font-size: 14px; font-variant-numeric: tabular-nums; }
+.dj-mistakes { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 8px; font-size: 12px; }
+.dj-mist-l { color: var(--muted); font-weight: 700; }
+.dj-mist { background: var(--red-bg); color: var(--red-d); border-radius: 999px; padding: 3px 10px; font-size: 11.5px; }
+.dj-mist b { font-variant-numeric: tabular-nums; }
+.dj-tbls { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 6px; }
+@media (max-width: 640px) { .dj-tbls { grid-template-columns: 1fr; } .dj-matrix { gap: 7px; } }
+.dj-tbl { overflow-x: auto; }
+.dj-tbl-h { font-size: 12px; font-weight: 700; color: var(--ink2); margin-bottom: 6px; }
+.dj-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.dj-table th { font-size: 10.5px; text-transform: uppercase; letter-spacing: .3px; color: var(--muted); font-weight: 700; text-align: right; padding: 4px 6px; border-bottom: 1px solid var(--line); }
+.dj-table th.l, .dj-table td.l { text-align: left; }
+.dj-table td { text-align: right; padding: 6px; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+.dj-table td.pos { color: var(--green-d); font-weight: 700; } .dj-table td.neg { color: var(--red-d); font-weight: 700; }
+.dj-table tr:last-child td { border-bottom: none; }
+.dj-note { font-size: 12.5px; line-height: 1.55; border-radius: 9px; padding: 9px 12px; margin-top: 10px; }
+.dj-note.warn { background: var(--amber-bg); color: var(--amber-d); }
+.dj-note.ok { background: var(--green-soft); color: var(--green-d); }
+.dj-note b { font-weight: 800; }
+
 /* Bilanço Nöbeti */
 .ew-list { display: flex; flex-direction: column; gap: 7px; }
 .ew-row { display: flex; align-items: center; gap: 11px; width: 100%; text-align: left; background: var(--bg2); border: 1px solid var(--line); border-radius: 10px; padding: 9px 13px; cursor: pointer; transition: border-color .15s; font: inherit; }

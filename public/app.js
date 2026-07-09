@@ -5717,6 +5717,93 @@ function swingStatsPanel(closed) {
     </section>`;
 }
 
+/* ===== Karar Kalitesi karnesi — tez/güven/setup girişi + kapanış plana-uyum self-tag'i.
+ * Şans vs beceri 2×2 matrisi, güven kalibrasyonu, setup kırılımı, en sık itiraf.
+ * Yalnız kapanmış + alanı dolu işlemlerden; boş alanlı eski işlemler karneyi çarpıtmaz. */
+const DJ_MISTAKE = { "early-fear": "korkuyla erken sattım", "moved-stop": "stopu kaydırdım", "no-confirm": "teyitsiz girdim", "target-close": "hedef fazla yakındı", "fomo": "FOMO ile girdim", "oversize": "fazla büyük girdim" };
+const DJ_SETUP = { breakout: "Kırılım", ep: "EP", pullback: "Geri-çekilme" };
+const DJ_CONF = { A: "A · güçlü", B: "B · orta", C: "C · zayıf" };
+
+function decisionRecs(closed) {
+  return closed.map((t) => {
+    const m = swEnrich(t);
+    const lots = t.realizedLots || [];
+    const lotSum = lots.reduce((a, l) => a + (l.pnlUSD || 0), 0);
+    const realized = (m.pnl || 0) + lotSum;                       // toplam net $ (kapanış + kısmi)
+    const origQty = (t.qty || 0) + lots.reduce((a, l) => a + (l.shares || 0), 0);
+    const riskPS = t.stop != null ? t.entry - t.stop : null;
+    const rMul = riskPS && riskPS > 0 && origQty > 0 ? realized / (riskPS * origQty) : null;
+    return { sym: t.symbol, realized, rMul, win: realized > 0, conf: t.conf || null, setupKind: t.setupKind || null, planFollow: t.planFollow || null, mistakeTag: t.mistakeTag || null };
+  });
+}
+
+function decisionScorecardPanel(closed) {
+  const recs = decisionRecs(closed);
+  const journaled = recs.filter((r) => r.planFollow || r.conf || r.setupKind);
+  if (!journaled.length) {
+    return closed.length ? `<section class="panel dj-panel dj-empty"><div class="panel-head"><div><h2>🧭 Karar Kalitesi</h2></div></div>
+      <p class="dj-empty-note">Karar defterini doldurmaya başla: yeni swing açarken <b>tez · güven · setup</b> gir, kapatırken <b>“plana uydun mu?”</b> yanıtla. Zamanla <b>şans mı beceri mi</b> ayrışır — Kural 1'in gerçek ölçüsü budur.</p></section>` : "";
+  }
+  // ── 2×2 şans/beceri matrisi (planFollow gerekir) ──
+  const pf = journaled.filter((r) => r.planFollow);
+  const q = { skill: 0, lucky: 0, right: 0, mistake: 0 };
+  pf.forEach((r) => {
+    const followed = r.planFollow === "yes";
+    if (r.win && followed) q.skill++; else if (r.win && !followed) q.lucky++;
+    else if (!r.win && followed) q.right++; else q.mistake++;
+  });
+  const followPct = pf.length ? (pf.filter((r) => r.planFollow === "yes").length / pf.length) * 100 : null;
+  const mistakes = {};
+  pf.filter((r) => r.planFollow !== "yes" && r.mistakeTag).forEach((r) => { mistakes[r.mistakeTag] = (mistakes[r.mistakeTag] || 0) + 1; });
+  const mistakeList = Object.entries(mistakes).sort((a, b) => b[1] - a[1]);
+  // ── güven kalibrasyonu & setup kırılımı ──
+  const agg = (arr) => { const rv = arr.map((r) => r.rMul).filter((v) => v != null && isFinite(v)); return { n: arr.length, wr: arr.length ? (arr.filter((r) => r.win).length / arr.length) * 100 : null, avgR: rv.length ? rv.reduce((a, v) => a + v, 0) / rv.length : null }; };
+  const byConf = ["A", "B", "C"].map((c) => ({ k: c, lbl: DJ_CONF[c], ...agg(journaled.filter((r) => r.conf === c)) })).filter((x) => x.n);
+  const bySetup = ["breakout", "ep", "pullback"].map((k) => ({ k, lbl: DJ_SETUP[k], ...agg(journaled.filter((r) => r.setupKind === k)) })).filter((x) => x.n);
+
+  const cell = (n, lbl, sub, tone) => `<div class="dj-cell ${tone}"><b>${n}</b><span class="dj-cell-l">${lbl}</span><span class="dj-cell-s">${sub}</span></div>`;
+  const matrix = pf.length ? `<div class="dj-matrix">
+      ${cell(q.skill, "Beceri", "kazandın · uydun", "skill")}
+      ${cell(q.lucky, "Şanslı", "kazandın · uymadın", "lucky")}
+      ${cell(q.right, "Doğru karar", "kaybettin · uydun", "right")}
+      ${cell(q.mistake, "Hata", "kaybettin · uymadın", "mistake")}
+    </div>` : "";
+  let insight = "";
+  if (pf.length) {
+    if (q.lucky > q.skill && q.lucky > 0) insight = `⚠️ Kazançlarının çoğu (<b>${q.lucky}</b>) plana <b>uymadan</b> geldi — bu şans, tekrarlanmaz. Süreç kazançlarını (${q.skill}) büyüt.`;
+    else if (q.skill + q.right > 0) insight = `✓ İşlemlerinin çoğu <b>süreç odaklı</b>: ${q.skill} beceri kazancı + ${q.right} disiplinli kayıp (doğru karar, kötü sonuç — hata değil). Bunu koru.`;
+  }
+  const confA = byConf.find((x) => x.k === "A"), confC = byConf.find((x) => x.k === "C");
+  let calNote = "";
+  if (confA && confC && confA.avgR != null && confC.avgR != null && confA.avgR < confC.avgR - 0.15)
+    calNote = `⚠️ Güven kalibrasyonun <b>ters</b>: A'da (${confA.avgR.toFixed(2)}R) C'den (${confC.avgR.toFixed(2)}R) kötüsün — en emin olduğunda yanılıyorsun. "Güçlü" hissini sorgula.`;
+  else if (confA && confA.avgR != null && confA.avgR >= 0.3) calNote = `✓ A-güven işlemlerin gerçekten iyi (${confA.avgR >= 0 ? "+" : ""}${confA.avgR.toFixed(2)}R) — güvenin kalibre. Büyük pozisyonu A'lara ayır.`;
+  const bestSetup = bySetup.filter((x) => x.avgR != null).sort((a, b) => b.avgR - a.avgR)[0];
+
+  const rtable = (rows, head) => `<div class="dj-tbl"><div class="dj-tbl-h">${head}</div>
+    <table class="dj-table"><thead><tr><th class="l">${rows.axis}</th><th>İşlem</th><th>İsabet</th><th>Ort. R</th></tr></thead><tbody>
+    ${rows.data.map((x) => `<tr><td class="l">${x.lbl}</td><td>${x.n}</td><td class="${x.wr != null && x.wr >= 50 ? "pos" : ""}">${x.wr != null ? Math.round(x.wr) + "%" : "—"}</td><td class="${x.avgR == null ? "" : x.avgR >= 0 ? "pos" : "neg"}">${x.avgR != null ? (x.avgR >= 0 ? "+" : "") + x.avgR.toFixed(2) + "R" : "—"}</td></tr>`).join("")}
+    </tbody></table></div>`;
+
+  const small = journaled.length < 5;
+  return `<section class="panel dj-panel">
+    <div class="panel-head"><div><h2>🧭 Karar Kalitesi <span class="sw-chip">${journaled.length} kayıt</span></h2>
+      <span class="chart-sub">Şans mı beceri mi — tezine, güvenine ve plana uyumuna göre kendi kararların</span></div></div>
+    ${small ? `<div class="dj-small">İlk sinyaller — sağlıklı okuma için ~5+ etiketli kapanış gerek. Yine de biriktikçe netleşir.</div>` : ""}
+    ${matrix ? `<div class="dj-block"><div class="dj-block-h">Şans / Beceri matrisi <span class="sw-muted">${pf.length} tam kapanış</span></div>
+      ${matrix}${insight ? `<div class="dj-insight">${insight}</div>` : ""}
+      ${followPct != null ? `<div class="dj-follow">Plana uyum: <b class="${followPct >= 70 ? "pos" : followPct >= 40 ? "" : "neg"}">${Math.round(followPct)}%</b> <span class="sw-muted">(${pf.filter((r) => r.planFollow === "yes").length}/${pf.length} işlemde "Evet")</span></div>` : ""}
+      ${mistakeList.length ? `<div class="dj-mistakes"><span class="dj-mist-l">En sık itiraf:</span> ${mistakeList.map(([k, n]) => `<span class="dj-mist"><b>${n}×</b> ${DJ_MISTAKE[k] || k}</span>`).join("")}</div>` : ""}
+    </div>` : ""}
+    ${(byConf.length || bySetup.length) ? `<div class="dj-tbls">
+      ${byConf.length ? rtable({ axis: "Güven", data: byConf }, "Güven kalibrasyonu") : ""}
+      ${bySetup.length ? rtable({ axis: "Setup", data: bySetup }, "Setup kırılımı") : ""}
+    </div>` : ""}
+    ${calNote ? `<div class="dj-note ${calNote.startsWith("⚠") ? "warn" : "ok"}">${calNote}</div>` : ""}
+    ${bestSetup && bySetup.length > 1 ? `<div class="dj-note ok">🎯 En iyi setup'ın <b>${bestSetup.lbl}</b> (${bestSetup.avgR >= 0 ? "+" : ""}${bestSetup.avgR.toFixed(2)}R) — sermayeni buraya yoğunlaştır, zayıf setup'ları ele.</div>` : ""}
+  </section>`;
+}
+
 function renderSwingDeck() {
   const el = $("#swingDeck");
   if (!el) return;
@@ -5960,7 +6047,7 @@ function renderSwingDeck() {
       </div>
     </section>` : "";
 
-  el.innerHTML = hero + swRegimeLine() + chart + swAnalyticsPanel(trades) + swingStatsPanel(closed) + openPanel + closedPanel;
+  el.innerHTML = hero + swRegimeLine() + chart + swAnalyticsPanel(trades) + swingStatsPanel(closed) + decisionScorecardPanel(closed) + openPanel + closedPanel;
 }
 
 /* Defter analitiği: kümülatif realize eğrisi + sembol bazlı K/Z barları.
@@ -6230,6 +6317,26 @@ function swEffectiveEntry() {
   }
   return Number(swingForm.entry.value);
 }
+/* ---- Karar defteri pil grupları: tek seçim → gizli input'a yaz ---- */
+function setPillGroup(groupId, hiddenInput, dataKey, value) {
+  const g = document.getElementById(groupId); if (!g) return;
+  g.querySelectorAll(".pill-opt").forEach((x) => x.classList.toggle("on", (x.dataset[dataKey] || "") === (value || "\0")));
+  if (hiddenInput) hiddenInput.value = value || "";
+}
+function bindPillGroup(groupId, hiddenInput, dataKey, onPick) {
+  const g = document.getElementById(groupId); if (!g || g._bound) return; g._bound = true;
+  g.addEventListener("click", (e) => {
+    const b = e.target.closest(".pill-opt"); if (!b) return;
+    const already = b.classList.contains("on"), val = already ? "" : (b.dataset[dataKey] || "");
+    g.querySelectorAll(".pill-opt").forEach((x) => x.classList.remove("on"));
+    if (val) b.classList.add("on");
+    if (hiddenInput) hiddenInput.value = val;
+    onPick && onPick(val);
+  });
+}
+bindPillGroup("swConf", swingForm.conf, "conf");
+bindPillGroup("swSetup", swingForm.setupKind, "setup");
+
 function openSwingModal(id, prefill) {
   swingForm.reset();
   swingForm.id.value = "";
@@ -6238,6 +6345,8 @@ function openSwingModal(id, prefill) {
   swSelectedHolding = null;
   swPopulatePicker();
   setSwCostMode("unit");
+  setPillGroup("swConf", swingForm.conf, "conf", null);
+  setPillGroup("swSetup", swingForm.setupKind, "setup", null);
   const t = id ? SWINGDECK.trades.find((x) => x.id === id) : null;
   if (t) {
     $("#swingModalTitle").textContent = "Swing Pozisyonu Düzenle";
@@ -6249,6 +6358,9 @@ function openSwingModal(id, prefill) {
     swingForm.stop.value = t.stop ?? "";
     swingForm.target.value = t.target ?? "";
     swingForm.note.value = t.note || "";
+    swingForm.thesis.value = t.thesis || "";
+    setPillGroup("swConf", swingForm.conf, "conf", t.conf || null);
+    setPillGroup("swSetup", swingForm.setupKind, "setup", t.setupKind || null);
   } else {
     $("#swingModalTitle").textContent = prefill ? `${prefill.symbol} — Swing Pozisyonu Aç` : "Swing Pozisyonu Aç";
     swingForm.openedAt.value = new Date().toISOString().slice(0, 10);
@@ -6464,6 +6576,7 @@ swingForm?.addEventListener("submit", async (e) => {
     symbol: fd.symbol, qty: fd.qty,
     stop: fd.stop || null, target: fd.target || null,
     openedAt: fd.openedAt, note: fd.note || "",
+    thesis: fd.thesis || "", conf: fd.conf || null, setupKind: fd.setupKind || null,
   };
   if (swCostMode === "unit" && fd.entry) body.entry = fd.entry;
   else if (swCostMode === "total" && fd.totalCost) body.totalCost = fd.totalCost;
@@ -6496,10 +6609,19 @@ function openSwingSell(id, full = false) {
   const principalShares = price > 0 ? Math.min(t.qty, (t.entry * t.qty) / price) : t.qty;
   swingCloseForm.shares.value = full ? +Number(t.qty).toFixed(4) : +principalShares.toFixed(2);
   swingCloseForm.shares.max = t.qty;
+  // Karar defteri: plana-uyum bloğunu sıfırla (görünürlük swSellHint'te tam kapanışa göre)
+  setPillGroup("swFollow", swingCloseForm.planFollow, "follow", null);
+  setPillGroup("swMistakeTags", swingCloseForm.mistakeTag, "mtag", null);
+  $("#swMistake").hidden = true;
   swSellHint();
   swingCloseBg.hidden = false;
   setTimeout(() => swingCloseForm.shares.focus(), 50);
 }
+bindPillGroup("swFollow", swingCloseForm.planFollow, "follow", (v) => {
+  const m = $("#swMistake"); if (m) m.hidden = !(v === "partial" || v === "no");
+  if (v === "yes" || v === "") setPillGroup("swMistakeTags", swingCloseForm.mistakeTag, "mtag", null);
+});
+bindPillGroup("swMistakeTags", swingCloseForm.mistakeTag, "mtag");
 // Satış önizleme: kâr + kalan adet + tam satış uyarısı
 function swSellHint() {
   const t = swSellTrade; if (!t) return;
@@ -6512,6 +6634,9 @@ function swSellHint() {
   const pnl = gross - MIDAS_FEE;               // Midas $1.5 satış komisyonu düşülü net
   const remain = t.qty - sh;
   note.innerHTML = `Satılacak <b>${fmtNum(sh, 2)}</b> adet → net kâr <b>${fmtUSD(pnl)}</b> <span class="muted">(brüt ${fmtUSD(gross)} − $1.5 Midas)</span> · kalan <b>${fmtNum(remain, 2)}</b> adet${remain <= 1e-6 ? " (pozisyon kapanır)" : ""}.<br>Bu net kâr <b>swing getirisine</b> + <b>vergiye (Realize 2026)</b> + <b>işlem geçmişine</b> işlenir, holding adedi düşer.`;
+  // Tam kapanışta (kalan ≈ 0) plana-uyum sorusunu göster — kısmi ana-para çekmede sorma
+  const pf = $("#swPlanFollow");
+  if (pf) pf.hidden = !(sh > 0 && remain <= 1e-6);
 }
 ["input", "change"].forEach((ev) => swingCloseForm?.addEventListener(ev, swSellHint));
 $("#swingCloseCancelBtn")?.addEventListener("click", () => (swingCloseBg.hidden = true));
@@ -6521,7 +6646,7 @@ swingCloseForm?.addEventListener("submit", async (e) => {
   const fd = Object.fromEntries(new FormData(swingCloseForm).entries());
   const r = await fetch(`/api/swing-trades/${fd.id}/sell`, {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ shares: fd.shares, exitPrice: fd.exitPrice, date: fd.closedAt }),
+    body: JSON.stringify({ shares: fd.shares, exitPrice: fd.exitPrice, date: fd.closedAt, planFollow: fd.planFollow || null, mistakeTag: fd.mistakeTag || null }),
   });
   if (!r.ok) { const j = await r.json().catch(() => ({})); toast(j.error || "Satılamadı", "err"); return; }
   swingCloseBg.hidden = true;

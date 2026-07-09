@@ -24,13 +24,13 @@ const Y = today.getFullYear(), M = today.getMonth();
 
 // Zengin örnek defter: kapanmış (aylık dağılım) + açık pozisyonlar
 let trades = [
-  { id: "sw-1", symbol: "NVDA", name: "", entry: 118.5, stop: 110, target: 135, qty: 40, openedAt: iso(Y, M - 5, 3), status: "closed", exitPrice: 134.2, closedAt: iso(Y, M - 5, 18), note: "50g üstü kırılım" },
-  { id: "sw-2", symbol: "AMD", entry: 142, stop: 134, target: 158, qty: 25, openedAt: iso(Y, M - 4, 2), status: "closed", exitPrice: 151, closedAt: iso(Y, M - 4, 20), note: "" },
-  { id: "sw-3", symbol: "TSLA", entry: 240, stop: 225, target: 270, qty: 12, openedAt: iso(Y, M - 4, 6), status: "closed", exitPrice: 232, closedAt: iso(Y, M - 4, 9), note: "stop yedi" },
-  { id: "sw-4", symbol: "MSFT", entry: 410, stop: 398, target: 440, qty: 8, openedAt: iso(Y, M - 3, 1), status: "closed", exitPrice: 436, closedAt: iso(Y, M - 3, 22), note: "" },
-  { id: "sw-5", symbol: "PLTR", entry: 24.5, stop: 22, target: 31, qty: 200, openedAt: iso(Y, M - 2, 4), status: "closed", exitPrice: 28.1, closedAt: iso(Y, M - 2, 19), note: "" },
-  { id: "sw-6", symbol: "AAPL", entry: 188, stop: 181, target: 205, qty: 30, openedAt: iso(Y, M - 1, 7), status: "closed", exitPrice: 197, closedAt: iso(Y, M - 1, 24), note: "" },
-  { id: "sw-7", symbol: "SMCI", entry: 42, stop: 38, target: 52, qty: 60, openedAt: iso(Y, M, 2), status: "closed", exitPrice: 46.5, closedAt: iso(Y, M, 8), note: "kısmi" },
+  { id: "sw-1", symbol: "NVDA", name: "", entry: 118.5, stop: 110, target: 135, qty: 40, openedAt: iso(Y, M - 5, 3), status: "closed", exitPrice: 134.2, closedAt: iso(Y, M - 5, 18), note: "50g üstü kırılım", thesis: "kırılım + hacim teyidi, EMA8 üstü", conf: "A", setupKind: "breakout", planFollow: "yes" },
+  { id: "sw-2", symbol: "AMD", entry: 142, stop: 134, target: 158, qty: 25, openedAt: iso(Y, M - 4, 2), status: "closed", exitPrice: 151, closedAt: iso(Y, M - 4, 20), note: "", thesis: "ORH kırılımı, konsolidasyon sonrası", conf: "B", setupKind: "breakout", planFollow: "yes" },
+  { id: "sw-3", symbol: "TSLA", entry: 240, stop: 225, target: 270, qty: 12, openedAt: iso(Y, M - 4, 6), status: "closed", exitPrice: 232, closedAt: iso(Y, M - 4, 9), note: "stop yedi", thesis: "kırılım denemesi, zayıf hacim", conf: "B", setupKind: "breakout", planFollow: "yes" },
+  { id: "sw-4", symbol: "MSFT", entry: 410, stop: 398, target: 440, qty: 8, openedAt: iso(Y, M - 3, 1), status: "closed", exitPrice: 436, closedAt: iso(Y, M - 3, 22), note: "", thesis: "gap sonrası EP", conf: "B", setupKind: "ep", planFollow: "no", mistakeTag: "target-close" },
+  { id: "sw-5", symbol: "PLTR", entry: 24.5, stop: 22, target: 31, qty: 200, openedAt: iso(Y, M - 2, 4), status: "closed", exitPrice: 28.1, closedAt: iso(Y, M - 2, 19), note: "", thesis: "10MA geri çekilme, trend güçlü", conf: "A", setupKind: "pullback", planFollow: "yes" },
+  { id: "sw-6", symbol: "AAPL", entry: 188, stop: 181, target: 205, qty: 30, openedAt: iso(Y, M - 1, 7), status: "closed", exitPrice: 197, closedAt: iso(Y, M - 1, 24), note: "", thesis: "20MA sıçrama", conf: "C", setupKind: "pullback", planFollow: "yes" },
+  { id: "sw-7", symbol: "SMCI", entry: 42, stop: 38, target: 52, qty: 60, openedAt: iso(Y, M, 2), status: "closed", exitPrice: 46.5, closedAt: iso(Y, M, 8), note: "kısmi", thesis: "episodic pivot, kazanç gap'i", conf: "C", setupKind: "ep", planFollow: "partial", mistakeTag: "early-fear" },
   // açık
   { id: "sw-8", symbol: "NVDA", entry: 130, stop: 122, target: 150, qty: 35, openedAt: iso(Y, M, 5), status: "open", note: "trend devam" },
   { id: "sw-8b", symbol: "NVDA", entry: 138, stop: 128, target: 160, qty: 15, openedAt: iso(Y, M, 9), status: "open", note: "2. swing ekleme" },
@@ -523,7 +523,7 @@ const server = createServer(async (req, res) => {
         if (!(entry > 0) && +b.totalCost > 0 && qty > 0) entry = +b.totalCost / qty;
         if (!(entry > 0)) { const h = holdings.find((x) => x.symbol === String(b.symbol).toUpperCase()); if (h && +h.costUSD > 0) entry = +h.costUSD; }
         if (!(entry > 0)) { res.writeHead(400, { "content-type": "application/json" }); res.end(JSON.stringify({ error: "giriş maliyeti bulunamadı" })); return; }
-        trades.push({ id: "sw-" + Date.now().toString(36), status: "open", symbol: String(b.symbol).toUpperCase(), qty, entry, stop: b.stop ? +b.stop : null, target: b.target ? +b.target : null, openedAt: b.openedAt || new Date().toISOString().slice(0, 10), note: b.note || "" });
+        trades.push({ id: "sw-" + Date.now().toString(36), status: "open", symbol: String(b.symbol).toUpperCase(), qty, entry, stop: b.stop ? +b.stop : null, target: b.target ? +b.target : null, openedAt: b.openedAt || new Date().toISOString().slice(0, 10), note: b.note || "", thesis: b.thesis || "", conf: b.conf || null, setupKind: b.setupKind || null });
       }
       res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify({ ok: true })); return;
     }
@@ -542,7 +542,11 @@ const server = createServer(async (req, res) => {
     const pnl = +((px - t.entry) * sell).toFixed(2);
     t.realizedLots = t.realizedLots || []; t.realizedLots.push({ shares: sell, exitPrice: px, pnlUSD: pnl, date });
     t.qty = +(t.qty - sell).toFixed(4);
-    if (t.qty <= 1e-6) { t.status = "closed"; t.closedAt = date; t.exitPrice = px; }
+    if (t.qty <= 1e-6) {
+      t.status = "closed"; t.closedAt = date; t.exitPrice = px;
+      if (["yes", "partial", "no"].includes(b.planFollow)) t.planFollow = b.planFollow;
+      if (b.mistakeTag != null) t.mistakeTag = String(b.mistakeTag).slice(0, 40) || null;
+    }
     // holding düş + trade + realize ekle (zero-cost sütunu güncellensin)
     const h = holdings.find((x) => x.symbol === t.symbol);
     if (h) { h.quantity = +(h.quantity - sell).toFixed(4); if (h.quantity <= 1e-6) holdings.splice(holdings.indexOf(h), 1); }
