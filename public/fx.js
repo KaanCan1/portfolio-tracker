@@ -25,6 +25,15 @@
   // Teşhis: konsoldan __FX_DEBUG() → gezinme penceresi durumu
   window.__FX_DEBUG = () => ({ navAt, fresh: navFresh(), now: performance.now() });
 
+  /* Mobil alt sekme çubuğu: tıklamayı sidebar'daki gerçek nav düğmesine vekâlet et
+   * (showView app.js kapsamında; aktif durum global .nav-item toggle'ından otomatik). */
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest("#mnav .nav-item");
+    if (!b) return;
+    document.querySelector(`#nav .nav-item[data-view="${b.dataset.view}"]`)?.click();
+    window.scrollTo({ top: 0, behavior: "instant" });
+  });
+
   /* Blok seçicileri: dış koreografi EN DIŞ blokları, scroll-reveal YAPRAK blokları kullanır
    * (Alfa Avı gibi tek dev panelli sekmelerde iç kartlar da tek tek belirsin). */
   const BLOCK_SEL = ".panel, .card, .db-card, .ch-kpi, .rai-panel, .tbl-wrap, .ri-card, .ch-card, .note-card, .sw-pos, .ch-goal, .ch-regime, .ch-strat, .dj-cell, .r26-stat, .sx-stat";

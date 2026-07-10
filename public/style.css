@@ -510,6 +510,7 @@ tbody tr:hover td { background: var(--green-soft); }
 
 /* Ana sayfa "drawer" — alt referans panelleri (Nakit/Sermaye/Alarm/İşlem/Realize) 2 sütun */
 .home-drawer { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 16px; align-items: start; }
+.home-drawer > * { min-width: 0; } /* içindeki geniş tablo (min-width 700) track'i şişirmesin */
 .home-drawer > .panel { margin: 0; }
 .home-drawer .collapsible:not(.is-collapsed) { grid-column: 1 / -1; } /* açılınca tam genişlik */
 @media (max-width: 820px) { .home-drawer { grid-template-columns: 1fr; } }
@@ -3113,7 +3114,6 @@ svg.fx-pop { animation: fxPop .7s cubic-bezier(.22,1,.36,1) both; transform-orig
   background: radial-gradient(120% 60% at 50% -12%, rgba(53,190,120,.16) 0%, transparent 62%);
   animation: fxAurora 9s ease-in-out infinite;
 }
-.sidebar { position: sticky; } /* ::before konumu için mevcut position korunur */
 
 /* Nav & çip mikro yayları */
 .nav-item, .vj-chip { transition: background .18s ease, color .18s ease, transform .16s cubic-bezier(.22,1,.36,1), box-shadow .18s ease; }
@@ -3126,3 +3126,91 @@ svg.fx-pop { animation: fxPop .7s cubic-bezier(.22,1,.36,1) both; transform-orig
   .fx-hide { opacity: 1 !important; transform: none !important; filter: none !important; }
   .sidebar::before { animation: none; }
 }
+
+/* ============================ MOBİL GEÇİŞ (≤640px) ============================
+ * iPhone "sağa yatık" fix'i + mobil-native görsellik.
+ * Kök nedenler: (1) 2-sütunlu grid'lerde 1fr track'ler uzun rakamlarla şişip
+ * görünümü viewport'tan geniş yapıyordu → minmax(0,1fr) + min-width:0;
+ * (2) lejant/şerit min-genişlikleri; (3) kaydırılamayan pill şeritleri. */
+
+/* Alt sekme çubuğu — masaüstünde gizli */
+.mnav { display: none; }
+
+@media (max-width: 640px) {
+  /* ── 1) Grid taşma korumaları ── */
+  .cards-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .cards-metrics .card { padding: 12px 13px; }
+  .card .value { font-size: 19px; }
+  .trade-summary, .rk-hero, .rk-grid, .rk-grid-sm, .pr-kpis, .ch-kpis, .rz-head,
+  .gr-hero, .dj-matrix, .sx-grid, .opp-bt-stats { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  .cards-top, .cards-mid, .db-grid, .analiz-grid, .dj-tbls, .tp-grid, .cuma-grid,
+  .analiz-summary, .cash-grid, .r26-summary { grid-template-columns: 1fr !important; }
+  .panel > *, .card > *, .db-card > *, .ch-kpi > * { min-width: 0; }
+  .panel { padding: 13px 13px; }
+  .r26-summary { display: grid; }
+  .r26-stat { flex: none; }
+
+  /* ── 2) Pill/sekme şeritleri: yatay kaydırmalı (mobil-native) ── */
+  .vj-bar, .range-tabs, .swing-seg, .seg-mini, .hunt-body {
+    display: flex; flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; max-width: 100%;
+  }
+  .vj-bar::-webkit-scrollbar, .range-tabs::-webkit-scrollbar, .swing-seg::-webkit-scrollbar,
+  .seg-mini::-webkit-scrollbar, .hunt-body::-webkit-scrollbar { display: none; }
+  .vj-chip, .range-tabs > *, .segm, .hunt-pill { white-space: nowrap; flex-shrink: 0; }
+  .hunt-body { align-items: center; gap: 8px; }
+
+  /* ── 3) Varlık dağılımı lejantı: min-genişlikler sıfırlanır, sıkı tipografi ── */
+  .alloc-body { gap: 12px; }
+  .donut-wrap { width: 128px; }
+  .lg-item { gap: 7px; font-size: 12.5px; }
+  .lg-val { min-width: 0; font-size: 12px; }
+  .lg-usd { min-width: 0; font-size: 11.5px; }
+
+  /* ── 4) Tipografi & yoğunluk ── */
+  .view-title { font-size: 19px; }
+  .view-sub { font-size: 12.5px; }
+  .db-big { font-size: 21px; }
+  .card.hero .value { font-size: 24px; }
+  .hc-seg { min-width: 64px; padding: 6px 9px; }
+  .panel-head h2 { font-size: 14.5px; }
+
+  /* ── 5) Modallar: alttan açılan sayfa (sheet) hissi ── */
+  .modal-bg { padding: 0; place-items: end center; }
+  .modal-bg .modal { width: 100%; max-width: 100%; border-radius: 20px 20px 0 0; max-height: 92dvh; overflow-y: auto; padding-bottom: calc(18px + env(safe-area-inset-bottom)); }
+  .modal-bg:not([hidden]) .modal { animation: fxSheet .34s cubic-bezier(.22,1,.36,1) both; }
+  .chart-modal-bg { padding: 0; }
+  .chart-modal { width: 100vw; height: 100dvh; max-height: 100dvh; border-radius: 0; }
+
+  /* ── 6) Dokunma hedefleri ── */
+  .btn { min-height: 40px; }
+  .btn.sm { min-height: 34px; }
+  .btn.icon { min-height: 34px; }
+
+  /* ── 7) Alt sekme çubuğu ── */
+  .mnav {
+    display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: var(--z-sticky);
+    justify-content: space-around; align-items: stretch; gap: 2px;
+    background: rgba(252, 251, 247, .92); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
+    border-top: 1px solid var(--line);
+    padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
+  }
+  .mnav .nav-item {
+    flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
+    padding: 5px 4px; border-radius: 12px; background: none;
+    color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .2px;
+  }
+  .mnav .nav-item:hover { background: var(--bg2); color: var(--ink); }
+  .mnav .nav-item.active { background: var(--green-soft); color: var(--green-d); }
+  .mnav .nav-item.active::before { display: none; }   /* sidebar'ın sol ray göstergesi burada yok */
+  .mnav .ni-ic { width: 22px; height: 22px; }
+  .mnav .ni-ic svg { width: 22px; height: 22px; stroke: currentColor; }
+  .mnav .nav-item.active .ni-ic { transform: none; }
+  .content { padding-bottom: calc(92px + env(safe-area-inset-bottom)); }
+}
+
+@keyframes fxSheet {
+  from { opacity: .6; transform: translateY(48px); }
+  to   { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) { .modal-bg:not([hidden]) .modal { animation: none !important; } }
