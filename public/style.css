@@ -3095,10 +3095,16 @@ svg.fx-pop { animation: fxPop .7s cubic-bezier(.22,1,.36,1) both; transform-orig
   to   { opacity: 1; transform: none; }
 }
 
-/* Hero three.js tuvali — içerik üstte, dalga altta */
-.fx-hero-host { position: relative; overflow: hidden; }
-.fx-hero-canvas { position: absolute; inset: 0; width: 100% !important; height: 100% !important; pointer-events: none; z-index: 0; }
-.fx-hero-host > *:not(.fx-hero-canvas) { position: relative; z-index: 1; }
+/* Scroll-reveal: gezinme anında ekran dışında kalan yaprak bloklar,
+ * görünüme girerken bir kez yumuşakça belirir (fx.js IntersectionObserver) */
+.fx-hide { opacity: 0; transform: translateY(18px); filter: blur(6px); }
+.fx-reveal {
+  transition: opacity .6s cubic-bezier(.22,1,.36,1), transform .6s cubic-bezier(.22,1,.36,1), filter .45s ease;
+  opacity: 1; transform: none; filter: none;
+}
+
+/* İnce dokunuş: bölüm zıplamaları (vj-chip) yumuşak kaysın */
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
 
 /* Sidebar aurora — çok yavaş nefes alan yeşil ışıma (elit ambiyans) */
 @keyframes fxAurora { 0%,100% { opacity: .55; } 50% { opacity: 1; } }
@@ -3117,5 +3123,6 @@ svg.fx-pop { animation: fxPop .7s cubic-bezier(.22,1,.36,1) both; transform-orig
 @media (prefers-reduced-motion: reduce) {
   .fx-in, .fx-in .value, .fx-in .db-big, .fx-in .ch-k-v, .fx-in .sx-stat b, .fx-in .dj-cell b,
   svg.fx-pop, .modal-bg:not([hidden]) .modal { animation: none !important; }
+  .fx-hide { opacity: 1 !important; transform: none !important; filter: none !important; }
   .sidebar::before { animation: none; }
 }
