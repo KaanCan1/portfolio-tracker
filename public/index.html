@@ -22,22 +22,33 @@
           </svg>
         </div>
         <div class="brand-text">
-          <h1>Portfolio</h1>
-          <span class="sub">Live data</span>
+          <h1>Kaan'ın Portföyü</h1>
+          <span class="sub" id="sbGreet">Canlı veri</span>
         </div>
       </div>
 
+      <!-- Canlı portföy nabzı — her sekmeden görünür (değer app.js'ten dolar) -->
+      <div class="sb-pulse" id="sbPulse" hidden>
+        <div class="sbp-l">Portföyüm</div>
+        <div class="sbp-v" id="sbVal">—</div>
+        <div class="sbp-m"><span class="sbp-day" id="sbDay"></span><span class="sbp-usd" id="sbUsd"></span></div>
+      </div>
+
       <nav class="nav" id="nav">
+        <div class="nav-sec">Masam</div>
         <button class="nav-item" data-view="notlar"><span class="ni-ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="16" height="20" x="4" y="2" rx="2"/><path d="M8 2v20"/><path d="M12 7h4"/><path d="M12 12h4"/><path d="M12 17h2"/></svg></span> Notlar</button>
         <button class="nav-item active" data-view="genel"><span class="ni-ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg></span> Genel Bakış</button>
+        <div class="nav-sec">Trade</div>
         <button class="nav-item" data-view="swingdefteri"><span class="ni-ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span> Swing</button>
         <button class="nav-item" data-view="radar"><span class="ni-ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></span> Radar</button>
-        <button class="nav-item" data-view="analiz"><span class="ni-ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 18h8"/><path d="M3 22h18"/><path d="M14 22a7 7 0 1 0 0-14h-1"/><path d="M9 14h2"/><path d="M9 12a2 2 0 0 1-2-2V6h6v4a2 2 0 0 1-2 2Z"/><path d="M12 6V3a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v3"/></svg></span> Analiz</button>
         <button class="nav-item" data-view="challenge"><span class="ni-ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" x2="4" y1="22" y2="15"/></svg></span> Alfa Avı</button>
+        <div class="nav-sec">Analiz &amp; Rapor</div>
+        <button class="nav-item" data-view="analiz"><span class="ni-ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 18h8"/><path d="M3 22h18"/><path d="M14 22a7 7 0 1 0 0-14h-1"/><path d="M9 14h2"/><path d="M9 12a2 2 0 0 1-2-2V6h6v4a2 2 0 0 1-2 2Z"/><path d="M12 6V3a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v3"/></svg></span> Analiz</button>
         <button class="nav-item" data-view="raporlar"><span class="ni-ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/></svg></span> Günlük Raporlar</button>
       </nav>
 
       <div class="sidebar-foot">
+        <div class="sb-mkt" id="sbMkt" hidden><span class="sbm-dot"></span><span class="sbm-t">—</span></div>
         <div class="updated" id="updated">—</div>
         <div class="sidebar-actions">
           <button class="btn ghost sm" id="refreshBtn" title="Yenile">↻ Yenile</button>

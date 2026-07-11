@@ -349,7 +349,8 @@ function renderSentiment(data) {
       <div class="regime-legend"><span>Hedef nakit <b>%${rg.targetCash[0]}–${rg.targetCash[1]}</b></span></div>`}
     </div>` : "";
 
-  host.innerHTML = (fngCard || regimeCard) ? `<div class="cards-mid">${fngCard}${regimeCard}</div>` : "";
+  host.innerHTML = (fngCard || regimeCard)
+    ? `<div class="sec-label">Piyasa Nabzı</div><div class="cards-mid">${fngCard}${regimeCard}</div>` : "";
 }
 
 // Duygu kartlarını ağır portföy çağrısını beklemeden hemen yükle
@@ -479,7 +480,7 @@ function render() {
           ).join("")}</div>` : "";
         })()}
         <div class="meta">${healthy ? (fx.usdtry ? `Varlık ${fmtUSD0(totalMarket / fx.usdtry)} + Nakit ${fmtUSD0(cashTL / fx.usdtry)}${optMarket ? ` · içinde Opsiyon ${fmtUSD0(optMarket / fx.usdtry)}` : ""}` : `Varlık ${fmtTRY0(totalMarket)} + Nakit ${fmtTRY0(cashTL)}`) : "↻ Veriler yenileniyor · son bilinen değer"}</div>
-        ${meta?.summaryText ? `<div class="hero-note">📋 ${meta.summaryText}</div>` : ""}
+        ${meta?.summaryText ? `<div class="hero-note"><b class="hn-l">Günün özeti</b>${meta.summaryText}</div>` : ""}
         ${healthIssues.length ? `<div class="hero-health">${healthIssues.join("<br>")}</div>` : ""}
       </div>
       ${allocCard}`;
@@ -496,35 +497,44 @@ function render() {
         <span class="mv-pct">${fmtPct(h.live.dayChangePct)}</span>
       </div>`;
     moverCard = `<div class="card mover-card">
+        <span class="mc-ic">${svgIcon("activity")}</span>
         <div class="label">Günün Hareketi ${tipIcon("Bugün açılışa göre portföyündeki en çok yükselen ve düşen pozisyon. Tek günlük oynama trend değildir; ama büyük düşüşü olan pozisyonun stop planını kontrol et.")}</div>
         <div class="mv-body">${best ? moverRow(best, "up") : ""}${worst && worst !== best ? moverRow(worst, "down") : ""}</div>
       </div>`;
   }
 
   // ---- Metrik kartları ----
-  $("#cardsMetrics").innerHTML = `${moverCard}`+ `
+  // Okunabilirlik dili: köşede sessiz çizgi-ikon, yüzdeler renkli pill (chip) —
+  // renk yalnız anlam taşıyan yerde, kart yüzeyi nötr kalır.
+  const pctChip = (p) => p != null && isFinite(p) ? `<span class="chip ${cls(p)}">${fmtPct(p)}</span>` : "";
+  $("#cardsMetrics").innerHTML = `<div class="sec-label sl-grid">Portföyün Özeti</div>` + `${moverCard}`+ `
       <div class="card">
+        <span class="mc-ic">${svgIcon("trendUp")}</span>
         <div class="label">Toplam Getiri ${tipIcon("İpucu: Açık pozisyonların kâğıt üzerindeki kâr/zararı, USD bazında. Maliyetler işlemlerle otomatik senkrondur. Kâğıt kârı gerçek kâr değildir — realize edene kadar piyasanındır.")}</div>
         <div class="value ${healthy ? cls(profit) : ""}">${healthy ? (fx.usdtry ? fmtUSD(profit / fx.usdtry) : fmtTRY(profit)) : "—"}</div>
-        <div class="meta ${healthy ? cls(profit) : ""}">${healthy ? `${fmtPct(profitPct)} · Maliyet ${fx.usdtry ? fmtUSD0(totalCost / fx.usdtry) : fmtTRY0(totalCost)}` : `Maliyet ${fx.usdtry ? fmtUSD0(totalCost / fx.usdtry) : fmtTRY0(totalCost)}`}</div>
+        <div class="meta">${healthy ? `${pctChip(profitPct)} Maliyet ${fx.usdtry ? fmtUSD0(totalCost / fx.usdtry) : fmtTRY0(totalCost)}` : `Maliyet ${fx.usdtry ? fmtUSD0(totalCost / fx.usdtry) : fmtTRY0(totalCost)}`}</div>
       </div>
       <div class="card">
+        <span class="mc-ic">${svgIcon("receipt")}</span>
         <div class="label">Realize Edilen K/Z ${tipIcon("İpucu: Cebe giren/çıkan gerçek sonuç — yalnızca satışlardan, USD bazında hesaplanır. Kural 1'in karnesi budur: bu sayı negatifleşiyorsa sistemde değil disiplinde sorun var demektir.")}</div>
         <div class="value ${cls(realizedUSD)}">${fmtUSD(realizedUSD)}</div>
         <div class="meta">${trades.filter((t) => t.kind !== "buy").length} satış</div>
       </div>
       ${netInvested > 0 ? `
       <div class="card">
+        <span class="mc-ic">${svgIcon("scale")}</span>
         <div class="label">Gerçek Getiri ${tipIcon("İpucu: Bugünkü toplam değer − net yatırdığın para, USD bazında. Piyasa kazancını cebinden eklediğin paradan ayırır; portföyün gerçekten büyüyor mu sorusunun tek dürüst cevabı.")}</div>
         <div class="value ${healthy ? cls(realProfit) : ""}">${healthy ? (fx.usdtry ? fmtUSD(realProfit / fx.usdtry) : fmtTRY(realProfit)) : "—"}</div>
-        <div class="meta ${healthy ? cls(realProfit) : ""}">${realPct != null ? fmtPct(realPct) : "—"} · Sermaye ${fx.usdtry ? fmtUSD0(netInvested / fx.usdtry) : fmtTRY0(netInvested)}</div>
+        <div class="meta">${realPct != null ? pctChip(realPct) : "—"} Sermaye ${fx.usdtry ? fmtUSD0(netInvested / fx.usdtry) : fmtTRY0(netInvested)}</div>
       </div>` : ""}
       <div class="card">
+        <span class="mc-ic">${svgIcon("dollar")}</span>
         <div class="label">USD / TRY</div>
         <div class="value">${fmtNum(fx.usdtry, 4)}</div>
         <div class="meta">EUR/TRY ${fmtNum(fx.eurtry, 4)}</div>
       </div>
       <div class="card">
+        <span class="mc-ic">${svgIcon("coins")}</span>
         <div class="label">Gram Altın</div>
         <div class="value">${fmtTRY(fx.gram)}</div>
         <div class="meta">${holdings.filter((h) => h.type === "gold").reduce((s, h) => s + h.quantity, 0)} gram tutuluyor</div>
@@ -646,6 +656,10 @@ function render() {
 
   $("#updated").textContent = "Son güncelleme: " + new Date(STATE.updatedAt).toLocaleTimeString("tr-TR");
 
+  // Sol menü canlı katmanı: selamlama + NYSE durumu + açık swing sayısı
+  sbGreeting(); sbMarket();
+  setNavMeta("swingdefteri", (STATE.swingPositions || []).length);
+
   // Yapışkan mini özet verisi (kaydırınca üstte görünür)
   try {
     const _segs = buildCompare(STATE.history, grandTotal, STATE.dayOpen?.total);
@@ -666,7 +680,55 @@ function updateMiniTop(grandTRY, usdtry, dayPct) {
   const d = bar.querySelector(".mt-day");
   if (dayPct != null && isFinite(dayPct)) { d.textContent = (dayPct >= 0 ? "▲ " : "▼ ") + "%" + Math.abs(dayPct).toFixed(2); d.className = "mt-day " + cls(dayPct); }
   else { d.textContent = ""; d.className = "mt-day"; }
+  updateSidebarPulse(grandTRY, usdtry, dayPct);
   if (document.body.classList.contains("privacy")) applyMask(true);
+}
+
+/* ---------------- Sol menü canlı katmanı ---------------- */
+/* Nabız kartı: portföy USD'ye endeksli olduğu için büyük değer USD, ₺ referans altta */
+function updateSidebarPulse(grandTRY, usdtry, dayPct) {
+  const box = $("#sbPulse"); if (!box) return;
+  box.hidden = false;
+  $("#sbVal").textContent = usdtry ? fmtUSD0(grandTRY / usdtry) : fmtTRY0(grandTRY);
+  $("#sbUsd").textContent = usdtry ? "≈ " + fmtTRY0(grandTRY) : "";
+  const d = $("#sbDay");
+  if (dayPct != null && isFinite(dayPct)) { d.textContent = (dayPct >= 0 ? "▲ " : "▼ ") + "%" + Math.abs(dayPct).toFixed(2) + " bugün"; d.className = "sbp-day " + cls(dayPct); }
+  else { d.textContent = ""; d.className = "sbp-day"; }
+}
+
+function sbGreeting() {
+  const el = $("#sbGreet"); if (!el) return;
+  const h = new Date().getHours();
+  el.textContent = (h < 6 ? "İyi geceler" : h < 12 ? "Günaydın" : h < 18 ? "İyi günler" : "İyi akşamlar") + ", Kaan";
+}
+
+/* NYSE seans durumu — yalnız saat hesabı, veri çekmez (resmî tatiller kapsam dışı) */
+function sbMarket() {
+  const el = $("#sbMkt"); if (!el) return;
+  try {
+    const et = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
+    const day = et.getDay(), mins = et.getHours() * 60 + et.getMinutes();
+    const wk = day >= 1 && day <= 5;
+    const open = wk && mins >= 570 && mins < 960;          // 09:30–16:00
+    const pre = wk && mins >= 240 && mins < 570;           // 04:00–09:30
+    const aft = wk && mins >= 960 && mins < 1200;          // 16:00–20:00
+    const hhmm = String(et.getHours()).padStart(2, "0") + ":" + String(et.getMinutes()).padStart(2, "0");
+    el.hidden = false;
+    el.className = "sb-mkt " + (open ? "on" : pre || aft ? "half" : "off");
+    el.querySelector(".sbm-t").textContent = (open ? "NYSE açık" : pre ? "Pre-market" : aft ? "After-hours" : "NYSE kapalı") + " · " + hhmm + " ET";
+  } catch { el.hidden = true; }
+}
+setInterval(sbMarket, 60000); // poll'dan bağımsız dakikada bir tazele (saat kayması olmasın)
+
+/* Sekme rozetleri: sağa yaslı sessiz sayaç (ör. açık swing pozisyonu) */
+function setNavMeta(view, n) {
+  const nav = document.querySelector(`#nav .nav-item[data-view="${view}"]`);
+  if (!nav) return;
+  nav.querySelector(".nav-meta")?.remove();
+  if (!n) return;
+  const b = document.createElement("span");
+  b.className = "nav-meta"; b.textContent = n;
+  nav.appendChild(b);
 }
 (function bindMiniTop() {
   let shown = false;
@@ -772,6 +834,7 @@ const ICONS = {
   briefcase: '<rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>',
   trendDown: '<polyline points="22 17 13.5 8.5 8.5 13.5 2 7"/><polyline points="16 17 22 17 22 11"/>',
   alertTriangle: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+  coins: '<circle cx="8" cy="8" r="6"/><path d="M18.09 10.37A6 6 0 1 1 10.34 18"/><path d="M7 6h1v4"/><path d="m16.71 13.88.7.71-2.82 2.82"/>',
 };
 function svgIcon(name, cls) {
   const p = ICONS[name]; if (!p) return "";
@@ -7072,6 +7135,7 @@ $("#watchInput").addEventListener("keydown", (e) => { if (e.key === "Enter") add
    alınır. render her çizimde yeniden uygular. */
 const PM_SEL = [
   ".card.hero .value", ".card.hero .hero-usd", ".card.hero .meta",
+  "#sbVal", "#sbUsd", // sol menü nabız kartı da gizlilik modunda maskelenir
   ".hero-compare .hc-v",
   ".cards-metrics .card .value", ".cards-metrics .card .meta",
   ".alloc .lg-val", ".alloc .lg-usd", ".alloc .lg-pct",
@@ -7119,6 +7183,7 @@ document.addEventListener("click", (e) => {
 try { if (localStorage.getItem("privacy") === "1") document.body.classList.add("privacy"); } catch {}
 
 showView("genel"); // açılış HER ZAMAN Genel Bakış (hash oturum içi gezinmede çalışmaya devam eder)
+sbGreeting(); sbMarket(); // sol menü selamlama + NYSE durumu ilk boyada hazır olsun
 loadSentiment(); // duygu kartları anında gelsin (ağır portföy çağrısını beklemeden)
 loadRadarBoard(); // hisse radarı bağımsız yüklensin
 loadSwingBoard(); // swing tarayıcı bağımsız yüklensin
