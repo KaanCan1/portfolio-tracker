@@ -752,6 +752,24 @@ async function chEngineTick(trigger = "timer") {
       vixReal: !!VIXSER,
       watch: chWatchSrv(S, watch, heldNow, regTodayObj, CH_ENG.startDate),
     };
+    // "Sen Yokken": Alfa olayları — replay her turda yeniden üretir, feed key'i tekilleştirir.
+    // ts = keşif anı; olayın gerçek günü detail'de (dünkü mum bugün ölçülse de "yeni" düşer).
+    try {
+      await feedGet();
+      const cutD = new Date(Date.now() - FEED_DAYS * 86400_000).toISOString().slice(0, 10);
+      const K = { tp1: "TP1 vurdu — %25 kâr alındı", tp2: "TP2 vurdu — %25 daha kâr alındı", stop: "stop oldu", be: "başa-baş stopla kapandı", def: "savunma stopuyla kapandı", gap: "gap ile stoplandı", trail: "EMA21 iz süren stopla çıktı" };
+      for (const p of positions) {
+        if (p.date >= cutD)
+          feedPush({ key: `ch:openpos:${p.id}`, type: "alfa", sev: "info", sym: p.sym,
+            title: `Alfa Avı: ${p.sym} pozisyon açtı`, detail: `giriş $${p.entry} · stop $${p.stop} (${p.date})` });
+        for (const ev of p.events || []) {
+          if (!ev.d || ev.d < cutD) continue;
+          feedPush({ key: `ch:${ev.k}:${p.sym}:${ev.d}`, type: "alfa", sev: "info", sym: p.sym,
+            title: `Alfa Avı: ${p.sym} ${K[ev.k] || ev.k}`,
+            detail: `$${(+ev.px).toFixed(2)} · ${ev.pnl >= 0 ? "+" : ""}$${(+ev.pnl).toFixed(0)}${ev.d !== todayISO ? " · " + ev.d : ""}` });
+        }
+      }
+    } catch {}
     CH_ENG.lastBoard = board;
     kvSave("challenge_board", board).catch(() => {});
     return CH_ENG.lastSummary;
@@ -772,6 +790,79 @@ app.post("/api/challenge/testmail", async (_req, res) => {
   const sent = await chSendMail("🧪 Alfa Avı test maili", "<p>Resend bağlantısı çalışıyor — pozisyon açılınca/kapanınca bildirim bu adrese gelecek.</p>");
   res.json({ sent, configured: !!process.env.RESEND_API_KEY, to: await notifyTo() });
 });
+
+/* ===== "Sen Yokken" olay defteri ==================================================
+ * Genel Bakış açılışındaki kişisel akış: bekçi/sinyal/rejim/Alfa olayları tek
+ * defterde birikir (app_data feed_events); "gördüm" imleci (seenAt) cihazlar arası
+ * ortaktır. Üreticiler MEVCUT motorlara kancalanır — yeni tarama/istek yoktur. */
+const FEED_MAX = 150, FEED_DAYS = 14;
+let FEED = null;          // { events, seenAt, state } — tek süreç, bellekte yaşar
+let FEED_SAVE_T = null;
+async function feedGet() {
+  if (FEED) return FEED;
+  const v = await kvLoad("feed_events").catch(() => null);
+  FEED = v && Array.isArray(v.events) ? v : { events: [], seenAt: null, state: {} };
+  FEED.state = FEED.state || {};
+  return FEED;
+}
+function feedSaveSoon() { // sinyal defteri gibi sync üreticiler için debounce'lı kalıcılık
+  clearTimeout(FEED_SAVE_T);
+  FEED_SAVE_T = setTimeout(() => { if (FEED) kvSave("feed_events", FEED).catch(() => {}); }, 1500);
+}
+/* Olay ekle — key ile tekilleştirir (motorlar replay yapsa da olay bir kez yazılır).
+ * ts = KEŞİF anı (senin için "yeni" olan bu); olayın gerçek günü detail'de taşınır. */
+function feedPush(ev) {
+  if (!FEED || !ev?.key) return false;
+  if (FEED.events.some((e) => e.key === ev.key)) return false;
+  FEED.events.unshift({ id: "f-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), ts: new Date().toISOString(), ...ev });
+  const cut = new Date(Date.now() - FEED_DAYS * 86400_000).toISOString();
+  FEED.events = FEED.events.filter((e) => e.ts >= cut).slice(0, FEED_MAX);
+  feedSaveSoon();
+  return true;
+}
+// Rejim / duygu bölge değişimi — önceki değer state'te; ilk görüşte yalnız kaydeder
+function feedCheckMarket(regime, fng) {
+  if (!FEED) return;
+  const day = new Date().toISOString().slice(0, 10);
+  if (regime?.band) {
+    const prev = FEED.state.vixBand;
+    if (prev && prev !== regime.band)
+      feedPush({ key: `mkt:vix:${prev}>${regime.band}:${day}`, type: "mkt", sev: "info", sym: null,
+        title: `Piyasa rejimi değişti: ${prev} → ${regime.band}`, detail: regime.note || `VIX ${regime.vix}` });
+    if (prev !== regime.band) { FEED.state.vixBand = regime.band; feedSaveSoon(); }
+  }
+  if (fng?.band) {
+    const prev = FEED.state.fngBand;
+    if (prev && prev !== fng.band)
+      feedPush({ key: `mkt:fng:${prev}>${fng.band}:${day}`, type: "mkt", sev: "info", sym: null,
+        title: `Aç Gözlülük bölge değiştirdi: ${prev} → ${fng.band}`, detail: `Endeks ${fng.score}/100` });
+    if (prev !== fng.band) { FEED.state.fngBand = fng.band; feedSaveSoon(); }
+  }
+}
+// Kural 1 skoru ±5 oynadıysa olay (hesap /api/portfolio'da doğar — değişim orada yakalanır)
+function feedCheckRule1(score, violations) {
+  if (!FEED || !isFinite(score)) return;
+  const prev = FEED.state.rule1Score;
+  const day = new Date().toISOString().slice(0, 10);
+  if (prev != null && Math.abs(score - prev) >= 5) {
+    const worst = (violations || []).find((v) => v.level === "crit") || (violations || []).find((v) => v.level === "warn");
+    feedPush({ key: `skor:${prev}>${score}:${day}`, type: "mkt", sev: score < prev ? "warn" : "info", sym: null,
+      title: `Kural 1 skoru ${prev} → ${score}`,
+      detail: score < prev ? (worst?.text || "yeni sermaye koruma uyarısı var — panele bak") : "koruma uyarıları azaldı" });
+  }
+  if (prev !== score) { FEED.state.rule1Score = score; feedSaveSoon(); }
+}
+app.get("/api/feed", async (_req, res) => {
+  const f = await feedGet();
+  res.json({ events: f.events.slice(0, 60), seenAt: f.seenAt });
+});
+app.post("/api/feed/seen", async (_req, res) => {
+  const f = await feedGet();
+  f.seenAt = new Date().toISOString();
+  await kvSave("feed_events", f).catch(() => {});
+  res.json({ ok: true, seenAt: f.seenAt });
+});
+feedGet().catch(() => {}); // boot'ta yükle → sync üreticiler FEED'i hazır bulur
 
 /* ===== Portföy Bekçisi — ani hareket / risk uyarı e-postaları =====================
  * Saatte bir gerçek portföyü tarar (Alfa Avı'ndan bağımsız). Amaç: kârı KORU + uzun
@@ -800,8 +891,11 @@ async function guardTick(trigger = "timer") {
     if (!data) return (GUARD.lastSummary = { trigger, note: "veri yok" });
     const stocks = (data.holdings || []).filter((h) => h.type === "stock" && Number(h.quantity) > 0);
     if (!stocks.length) return (GUARD.lastSummary = { trigger, note: "hisse pozisyonu yok" });
-    const syms = [...new Set(stocks.map((h) => String(h.symbol).toUpperCase()))];
+    // Swing Defteri'nin açık pozisyonları da izlenir (stop/hedef olayları "Sen Yokken" akışına)
+    const swOpen = (data.swingTrades || []).filter((t) => t && t.status === "open" && Number(t.qty) > 0 && t.symbol);
+    const syms = [...new Set([...stocks.map((h) => String(h.symbol).toUpperCase()), ...swOpen.map((t) => String(t.symbol).toUpperCase())])];
     const qmap = await fetchStocks(syms).catch(() => ({}));
+    await feedGet().catch(() => {});
     // Kaba sembol-başı realize (satışlar) — sıfır-maliyet önerisinin etkin maliyeti için
     const realizedOf = {};
     for (const t of (data.trades || [])) { if (t.kind !== "sell") continue; const s = String(t.symbol || "").toUpperCase(); realizedOf[s] = (realizedOf[s] || 0) + (Number(t.shares) || 0) * ((Number(t.sellUSD) || 0) - (Number(t.buyUSD) || 0)); }
@@ -825,22 +919,52 @@ async function guardTick(trigger = "timer") {
       const weight = price * qty / totMV * 100;
       const inProfit = cost != null && price > cost;
       // (a) kâr sıçraması → koru + sıfır-maliyet önerisi
-      if (dc != null && dc >= spikeThresh && inProfit && mark(`spike:${sym}:${today}`)) {
+      const spiked = dc != null && dc >= spikeThresh && inProfit;
+      if (spiked) {
+        feedPush({ key: `spike:${sym}:${today}`, type: "pos", sev: "warn", sym,
+          title: `${sym} +${dc.toFixed(1)}% sıçradı — kârı koru`, detail: `${usd0(price)} · sıfır-maliyet fırsatı olabilir (Büyüme'ye bak)` });
+        if (mark(`spike:${sym}:${today}`)) {
         const principal = cost * qty, realized = realizedOf[sym] || 0, effCost = principal - realized;
         let sugg;
         if (effCost <= 0) sugg = `Bu pozisyon zaten <b>bedava</b> (ana paranı geri almışsın) — kâr tümüyle risksiz. Stopu yukarı çek, kalanı koştur.`;
         else { const sh = Math.min(qty, effCost / price), remain = qty - sh; sugg = `Kalan ana parayı çekmek için ~<b>${sh.toFixed(2)} adet</b> sat (~${usd0(effCost)} cebe); kalan <b>${remain.toFixed(2)} adet</b> (${usd0(remain * price)}) bedava biner — tezin tam bu.`; }
         mails.push({ subject: `📈 ${sym} +${dc.toFixed(1)}% sıçradı — kârı koru`, html: `<h2>📈 ${sym} bugün +${dc.toFixed(1)}%</h2><p>Günlük hareket ADR eşiğini (${spikeThresh.toFixed(1)}%) aştı; ${sym} <b>${usd0(price)}</b>, girişe göre ${((price / cost - 1) * 100).toFixed(0)}% kârda.</p><p><b>Öneri (sıfır maliyet):</b> ${sugg}</p><p style="color:#888;font-size:12px">Kârı koru + maksimize et: ana parayı çekip kalanı bedava bindirmek riski sıfırlar. Karar senin; bu bir hatırlatmadır, emir değil.</p>` });
+        }
+      }
+      // (a2) sert günlük hareket (±%3) — mail yok, yalnız "Sen Yokken" akışı (sıçramayla çakışırsa tek olay)
+      if (dc != null && Math.abs(dc) >= 3 && !spiked) {
+        feedPush({ key: `gap:${sym}:${today}`, type: "pos", sev: dc < 0 ? "warn" : "info", sym,
+          title: `${sym} bugün ${dc >= 0 ? "+" : ""}${dc.toFixed(1)}% hareket etti`, detail: usd0(price) + (dc < 0 ? " · stop planını kontrol et" : "") });
       }
       // (b) risk: stop delindi
       const stop = Number(h.planStop) || 0;
-      if (stop > 0 && price <= stop && mark(`stop:${sym}:${today}`)) {
+      if (stop > 0 && price <= stop) {
+        feedPush({ key: `stop:${sym}:${today}`, type: "pos", sev: "crit", sym,
+          title: `${sym} stop seviyesinde — planı uygula`, detail: `${usd0(price)} ≤ stop ${usd0(stop)} · Kural 1: önce sermayeyi koru` });
+        if (mark(`stop:${sym}:${today}`)) {
         mails.push({ subject: `🛑 ${sym} stop seviyesinde (${usd0(price)})`, html: `<h2>🛑 ${sym} planlı stopunda</h2><p>${sym} <b>${usd0(price)}</b>, plan stopun <b>${usd0(stop)}</b> seviyesine indi/geçti. Kural 1: önce sermayeyi koru — planını uygula, tezini yeniden değerlendir.</p>` });
+        }
       }
       // (c) yoğunlaşma: ağırlık >%35 ve stopsuz
-      if (weight > 35 && !(stop > 0) && mark(`weight:${sym}:${today}`)) {
+      if (weight > 35 && !(stop > 0)) {
+        feedPush({ key: `weight:${sym}:${today}`, type: "pos", sev: "warn", sym,
+          title: `${sym} portföyün %${weight.toFixed(0)}'i — stop yok`, detail: "Tek hisse seni sallayabilir · plan stop gir ya da kademeli azalt" });
+        if (mark(`weight:${sym}:${today}`)) {
         mails.push({ subject: `⚠️ ${sym} portföyün %${weight.toFixed(0)}'i — stop yok`, html: `<h2>⚠️ Yoğunlaşma riski: ${sym}</h2><p>${sym} portföyünün <b>%${weight.toFixed(0)}</b>'i ve <b>plan stopu yok</b>. Tek hisse seni sallayabilir (Kural 1). Bir plan stop gir ya da kademeli azalt.</p>` });
+        }
       }
+    }
+    // Swing Defteri açık pozisyonları: stop delinmesi / hedefe varış — akışa (mail bekçide kalır)
+    for (const t of swOpen) {
+      const sym = String(t.symbol).toUpperCase();
+      const q = qmap[sym]; if (!q || !(q.price > 0)) continue;
+      const stop = Number(t.stop), target = Number(t.target);
+      if (isFinite(stop) && stop > 0 && q.price <= stop)
+        feedPush({ key: `swstop:${sym}:${today}`, type: "pos", sev: "crit", sym,
+          title: `Swing: ${sym} stop delindi — planı uygula`, detail: `${usd0(q.price)} ≤ stop ${usd0(stop)} · sermayeyi koru` });
+      if (isFinite(target) && target > 0 && q.price >= target)
+        feedPush({ key: `swtarget:${sym}:${today}`, type: "pos", sev: "warn", sym,
+          title: `Swing: ${sym} hedefe ulaştı — kâr-al planı`, detail: `${usd0(q.price)} ≥ hedef ${usd0(target)}` });
     }
     if (changed) await guardSave(notified);
     for (const m of mails) await chSendMail(m.subject, m.html);
@@ -2896,6 +3020,11 @@ function recordSignals(symbols) {
       entryDate: plan.entryType === "now" ? signalDate : null,
     });
     ledgerDirty = true;
+    // "Sen Yokken": yalnız A/B kurulumlar akışa girer (C gürültü yapar)
+    if (plan.grade === "A" || plan.grade === "B")
+      feedPush({ key: `sig:new:${sym}:${type}:${signalDate}`, type: "sig", sev: "info", sym,
+        title: `${sym} yeni kurulum — ${plan.setup.label} (${plan.grade})`,
+        detail: `giriş $${plan.entry} · stop $${plan.stop}${plan.entryType === "now" ? " · tetik dolu sayıldı" : ""}` });
   }
 }
 
@@ -2923,6 +3052,10 @@ function evaluateLedger() {
           continue;
         }
         rec.status = "open"; rec.entryDate = c.time; ledgerDirty = true;
+        // "Sen Yokken": bekleyen A/B kurulumun tetiği doldu — eyleme en yakın sinyal anı
+        if (rec.grade === "A" || rec.grade === "B")
+          feedPush({ key: `sig:fill:${rec.id}`, type: "sig", sev: "info", sym: rec.symbol,
+            title: `${rec.symbol} tetik doldu — ${rec.label || rec.type}`, detail: `giriş $${rec.entry} (${c.time})` });
         // dolduğu mumda stop/hedef de görülmüş olabilir → aşağıda aynı mumla kontrol
       }
       openBars++;
@@ -3485,6 +3618,8 @@ app.get("/api/sentiment", async (_req, res) => {
     const r = vixRegime(vix.value);
     if (r) regime = { vix: vix.value, vixChangePct: vix.changePct, stale: !!vix.stale, ...r };
   }
+  // "Sen Yokken": rejim/duygu bölge değişimini yakala (SWR önbellekli — maliyetsiz)
+  try { await feedGet(); feedCheckMarket(regime, fearGreed); } catch {}
   res.json({ regime, fearGreed });
 });
 
@@ -3810,6 +3945,8 @@ app.get("/api/portfolio", async (_req, res) => {
         motto: "1. Kural: Para kaybetme. 2. Kural: 1. kuralı asla unutma.",
         violations: v,
       };
+      // "Sen Yokken": skor ±5 oynadıysa akışa olay düşer
+      try { await feedGet(); feedCheckRule1(score, v); } catch {}
     }
 
     /* ---- Portföy Önerileri: ham ihlal listesi yerine okunabilir, tekrarsız ve

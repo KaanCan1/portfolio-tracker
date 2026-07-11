@@ -335,6 +335,23 @@ function qmChartPayload(sym) {
 
 const EMPTY = { "/api/sentiment": { fearGreed: FNG, regime: REGIME }, "/api/reports": [] };
 
+// ---- "Sen Yokken" akışı mock'u: karışık tür/önem; ts'ler çalışma anına göre taze ----
+let FEED_SEEN = new Date(Date.now() - 2 * 86400_000).toISOString();
+const feedFix = () => {
+  const h = (n) => new Date(Date.now() - n * 3600_000).toISOString();
+  return [
+    { id: "f1", ts: h(1),  type: "pos",  sev: "crit", sym: "GOOGL", title: "GOOGL stop seviyesinde — planı uygula", detail: "$163 ≤ stop $165 · Kural 1: önce sermayeyi koru" },
+    { id: "f2", ts: h(3),  type: "pos",  sev: "warn", sym: "META",  title: "Swing: META hedefe ulaştı — kâr-al planı", detail: "$642 ≥ hedef $640" },
+    { id: "f3", ts: h(5),  type: "pos",  sev: "warn", sym: "NBIS",  title: "NBIS bugün -4.2% hareket etti", detail: "$34.10 · stop planını kontrol et" },
+    { id: "f4", ts: h(8),  type: "sig",  sev: "info", sym: "ANET",  title: "ANET tetik doldu — ORH kırılımı", detail: "giriş $128.4 (2026-07-10)" },
+    { id: "f5", ts: h(22), type: "sig",  sev: "info", sym: "MU",    title: "MU yeni kurulum — bayrak kırılımı (B)", detail: "giriş $141.2 · stop $136.8" },
+    { id: "f6", ts: h(26), type: "mkt",  sev: "warn", sym: null,    title: "Kural 1 skoru 78 → 70", detail: "NBIS portföyün %29'u — yoğunlaşma uyarısı" },
+    { id: "f7", ts: h(30), type: "alfa", sev: "info", sym: "WT",    title: "Alfa Avı: WT TP1 vurdu — %25 kâr alındı", detail: "$9.84 · +$38 · dünkü mum" },
+    { id: "f8", ts: h(31), type: "alfa", sev: "info", sym: "ANET",  title: "Alfa Avı: ANET pozisyon açtı", detail: "giriş $126.9 · stop $122.4" },
+    { id: "f9", ts: h(40), type: "mkt",  sev: "info", sym: null,    title: "Piyasa rejimi değişti: Gergin → Sakin", detail: "Normal piyasa — dengeli pozisyon." },
+  ];
+};
+
 // ---- Birleşik Radar mock'u: skorlu radar item'lar (cuma bayraklı) + swing kurulumları ----
 const RADAR_GROUPS_MOCK = [
   { key: "popular", title: "Popüler · Mega-Cap" }, { key: "ai", title: "AI · Yarı İletken & Optik" },
@@ -660,6 +677,8 @@ const server = createServer(async (req, res) => {
         dollarVol: price * 1e6, fromHighPct: +(((price - Math.max(...cl)) / Math.max(...cl)) * 100).toFixed(1) } };
     res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify(payload)); return;
   }
+  if (url === "/api/feed" && req.method === "GET") { res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify({ events: feedFix(), seenAt: FEED_SEEN })); return; }
+  if (url === "/api/feed/seen" && req.method === "POST") { FEED_SEEN = new Date().toISOString(); res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify({ ok: true, seenAt: FEED_SEEN })); return; }
   if (url === "/api/portfolio") { res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify(portfolioPayload())); return; }
   if (url === "/api/qm") { res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify(qmPayload())); return; }
   if (url.startsWith("/api/qm/") && url !== "/api/qm/history") {           // tek sembol giriş-kalitesi (Faz 2)

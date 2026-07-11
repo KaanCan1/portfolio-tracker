@@ -1381,6 +1381,35 @@ tfoot td.l { text-align: left; }
 .ri-card.ri-firsat .ri-tag { background: var(--green-soft); color: var(--green-d); }
 .ri-card.ri-denge  .ri-tag { background: var(--bg2); color: var(--ink2); }
 .ri-card.ri-rejim  .ri-tag { background: var(--bg2); color: var(--ink2); }
+
+/* ---- "Sen Yokken" — açılış olay akışı ----
+ * Nötr satırlar; renk yalnız önem çipinde (ikon kutusu kırmızı/amber'e döner). */
+.fd-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 11px; }
+.fd-title { display: inline-flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 800; letter-spacing: -.2px; }
+.fd-count { display: inline-flex; align-items: center; padding: 2px 9px; border-radius: 999px; background: var(--green-soft); color: var(--green-d); font-size: 11px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.fd-since { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.fd-seen { margin-left: auto; }
+.fd-list { display: flex; flex-direction: column; gap: 6px; }
+.fd-row {
+  display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 11px;
+  padding: 9px 12px; border-radius: 11px; background: var(--bg3); border: 1px solid var(--line);
+  transition: background .15s ease, border-color .15s ease;
+}
+.fd-row[data-chsym], .fd-row[data-fdnav] { cursor: pointer; }
+.fd-row[data-chsym]:hover, .fd-row[data-fdnav]:hover { background: var(--card); border-color: var(--line-strong); }
+.fd-ic { width: 27px; height: 27px; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center; background: var(--bg2); border: 1px solid var(--line); color: var(--muted); flex-shrink: 0; }
+.fd-ic svg { width: 14px; height: 14px; stroke: currentColor; fill: none; }
+.fd-crit .fd-ic { background: var(--red-bg); border-color: transparent; color: var(--red-d); }
+.fd-warn .fd-ic { background: var(--amber-bg); border-color: transparent; color: var(--amber-d); }
+.fd-body { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.fd-tt { font-size: 13px; font-weight: 700; color: var(--ink); line-height: 1.35; }
+.fd-dd { font-size: 11.5px; color: var(--muted); line-height: 1.4; }
+.fd-t { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; display: inline-flex; align-items: center; gap: 7px; align-self: start; margin-top: 2px; }
+.fd-go { font-style: normal; color: var(--ink2); font-weight: 700; }
+.fd-more { display: block; width: 100%; margin-top: 8px; padding: 8px; border-radius: 10px; border: 1px dashed var(--line-strong); background: none; color: var(--ink2); font-family: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.fd-more:hover { background: var(--bg2); }
+.feed-card.fd-bye { opacity: 0; transform: translateY(-6px); transition: opacity .25s ease, transform .25s ease; }
+@media (prefers-reduced-motion: reduce) { .feed-card.fd-bye { transition: none; transform: none; } }
 @media (max-width: 560px) { .ri-grid { grid-template-columns: 1fr; } }
 
 /* ==================== En Büyük 3 Pozisyon (olumlu/olumsuz + haber) ============ */

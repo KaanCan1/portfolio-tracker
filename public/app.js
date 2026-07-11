@@ -361,6 +361,86 @@ async function loadSentiment() {
   } catch {}
 }
 
+/* ---------------- "Sen Yokken" — açılış olay akışı ----------------
+ * Sunucudaki olay defteri (bekçi/sinyal/rejim/Alfa) + cihazlar-arası "gördüm"
+ * imleci. Yeni olay yoksa kart hiç çizilmez — sayfa temiz kalır. */
+let FEEDDATA = null;
+let FEED_OPENALL = false;
+const FEED_ICON = { pos: "shield", sig: "zap", mkt: "activity", alfa: "trophy" };
+const FEED_NAV = { sig: "radar", alfa: "challenge" }; // satır tıklaması ilgili sekmeye götürür
+const FEED_SEVR = { crit: 0, warn: 1, info: 2 };
+function feedClock(t) { return String(t.getHours()).padStart(2, "0") + ":" + String(t.getMinutes()).padStart(2, "0"); }
+function feedAgo(ts) {
+  const t = new Date(ts), now = new Date();
+  const mins = Math.max(0, (now - t) / 60000);
+  if (mins < 1) return "az önce";
+  if (mins < 60) return Math.round(mins) + " dk önce";
+  const day = t.toLocaleDateString("sv"), today = now.toLocaleDateString("sv");
+  const yday = new Date(now - 86400000).toLocaleDateString("sv");
+  if (day === today) return feedClock(t);
+  if (day === yday) return "dün " + feedClock(t);
+  return Math.round(mins / 1440) + " gün önce";
+}
+function feedSince(iso) {
+  const t = new Date(iso), now = new Date();
+  const day = t.toLocaleDateString("sv"), today = now.toLocaleDateString("sv");
+  const yday = new Date(now - 86400000).toLocaleDateString("sv");
+  const lbl = day === today ? feedClock(t) : day === yday ? "dün " + feedClock(t)
+    : t.toLocaleDateString("tr-TR", { day: "numeric", month: "short" });
+  return lbl + " → şimdi";
+}
+function renderFeed() {
+  const host = $("#feedStrip"); if (!host) return;
+  const f = FEEDDATA;
+  const evs = (f?.events || [])
+    .filter((e) => !f.seenAt || e.ts > f.seenAt)
+    .sort((a, b) => (FEED_SEVR[a.sev] ?? 3) - (FEED_SEVR[b.sev] ?? 3) || (a.ts < b.ts ? 1 : -1));
+  const sig = evs.map((e) => e.id).join(",") + "|" + FEED_OPENALL;
+  if (host.dataset.fsig === sig) return; // aynı içerik — 2dk'lık poll kullanıcı etkileşimini bozmasın
+  host.dataset.fsig = sig;
+  if (!evs.length) { host.hidden = true; host.innerHTML = ""; return; }
+  const LIM = 6;
+  const shown = FEED_OPENALL ? evs : evs.slice(0, LIM);
+  const row = (e) => {
+    const nav = e.sym && e.type === "pos" ? ` data-chsym="${e.sym}" title="Grafiği aç — ${e.sym}"`
+      : FEED_NAV[e.type] ? ` data-fdnav="${FEED_NAV[e.type]}" title="${FEED_NAV[e.type] === "radar" ? "Radar'a git" : "Alfa Avı'na git"}"` : "";
+    return `<div class="fd-row fd-${e.sev || "info"}"${nav} role="listitem">
+      <span class="fd-ic">${svgIcon(FEED_ICON[e.type] || "bell")}</span>
+      <span class="fd-body"><b class="fd-tt">${e.title}</b>${e.detail ? `<span class="fd-dd">${e.detail}</span>` : ""}</span>
+      <span class="fd-t">${feedAgo(e.ts)}${nav ? '<i class="fd-go">→</i>' : ""}</span>
+    </div>`;
+  };
+  host.hidden = false;
+  host.innerHTML = `
+    <section class="panel feed-card">
+      <div class="fd-head">
+        <span class="fd-title">${svgIcon("bell", "h2-ic")}Sen yokken</span>
+        <span class="fd-count">${evs.length} olay</span>
+        <span class="fd-since">${f.seenAt ? feedSince(f.seenAt) : "son 14 gün"}</span>
+        <button class="btn ghost sm fd-seen" data-fdseen type="button" title="Akışı temizle — 'gördüm' imleci cihazlar arası ortaktır">✓ Gördüm</button>
+      </div>
+      <div class="fd-list" role="list">${shown.map(row).join("")}</div>
+      ${evs.length > LIM && !FEED_OPENALL ? `<button class="fd-more" data-fdmore type="button">+${evs.length - LIM} olay daha</button>` : ""}
+    </section>`;
+}
+async function loadFeed() {
+  try { FEEDDATA = await (await fetch("/api/feed")).json(); renderFeed(); } catch {}
+}
+$("#feedStrip")?.addEventListener("click", async (e) => {
+  if (e.target.closest("[data-fdmore]")) { FEED_OPENALL = true; delete $("#feedStrip").dataset.fsig; renderFeed(); return; }
+  const nv = e.target.closest("[data-fdnav]");
+  if (nv) { showView(nv.dataset.fdnav); return; }
+  if (!e.target.closest("[data-fdseen]")) return;
+  try {
+    const r = await (await fetch("/api/feed/seen", { method: "POST" })).json();
+    if (FEEDDATA) FEEDDATA.seenAt = r.seenAt || new Date().toISOString();
+  } catch { if (FEEDDATA) FEEDDATA.seenAt = new Date().toISOString(); }
+  const card = $("#feedStrip .feed-card");
+  if (!card) return renderFeed();
+  card.classList.add("fd-bye"); // yumuşak kapanış → sonra gizle
+  setTimeout(() => { FEED_OPENALL = false; delete $("#feedStrip").dataset.fsig; renderFeed(); }, 280);
+});
+
 function render() {
   const { holdings, fx, cash, trades = [] } = STATE;
 
@@ -7185,6 +7265,7 @@ try { if (localStorage.getItem("privacy") === "1") document.body.classList.add("
 showView("genel"); // açılış HER ZAMAN Genel Bakış (hash oturum içi gezinmede çalışmaya devam eder)
 sbGreeting(); sbMarket(); // sol menü selamlama + NYSE durumu ilk boyada hazır olsun
 loadSentiment(); // duygu kartları anında gelsin (ağır portföy çağrısını beklemeden)
+loadFeed(); setInterval(loadFeed, 120_000); // "Sen Yokken" akışı — bağımsız, 2 dk'da bir tazelenir
 loadRadarBoard(); // hisse radarı bağımsız yüklensin
 loadSwingBoard(); // swing tarayıcı bağımsız yüklensin
 loadNotes(); // hisse notları + nav rozeti bağımsız yüklensin
