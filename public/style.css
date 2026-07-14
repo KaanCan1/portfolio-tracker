@@ -2802,6 +2802,25 @@ ul.sw-qm-list li b { font-weight: 700; color: var(--ink); }
 .ch-setup.brk { background: var(--green-soft); color: var(--green-d); }
 .ch-setup.pb { background: #e7effb; color: #2f6bb0; }
 .ch-setup.ep { background: var(--amber-bg); color: var(--amber-d); }
+/* Hedef Yolculuğu merdiveni — 2.500 → 5.000 → 10.000; varılan basamak tarihle kilitli */
+.cg-ladder { display: flex; flex-direction: column; gap: 7px; }
+.cg-t { font-size: 12px; font-weight: 800; letter-spacing: .8px; text-transform: uppercase; }
+.cg-day { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.cg-row { display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 11px; padding: 9px 12px; border-radius: 11px; background: var(--bg3); border: 1px solid var(--line); }
+.cg-row.done { background: var(--green-soft); border-color: transparent; }
+.cg-row.active { background: var(--card); border-color: var(--line-strong); box-shadow: var(--shadow); }
+.cg-row.locked { opacity: .62; }
+.cg-ic { width: 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; background: var(--bg2); color: var(--muted); border: 1px solid var(--line); flex-shrink: 0; }
+.cg-row.done .cg-ic { background: var(--green-d); color: #eafff3; border-color: transparent; }
+.cg-ic.on { color: var(--green-d); background: var(--card); border-color: var(--green-d); }
+.cg-b { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.cg-b > b { font-family: var(--mono); font-size: 14.5px; font-variant-numeric: tabular-nums; letter-spacing: -.3px; }
+.cg-b > span { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.cg-bar { height: 7px; border-radius: 5px; background: var(--bg2); border: 1px solid var(--line); overflow: hidden; }
+.cg-bar i { display: block; height: 100%; border-radius: 5px; background: linear-gradient(90deg, #2f8f57, #1b6a40); }
+.cg-tag { font-size: 9.5px; font-weight: 800; letter-spacing: .9px; padding: 3px 9px; border-radius: 999px; background: var(--bg2); color: var(--muted); white-space: nowrap; }
+.cg-tag.done { background: var(--green-d); color: #eafff3; }
+.cg-tag.on { background: var(--green-soft); color: var(--green-d); }
 /* Açık pozisyon canlı durum ızgarası — değer/K:Z/R/gün + stop-TP2 senaryoları */
 .ch-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 6px; margin-top: 9px; }
 .cs { display: flex; flex-direction: column; gap: 2px; padding: 7px 9px; border-radius: 9px; background: var(--bg3); border: 1px solid var(--line); min-width: 0; }

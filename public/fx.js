@@ -37,7 +37,7 @@
   /* Blok seçicileri: dış koreografi EN DIŞ blokları, scroll-reveal YAPRAK blokları kullanır
    * (Alfa Avı gibi tek dev panelli sekmelerde iç kartlar da tek tek belirsin). */
   const BLOCK_SEL = ".panel, .card, .db-card, .ch-kpi, .rai-panel, .tbl-wrap, .ri-card, .ch-card, .note-card, .sw-pos, .ch-goal, .ch-regime, .ch-strat, .dj-cell, .r26-stat, .sx-stat";
-  const BAR_SEL = ".ch-goalfill, .rai-fill, .goalfill, .lg-bar i, .rb-bar i, .rk-health-fill, .chl-seg";
+  const BAR_SEL = ".ch-goalfill, .rai-fill, .goalfill, .lg-bar i, .rb-bar i, .rk-health-fill, .chl-seg, .cg-bar i";
 
   /* Dolum çubukları: inline width'i 0'dan hedefe süz (fx-hide içindekiler reveal anına bırakılır) */
   function fillBars(scope) {

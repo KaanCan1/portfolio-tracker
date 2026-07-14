@@ -5331,7 +5331,7 @@ function chWatch(openSyms) {
 
 function chEntryWhy(p) {
   const riskPct = ((p.entry - p.stop) / p.entry) * 100;
-  const plan = `→ Giriş $${p.entry.toFixed(2)}, stop $${p.stop.toFixed(2)} (−%${riskPct.toFixed(1)}, risk ${fmtUSD0(p.initRisk || (p.shares * (p.entry - p.stop)))}), TP1 +%${CHALLENGE.tp1}, TP2 +%${CHALLENGE.tp2}, kalan ${CHALLENGE.trailEma} iz süren stop. Pozisyon ~${fmtUSD0(p.notional)}.${p.rai != null ? ` Girişte risk iştahı <b>${p.rai}/100</b>.` : ""}${p.frozen ? ` <span class="ch-frozen" title="Sunucu defterine yazıldı — evren değişse de bu karar değişmez">🔒 defterde</span>` : ""}`;
+  const plan = `→ Giriş $${p.entry.toFixed(2)}, stop $${p.stop.toFixed(2)} (−%${riskPct.toFixed(1)}, risk ${fmtUSD0(p.initRisk || (p.shares * (p.entry - p.stop)))}), TP1 +%${CHALLENGE.tp1}, TP2 +%${CHALLENGE.tp2}, kalan ${CHALLENGE.trailEma} iz süren stop. Pozisyon ~${fmtUSD0(p.notional)}.${p.rsPct != null ? ` Göreli güç <b>RS %${p.rsPct}</b>${p.weakRs ? " (lider bandı altı → yarım boyut)" : ""}.` : ""}${p.rai != null ? ` Girişte risk iştahı <b>${p.rai}/100</b>.` : ""}${p.frozen ? ` <span class="ch-frozen" title="Sunucu defterine yazıldı — evren değişse de bu karar değişmez">🔒 defterde</span>` : ""}`;
   if (p.lane === "ep") // EP / haber trade'i — katalizör günü girişi (QM episodic pivot)
     return `<b>Giriş — neden?</b> <b>KATALİZÖR günü</b> (EP/haber şeridi): fiyat ${p.gapPct != null ? `<b>+%${p.gapPct}</b> boşluk/hamle yaptı` : "büyük boşluk/hamle yaptı"}, hacim 20g ortalamanın <b>${p.epVolR ?? "—"}×</b>'i — gün güçlü kapandı (gün içi satılmadı). QM episodic pivot kuralı: giriş kapanıştan, <b>stop günün dibinden</b>.${p.news ? `<br><b>Katalizör:</b> “${p.news}”` : ""} ${plan}`;
   if (p.ema50 == null || p.ema8 == null) // donmuş kayıt (analitik yeniden üretilemedi) — plan yine de kesin
@@ -5415,6 +5415,49 @@ function chLadderMini(p) {
   </div>`;
 }
 
+/* Hedef Yolculuğu — $1.500'den merdiven: 2.500 → 5.000 → 10.000.
+ * Varılan basamak tarihiyle kilitlenir (sunucu milestones); aktif basamakta ilerleme çubuğu +
+ * mevcut tempoya göre DÜRÜST tahmin (günlük bileşik büyüme; garanti değil, motivasyon pusulası). */
+function chGoalLadder(D, equityNow) {
+  const start = new Date(CHALLENGE.startDate);
+  const days = Math.max(0, Math.round((Date.now() - start) / 86400_000));
+  const goals = (D.goals && D.goals.length ? D.goals : [2500, 5000, 10000]);
+  const ms = D.milestones || {};
+  const gRate = days >= 5 && equityNow > CHALLENGE.startCapital
+    ? Math.pow(equityNow / CHALLENGE.startCapital, 1 / days) - 1 : null;
+  let prevGoal = CHALLENGE.startCapital;
+  let activeFound = false;
+  const rows = goals.map((goal) => {
+    const hit = ms[goal] ?? ms[String(goal)];
+    if (hit) {
+      const dHit = Math.max(1, Math.round((new Date(hit) - start) / 86400_000));
+      prevGoal = goal;
+      return `<div class="cg-row done"><span class="cg-ic">✓</span>
+        <div class="cg-b"><b>${fmtUSD0(goal)}</b><span>${chFmtD(hit)} tarihinde · <b>${dHit} günde</b></span></div>
+        <span class="cg-tag done">BAŞARILDI</span></div>`;
+    }
+    if (!activeFound) {
+      activeFound = true;
+      const base = prevGoal;
+      const pct = Math.max(0, Math.min(100, ((equityNow - base) / (goal - base)) * 100));
+      const eta = gRate && equityNow > 0 && equityNow < goal
+        ? Math.ceil(Math.log(goal / equityNow) / Math.log(1 + gRate)) : null;
+      return `<div class="cg-row active"><span class="cg-ic on">●</span>
+        <div class="cg-b"><b>${fmtUSD0(goal)}</b>
+          <div class="cg-bar"><i style="width:${pct.toFixed(1)}%"></i></div>
+          <span>şu an ${fmtUSD0(equityNow)} · %${pct.toFixed(0)} yolda${eta && eta < 3650 ? ` · bu tempoyla ~${eta} gün (tahmin, garanti değil)` : ""}</span></div>
+        <span class="cg-tag on">SIRADAKİ</span></div>`;
+    }
+    return `<div class="cg-row locked"><span class="cg-ic">○</span>
+      <div class="cg-b"><b>${fmtUSD0(goal)}</b><span>önce ${fmtUSD0(goals[goals.indexOf(goal) - 1])}</span></div>
+      <span class="cg-tag">KİLİTLİ</span></div>`;
+  }).join("");
+  return `<div class="ch-goal cg-ladder">
+    <div class="ch-goal-top"><span class="cg-t">Hedef Yolculuğu</span><span class="cg-day">Gün <b>${days}</b> · başlangıç ${fmtUSD0(CHALLENGE.startCapital)} (${chFmtD(CHALLENGE.startDate)})</span></div>
+    ${rows}
+  </div>`;
+}
+
 // SUNUCU-PANOSU: tek doğruluk kaynağı. Varsa sunucunun hesabından çizeriz (istemci/sunucu ayrışmaz),
 // yoksa yerel motora (chLoad+chRun+chWatch) düşeriz — regresyon riski yok.
 async function chLoadBoard() {
@@ -5423,7 +5466,7 @@ async function chLoadBoard() {
     if (!r.ok) return null;
     const b = await r.json();
     if (!b || !Array.isArray(b.positions) || !Array.isArray(b.watch) || !b.regime) return null;
-    return { positions: b.positions, cash: b.cash, watch: b.watch, regime: b.regime, rai: b.rai, universeCount: b.universeCount, vixReal: !!b.vixReal, source: "server" };
+    return { positions: b.positions, cash: b.cash, watch: b.watch, regime: b.regime, rai: b.rai, universeCount: b.universeCount, vixReal: !!b.vixReal, goals: b.goals, milestones: b.milestones, rsMin: b.rsMin, source: "server" };
   } catch { return null; }
 }
 async function chLocalBoard(el) {
@@ -5447,7 +5490,6 @@ async function renderChallenge() {
   const wins = closed.filter((p) => p.realized > 1), losses = closed.filter((p) => p.realized < -1);
   const winRate = closed.length ? (wins.length / closed.length) * 100 : 0;
   const totPct = (equityNow / CHALLENGE.startCapital - 1) * 100;
-  const goalPct = Math.max(0, Math.min(100, ((equityNow - CHALLENGE.startCapital) / (CHALLENGE.goal - CHALLENGE.startCapital)) * 100));
 
   const setup = (p) => p?.lane === "ep"
     ? `<span class="ch-setup ep" title="Episodic pivot / haber trade'i — katalizör günü girişi (QM)">EP · HABER</span>`
@@ -5484,6 +5526,7 @@ async function renderChallenge() {
           ${cell("Anlık K/Z", `${p.unreal >= 0 ? "+" : ""}${fmtUSD0(p.unreal)} · ${upct >= 0 ? "+" : ""}${upct.toFixed(1)}%`, cls(p.unreal))}
           ${cell("Canlı R", liveR != null ? `${liveR >= 0 ? "+" : ""}${liveR.toFixed(2)}R` : "—", liveR != null ? cls(liveR) : "")}
           ${cell("Gün", String(days))}
+          ${p.rsPct != null ? cell("RS", `%${p.rsPct}${p.weakRs ? " · yarım" : ""}`, p.weakRs ? "" : p.rsPct >= 70 ? "win-c" : "") : ""}
           ${cell("Stop senaryosu", `${wc >= 0 ? "+" : ""}${fmtUSD0(wc)}`, cls(wc))}
           ${cell("TP2 senaryosu", `+${fmtUSD0(bc)}`, "win-c")}
         </div>`;
@@ -5542,8 +5585,7 @@ async function renderChallenge() {
       <div class="ch-kpi"><div class="ch-k-l">REALİZE K/Z</div><div class="ch-k-v ${cls(realized)}">${realized >= 0 ? "+" : ""}${fmtUSD0(realized)}</div><div class="ch-k-s">${closed.length} kapanan${closed.length ? ` · %${winRate.toFixed(0)} isabet` : ""}</div></div>
       <div class="ch-kpi"><div class="ch-k-l">AÇIK POZİSYON</div><div class="ch-k-v">${open.length}</div><div class="ch-k-s">${unreal >= 0 ? "+" : ""}${fmtUSD0(unreal)} açık K/Z</div></div>
     </div>
-    <div class="ch-goal"><div class="ch-goal-top"><span>Hedef: <b>${fmtUSD0(CHALLENGE.startCapital)} → ${fmtUSD0(CHALLENGE.goal)}</b></span><span class="ch-goal-pct">%${goalPct.toFixed(0)} yolda</span></div>
-      <div class="ch-goalbar"><div class="ch-goalfill" style="width:${goalPct.toFixed(1)}%"></div></div></div>
+    ${chGoalLadder(D, equityNow)}
 
     <div class="ch-h ch-h-tbl">Açık pozisyonlar <span class="ch-sub">gerçek fiyatla canlı · hedef/stop otomatik</span></div>
     ${open.length ? `<div class="ch-jrnl">${openCards}</div>` : `<div class="ch-empty-box">Şu an açık pozisyon yok. Sistem <b>tetik</b> bekliyor — kural olmadan (stop'suz) girmez. Aşağıdaki izleme listesi hangi hisselerin kuruluma yaklaştığını gösterir.</div>`}

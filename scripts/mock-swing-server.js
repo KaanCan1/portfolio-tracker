@@ -769,10 +769,12 @@ const server = createServer(async (req, res) => {
     // Sunucu-panosu paritesi — client'ın board-render yolunu test eder (pozisyon/izleme/rejim/RAI + olaylar)
     const board = {
       asOf: Date.now(), startCapital: 1500, goal: 2500, riskPct: 3, tp1: 6, tp2: 12, trailEma: "EMA21", startDate: "2026-07-01",
+      goals: [2500, 5000, 10000], milestones: { "2500": "2026-07-09" }, rsMin: 30,
+      daysElapsed: Math.max(0, Math.round((Date.now() - new Date("2026-07-01")) / 86400000)),
       universeCount: 18, cash: 1240.5,
       positions: [
-        { sym: "NVDA", open: true, date: "2026-07-03", exitDate: null, entry: 138.0, stop: 129.0, tp1: 146.28, tp2: 154.56, notional: 520, shares: 3.768, rem: 0.75, tp1hit: true, tp2hit: false, realized: 31.2, R: 0.9, unreal: 24.8, mark: 144.5, initRisk: 33.9, rai: 62, frozen: true, lane: "tech", events: [{ d: "2026-07-06", k: "tp1", px: 146.28, fr: 0.25, pnl: 31.2 }] },
-        { sym: "WT", open: true, date: "2026-07-10", exitDate: null, entry: 9.62, stop: 9.05, tp1: 10.2, tp2: 10.77, notional: 405, shares: 42.1, rem: 1, tp1hit: false, tp2hit: false, realized: 0, R: 0, unreal: 13.9, mark: 9.95, initRisk: 24.0, rai: 66, frozen: true, lane: "ep", gapPct: 8.4, epVolR: 3.2, news: "WisdomTree beats Q2 estimates, raises full-year guidance on record ETF inflows", events: [] },
+        { sym: "NVDA", open: true, date: "2026-07-03", exitDate: null, entry: 138.0, stop: 129.0, tp1: 146.28, tp2: 154.56, notional: 520, shares: 3.768, rem: 0.75, tp1hit: true, tp2hit: false, realized: 31.2, R: 0.9, unreal: 24.8, mark: 144.5, initRisk: 33.9, rai: 62, frozen: true, lane: "tech", rsPct: 84, weakRs: false, events: [{ d: "2026-07-06", k: "tp1", px: 146.28, fr: 0.25, pnl: 31.2 }] },
+        { sym: "WT", open: true, date: "2026-07-10", exitDate: null, entry: 9.62, stop: 9.05, tp1: 10.2, tp2: 10.77, notional: 405, shares: 42.1, rem: 1, tp1hit: false, tp2hit: false, realized: 0, R: 0, unreal: 13.9, mark: 9.95, initRisk: 24.0, rai: 66, frozen: true, lane: "ep", gapPct: 8.4, epVolR: 3.2, rsPct: 41, weakRs: false, news: "WisdomTree beats Q2 estimates, raises full-year guidance on record ETF inflows", events: [] },
         { sym: "AMD", open: false, date: "2026-07-01", exitDate: "2026-07-05", entry: 112.0, stop: 105.0, tp1: 118.72, tp2: 125.44, notional: 480, shares: 4.285, rem: 0, tp1hit: true, tp2hit: false, realized: 42.6, R: 1.4, unreal: 0, mark: null, initRisk: 30.0, rai: 58, frozen: true, lane: "tech", events: [{ d: "2026-07-03", k: "tp1", px: 118.72, fr: 0.25, pnl: 28.7 }, { d: "2026-07-05", k: "trail", px: 121.2, fr: 0.75, pnl: 13.9 }] },
       ],
       regime: { state: "on", txt: "QQQ 516.20 > EMA8 & EMA21 — piyasa sağlıklı · risk iştahı 62/100 (nötr)", qqq: 516.2, rai: { score: 62, comps: { trend: 70, vol: 60, credit: 55, rot: 58, breadth: 64 } }, emaState: "on" },
