@@ -288,6 +288,7 @@ app.post("/api/challenge/open", async (req, res) => {
 const CH_ENG = {
   core: ["NVDA", "AMD", "MU", "NBIS", "INTC", "SNDK", "TSLA", "SOFI", "NOW"],
   startDate: "2026-07-01", startCapital: 1500, riskPct: 3, tp1: 6, tp2: 12,
+  epStart: "2026-07-11", // EP/haber şeridi bu tarihten İLERİ işler — geçmişe hindsight girişi yazılmaz
   minNotional: 350, maxNotional: 850, maxSyms: 60, indexSym: "QQQ", // 40→60: QM evreni bağlandı
   _running: false, lastRun: null, lastSummary: null, lastBoard: null,
 };
@@ -546,6 +547,46 @@ function chSrvSignal(S, sym, i) {
   return { sym, date: c.time, entry: c.close, stop, volRatio: c.volume / s.vma[i], adr, priorLeg };
 }
 
+/* İKİNCİ GİRİŞ ŞERİDİ — "EP / haber trade'i" (QM episodic pivot):
+ * Teknik şeridin (geri çekilme → EMA8 geri alma) yakalayamadığı KATALİZÖR günleri:
+ * büyük boşluk/hamle + hacim patlaması + günü güçlü kapanış. Stop = günün dibi (QM kuralı).
+ * Haber metni şart değil — fiyat+hacim patlaması katalizörün kendisidir; başlık varsa süstür. */
+function chSrvEpSignal(S, sym, i) {
+  const s = S[sym]; if (!s || i < 21) return null;
+  const v = s.v, c = v[i], p = v[i - 1];
+  if (!p?.close || !c.volume) return null;
+  const gapPct = (c.open / p.close - 1) * 100;
+  const dayPct = (c.close / p.close - 1) * 100;
+  const volR = s.vma[i] ? c.volume / s.vma[i] : 0;
+  if (!(gapPct >= 6 || dayPct >= 9)) return null;            // katalizör ölçüsünde boşluk/hamle
+  if (volR < 2.5) return null;                               // kurumsal katılım şart
+  if (c.close < c.open) return null;                         // gün içi satılmış gap'e girilmez
+  if (c.close < s.ema21[i]) return null;                     // en azından kısa trend üstü kapanış
+  const stop = c.low;
+  const riskFrac = (c.close - stop) / c.close;
+  if (!(riskFrac > 0.005 && riskFrac <= 0.09)) return null;  // stop çok dar/geniş → dürüstçe pas
+  return { sym, date: c.time, entry: c.close, stop, lane: "ep", gapPct: +Math.max(gapPct, dayPct).toFixed(1), volRatio: +volR.toFixed(1) };
+}
+
+/* Katalizör başlığı (Finnhub company-news, süreç içi önbellek) — yoksa null, akış bozulmaz */
+const CH_NEWS = new Map();
+async function chNewsFor(sym, dayISO) {
+  const key = sym + ":" + dayISO;
+  if (CH_NEWS.has(key)) return CH_NEWS.get(key);
+  let head = null;
+  try {
+    const from = new Date(new Date(dayISO).getTime() - 2 * 86400_000).toISOString().slice(0, 10);
+    const j = await finnhub("/company-news", { symbol: sym, from, to: dayISO }, { bg: true });
+    if (Array.isArray(j) && j.length) {
+      const it = j.slice().sort((a, b) => (b.datetime || 0) - (a.datetime || 0))[0];
+      head = String(it?.headline || "").slice(0, 140) || null;
+    }
+  } catch {}
+  CH_NEWS.set(key, head);
+  if (CH_NEWS.size > 300) CH_NEWS.delete(CH_NEWS.keys().next().value);
+  return head;
+}
+
 async function chEngineTick(trigger = "timer") {
   if (CH_ENG._running) return { skipped: "already running" };
   CH_ENG._running = true;
@@ -644,32 +685,49 @@ async function chEngineTick(trigger = "timer") {
         }
       }
       prevRegime = regime;
-      if (regime === "off") continue;
       if (d >= todayISO) continue; // bugünün barı oluşuyor — sadece KAPANMIŞ barda karar
       const raiD = raiAt(d);
-      const sigs = watch.filter((sym) => S[sym].idx[d] != null && !held.has(sym))
-        .map((sym) => { const i = S[sym].idx[d]; const g = chSrvSignal(S, sym, i); return g ? { ...g, rs: chRsAt(S[sym], i) } : null; })
+      // ── İKİ GİRİŞ ŞERİDİ ──
+      // Teknik (EMA8 geri alma + QM): rejim on/caution'da işler; off'ta KAPALI (mevcut kural).
+      // EP/Haber (katalizör): on/caution'da normal; off'ta bile YARIM boyutla girebilir —
+      // zayıf piyasada göreli güç en net katalizör gününde görünür (esnetilmiş tek kural bu).
+      const free = (sym) => S[sym].idx[d] != null && !held.has(sym);
+      const sigs = regime === "off" ? [] : watch.filter(free)
+        .map((sym) => { const i = S[sym].idx[d]; const g = chSrvSignal(S, sym, i); return g ? { ...g, lane: "tech", rs: chRsAt(S[sym], i) } : null; })
         .filter(Boolean).sort((a, b) => b.rs - a.rs || b.volRatio - a.volRatio); // önce göreli güç (QM), eşitse hacim
-      for (const sig of sigs) {
+      const eps = d >= CH_ENG.epStart ? watch.filter(free)
+        .map((sym) => { const i = S[sym].idx[d]; const g = chSrvEpSignal(S, sym, i); return g ? { ...g, rs: chRsAt(S[sym], i) } : null; })
+        .filter(Boolean).sort((a, b) => b.volRatio - a.volRatio) : [];
+      const seenSym = new Set();
+      const cands = [];
+      for (const x of [...eps, ...sigs]) { if (seenSym.has(x.sym)) continue; seenSym.add(x.sym); cands.push(x); } // aynı gün ikisi de varsa EP önceliklidir (katalizör > rutin)
+      for (const sig of cands) {
         const id = `${sig.date}-${sig.sym}`;
         if (led.trades.some((x) => x.id === id)) continue;
-        if (chEarnBlocked(sig.sym, d)) continue; // bilanço karartması: bilançoya ≤3 gün kala giriş yok
+        if (chEarnBlocked(sig.sym, d)) continue; // bilanço karartması: bilançoya ≤3 gün kala giriş yok (bilanço SONRASI gap serbest)
         const sct = CH_SECT.map[sig.sym];
         if (sct && positions.some((p) => p.open && CH_SECT.map[p.sym] === sct)) continue; // sektör tavanı: aynı sektörden 1 açık
         let notional = chSizeSrv(sig.entry, sig.stop);
-        if (regime === "caution") notional = Math.max(280, +(notional / 2).toFixed(0));
+        const half = regime === "caution" || (regime === "off" && sig.lane === "ep");
+        if (half) notional = Math.max(280, +(notional / 2).toFixed(0));
         if (cash < notional) continue;
         cash -= notional;
-        const t = { id, sym: sig.sym, date: sig.date, entry: +sig.entry.toFixed(4), stop: +sig.stop.toFixed(4), tp1: +(sig.entry * (1 + CH_ENG.tp1 / 100)).toFixed(4), tp2: +(sig.entry * (1 + CH_ENG.tp2 / 100)).toFixed(4), notional: +notional.toFixed(2), shares: +(notional / sig.entry).toFixed(6), rai: raiD ? raiD.score : null, frozenAt: new Date().toISOString(), by: "server" };
+        const t = { id, sym: sig.sym, date: sig.date, entry: +sig.entry.toFixed(4), stop: +sig.stop.toFixed(4), tp1: +(sig.entry * (1 + CH_ENG.tp1 / 100)).toFixed(4), tp2: +(sig.entry * (1 + CH_ENG.tp2 / 100)).toFixed(4), notional: +notional.toFixed(2), shares: +(notional / sig.entry).toFixed(6), rai: raiD ? raiD.score : null, lane: sig.lane, gapPct: sig.gapPct ?? null, epVolR: sig.lane === "ep" ? sig.volRatio : null, news: null, frozenAt: new Date().toISOString(), by: "server" };
+        if (t.lane === "ep") t.news = await chNewsFor(t.sym, t.date).catch(() => null); // katalizör başlığı (yalnız yeni EP girişleri — nadir, kota dostu)
         led.trades.push(t); (frozenByDate[t.date] ||= []).push(t);
         positions.push({ ...t, rem: 1, tp1hit: false, tp2hit: false, realized: 0, open: true, events: [] });
         held.add(t.sym); dirty = true;
         if (!led.notified[`open:${id}`]) {
           led.notified[`open:${id}`] = new Date().toISOString();
           const raiLine = raiD ? `<li>Risk iştahı (RAI): <b>${raiD.score}/100</b> — trend ${raiD.comps.trend ?? "—"} · volatilite ${raiD.comps.vol ?? "—"} · kredi ${raiD.comps.credit ?? "—"} · rotasyon ${raiD.comps.rot ?? "—"} · genişlik ${raiD.comps.breadth ?? "—"}</li>` : "";
+          const riskUSD = t.shares * (t.entry - t.stop);
+          const rr = (t.tp2 - t.entry) / Math.max(0.0001, t.entry - t.stop);
+          const laneLine = t.lane === "ep"
+            ? `EP / HABER trade'i — ${t.gapPct != null ? `+%${t.gapPct} boşluk/hamle` : "katalizör günü"}, hacim ${t.epVolR ?? "—"}× (QM episodic pivot; stop = günün dibi)${t.news ? `.<br><b>Katalizör:</b> “${t.news}”` : ""}`
+            : `TEKNİK — geri çekilme sonrası EMA8'i hacimle geri aldı, trend + QM teyitli`;
           mails.push({
-            subject: `🏹 Alfa Avı: ${t.sym} pozisyonu AÇILDI — $${t.entry}`,
-            html: `<h2>🏹 Alfa Avı — yeni pozisyon</h2><p><b>${t.sym}</b> · ${t.date} kapanışında tetik oluştu (EMA8'i hacimle geri aldı, trend + QM teyitli${regime === "caution" ? ", endeks/risk-iştahı uyarısı nedeniyle YARIM boyut" : ""}).</p><ul><li>Giriş: <b>$${t.entry}</b></li><li>Stop: <b>$${t.stop}</b></li><li>TP1 (+%${CH_ENG.tp1}): $${t.tp1} · TP2 (+%${CH_ENG.tp2}): $${t.tp2}</li><li>Pozisyon: ~$${t.notional} (${t.shares} adet)</li>${raiLine}</ul><p>Plan sunucu defterine kilitlendi — hedef/stop gerçek mumlarla otomatik ölçülür. Bu oyun parasıdır, yatırım tavsiyesi değildir.</p>`,
+            subject: `🏹 Alfa Avı: ${t.sym} AÇILDI — $${t.entry} (${t.lane === "ep" ? "EP/Haber" : "Teknik"}${half ? " · yarım boyut" : ""})`,
+            html: `<h2>🏹 Alfa Avı — yeni pozisyon: ${t.sym}</h2><p>${t.date} kapanışında tetik oluştu. <b>Şerit:</b> ${laneLine}${half ? `<br><b>Boyut:</b> rejim ${regime === "off" ? "risk-off (yalnız EP istisnası)" : "temkin"} nedeniyle YARIM.` : ""}</p><ul><li>Giriş: <b>$${t.entry}</b> · Pozisyon: <b>~$${t.notional}</b> (${t.shares} adet)</li><li>Stop: <b>$${t.stop}</b> → riskteki para <b>~$${riskUSD.toFixed(0)}</b> (pozisyonun %${(((t.entry - t.stop) / t.entry) * 100).toFixed(1)}'i)</li><li>TP1 (+%${CH_ENG.tp1}): <b>$${t.tp1}</b> → %25 kâr al · TP2 (+%${CH_ENG.tp2}): <b>$${t.tp2}</b> → %25 daha · kalan EMA21 iz süren</li><li>Ödül/Risk (TP2'ye): <b>${rr.toFixed(1)}R</b></li><li>Hesap: nakit ~$${cash.toFixed(0)} · açık pozisyon ${positions.filter((x) => x.open).length}</li>${raiLine}</ul><p>Plan sunucu defterine kilitlendi — hedef/stop gerçek mumlarla otomatik ölçülür. Bu oyun parasıdır, yatırım tavsiyesi değildir.</p>`,
           });
         }
       }
@@ -684,6 +742,22 @@ async function chEngineTick(trigger = "timer") {
         subject: `Alfa Avı: ${p.sym} kapandı — ${pnl >= 0 ? "KÂR" : "ZARAR"} ${pnl >= 0 ? "+" : ""}$${pnl}`,
         html: `<h2>Alfa Avı — pozisyon kapandı</h2><p><b>${p.sym}</b> (${p.date} girişi) ${p.exitDate} tarihinde <b>${p.exitKind}</b> ile kapandı.</p><p>Net sonuç: <b>${pnl >= 0 ? "+" : ""}$${pnl}</b></p>`,
       });
+    }
+    // 3b) TP vuruş bildirimleri — kısmi kâr alma anları (idempotent; deploy öncesi eski
+    // olaylar geriye dönük mail üretmesin diye sessizce işaretlenir)
+    const mailCutD = new Date(Date.now() - 3 * 86400_000).toISOString().slice(0, 10);
+    for (const p of positions) {
+      for (const ev of p.events || []) {
+        if (ev.k !== "tp1" && ev.k !== "tp2") continue;
+        const key = `pt:${ev.k}:${p.id}:${ev.d}`;
+        if (led.notified[key]) continue;
+        led.notified[key] = new Date().toISOString(); dirty = true;
+        if (ev.d < mailCutD) continue;
+        mails.push({
+          subject: `🎯 Alfa Avı: ${p.sym} ${ev.k.toUpperCase()} vurdu — +$${(+ev.pnl).toFixed(0)} realize`,
+          html: `<h2>🎯 ${p.sym} ${ev.k.toUpperCase()} (+%${ev.k === "tp1" ? CH_ENG.tp1 : CH_ENG.tp2})</h2><p>${ev.d} mumunda <b>$${(+ev.px).toFixed(2)}</b> hedefi görüldü → pozisyonun %25'i satıldı, <b>+$${(+ev.pnl).toFixed(2)}</b> realize edildi.</p><p>${ev.k === "tp1" ? "Stop <b>başa-başa</b> çekildi — kalan %75 artık risksiz koşuyor." : "Kalan %50, EMA21 iz süren stopla trendde bırakıldı."}</p><p>Bu oyun parasıdır, yatırım tavsiyesi değildir.</p>`,
+        });
+      }
     }
     // Günlük RAI denetim izi — defterde sadece-ekle (o günün değeri bir kez yazılır, değişmez)
     const raiToday = raiAt(todayISO);
@@ -746,6 +820,7 @@ async function chEngineTick(trigger = "timer") {
         rem: p.rem, tp1hit: !!p.tp1hit, tp2hit: !!p.tp2hit, realized: +(+p.realized).toFixed(2),
         R: p.R, unreal: p.unreal ?? 0, mark: p.mark ?? null, initRisk: p.initRisk ?? null,
         rai: p.rai ?? null, frozen: true, events: p.events || [],
+        lane: p.lane || "tech", gapPct: p.gapPct ?? null, epVolR: p.epVolR ?? null, news: p.news || null,
       })),
       regime: regTodayObj,
       rai: raiToday ? { score: raiToday.score, comps: raiToday.comps } : null,

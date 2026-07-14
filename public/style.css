@@ -132,6 +132,10 @@ body {
 .mc-ic svg { width: 14px; height: 14px; stroke: currentColor; fill: none; }
 .cards-metrics .card .label { padding-right: 34px; }
 .cards-metrics .card .meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+/* Panel çiftleri: geniş ekranda yan yana — scroll yükü düşer, ilişkili bilgiler komşu */
+.duo-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 13px; align-items: start; }
+.duo-grid > * { min-width: 0; }
+@media (max-width: 1240px) { .duo-grid { grid-template-columns: 1fr; } }
 /* Editoryal bölüm etiketi — kart akışını bölümlere ayırır (okunabilirlik) */
 .sec-label {
   display: flex; align-items: center; gap: 10px; margin: 4px 2px 10px;
@@ -1382,21 +1386,62 @@ tfoot td.l { text-align: left; }
 .ri-card.ri-denge  .ri-tag { background: var(--bg2); color: var(--ink2); }
 .ri-card.ri-rejim  .ri-tag { background: var(--bg2); color: var(--ink2); }
 
-/* ---- "Sen Yokken" — açılış olay akışı ----
- * Nötr satırlar; renk yalnız önem çipinde (ikon kutusu kırmızı/amber'e döner). */
-.fd-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 11px; }
+/* ---- "Sen Yokken" — özet şerit + açılır pencere ----
+ * Şerit tek satır özet verir (kaç kritik/uyarı/yeni); detay sağdan açılan
+ * pencerede TÜRE GÖRE GRUPLU gelir. Renk yalnız önem çipinde. */
+#feedStrip:not([hidden]) { margin-bottom: 12px; }
+.fdb {
+  display: flex; align-items: center; gap: 9px; width: 100%; text-align: left;
+  padding: 10px 14px; border-radius: 14px; cursor: pointer; font-family: inherit;
+  background: var(--card); border: 1px solid var(--line-strong); box-shadow: var(--shadow-md);
+  transition: box-shadow .18s ease, transform .12s ease, border-color .18s ease;
+}
+.fdb:hover { transform: translateY(-1px); box-shadow: 0 12px 30px -14px rgba(16,30,22,.3); }
+.fdb-ic { width: 27px; height: 27px; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center; background: var(--green-soft); color: var(--green-d); flex-shrink: 0; }
+.fdb-ic svg { width: 14px; height: 14px; stroke: currentColor; fill: none; }
+.fdb-t { font-size: 13.5px; font-weight: 800; letter-spacing: -.2px; white-space: nowrap; }
+.fdb-c { display: inline-flex; align-items: center; padding: 2px 9px; border-radius: 999px; font-size: 10.5px; font-weight: 800; white-space: nowrap; font-variant-numeric: tabular-nums; background: var(--bg2); color: var(--ink2); }
+.fdb-c.crit { background: var(--red-bg); color: var(--red-d); }
+.fdb-c.warn { background: var(--amber-bg); color: var(--amber-d); }
+.fdb-peek { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; color: var(--muted); }
+.fdb-go { font-size: 12px; font-weight: 800; color: var(--green-d); white-space: nowrap; }
+/* Pencere: masaüstünde sağdan panel, mobilde alttan sheet */
+.fdd-bg {
+  position: fixed; inset: 0; z-index: 95; background: rgba(11,21,15,.35);
+  backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px);
+  opacity: 0; transition: opacity .22s ease;
+}
+.fdd-bg.on { opacity: 1; }
+.fdd {
+  position: absolute; top: 0; right: 0; height: 100dvh; width: min(430px, 94vw);
+  display: flex; flex-direction: column;
+  background: var(--bg3); border-left: 1px solid var(--line-strong);
+  box-shadow: -18px 0 50px -20px rgba(10,20,14,.35);
+  transform: translateX(28px); opacity: .6; transition: transform .24s cubic-bezier(.22,1,.36,1), opacity .2s ease;
+}
+.fdd-bg.on .fdd { transform: none; opacity: 1; }
+.fdd-head { display: flex; align-items: center; gap: 10px; padding: 16px 18px 12px; border-bottom: 1px solid var(--line); }
 .fd-title { display: inline-flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 800; letter-spacing: -.2px; }
 .fd-count { display: inline-flex; align-items: center; padding: 2px 9px; border-radius: 999px; background: var(--green-soft); color: var(--green-d); font-size: 11px; font-weight: 800; font-variant-numeric: tabular-nums; }
-.fd-since { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
-.fd-seen { margin-left: auto; }
+.fd-since { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.fdd-x { margin-left: auto; width: 30px; height: 30px; border-radius: 9px; border: 1px solid var(--line); background: var(--card); color: var(--ink2); font-size: 13px; cursor: pointer; }
+.fdd-x:hover { background: var(--bg2); }
+.fdd-body { flex: 1; overflow-y: auto; padding: 12px 14px 16px; }
+.fdd-sec { display: flex; align-items: center; gap: 8px; margin: 14px 2px 7px; }
+.fdd-sec:first-child { margin-top: 2px; }
+.fdd-sec-t { font-size: 10.5px; font-weight: 800; letter-spacing: 1.2px; text-transform: uppercase; color: var(--muted); }
+.fdd-sec-n { font-size: 10.5px; font-weight: 800; color: var(--ink2); background: var(--bg2); border-radius: 999px; padding: 1px 7px; font-variant-numeric: tabular-nums; }
+.fdd-foot { padding: 12px 14px calc(12px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: var(--card); }
+.fdd-foot .btn { width: 100%; }
+.fdd-empty { padding: 30px 10px; text-align: center; color: var(--muted); font-size: 13px; }
 .fd-list { display: flex; flex-direction: column; gap: 6px; }
 .fd-row {
   display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 11px;
-  padding: 9px 12px; border-radius: 11px; background: var(--bg3); border: 1px solid var(--line);
+  padding: 9px 12px; border-radius: 11px; background: var(--card); border: 1px solid var(--line);
   transition: background .15s ease, border-color .15s ease;
 }
 .fd-row[data-chsym], .fd-row[data-fdnav] { cursor: pointer; }
-.fd-row[data-chsym]:hover, .fd-row[data-fdnav]:hover { background: var(--card); border-color: var(--line-strong); }
+.fd-row[data-chsym]:hover, .fd-row[data-fdnav]:hover { border-color: var(--line-strong); box-shadow: var(--shadow); }
 .fd-ic { width: 27px; height: 27px; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center; background: var(--bg2); border: 1px solid var(--line); color: var(--muted); flex-shrink: 0; }
 .fd-ic svg { width: 14px; height: 14px; stroke: currentColor; fill: none; }
 .fd-crit .fd-ic { background: var(--red-bg); border-color: transparent; color: var(--red-d); }
@@ -1406,10 +1451,12 @@ tfoot td.l { text-align: left; }
 .fd-dd { font-size: 11.5px; color: var(--muted); line-height: 1.4; }
 .fd-t { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; display: inline-flex; align-items: center; gap: 7px; align-self: start; margin-top: 2px; }
 .fd-go { font-style: normal; color: var(--ink2); font-weight: 700; }
-.fd-more { display: block; width: 100%; margin-top: 8px; padding: 8px; border-radius: 10px; border: 1px dashed var(--line-strong); background: none; color: var(--ink2); font-family: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
-.fd-more:hover { background: var(--bg2); }
-.feed-card.fd-bye { opacity: 0; transform: translateY(-6px); transition: opacity .25s ease, transform .25s ease; }
-@media (prefers-reduced-motion: reduce) { .feed-card.fd-bye { transition: none; transform: none; } }
+@media (max-width: 640px) {
+  .fdd { top: auto; bottom: 0; right: 0; left: 0; width: 100%; height: auto; max-height: 88dvh; border-left: none; border-top: 1px solid var(--line-strong); border-radius: 20px 20px 0 0; transform: translateY(30px); }
+  .fdd-bg.on .fdd { transform: none; }
+  .fdb-peek { display: none; } /* dar ekranda özet başlık sığmaz — sayaç çipleri yeter */
+}
+@media (prefers-reduced-motion: reduce) { .fdd, .fdd-bg { transition: none; } .fdd { transform: none; } }
 @media (max-width: 560px) { .ri-grid { grid-template-columns: 1fr; } }
 
 /* ==================== En Büyük 3 Pozisyon (olumlu/olumsuz + haber) ============ */
@@ -2754,6 +2801,12 @@ ul.sw-qm-list li b { font-weight: 700; color: var(--ink); }
 .ch-setup { font-size: 10.5px; font-weight: 700; padding: 2px 7px; border-radius: 6px; margin-left: 4px; }
 .ch-setup.brk { background: var(--green-soft); color: var(--green-d); }
 .ch-setup.pb { background: #e7effb; color: #2f6bb0; }
+.ch-setup.ep { background: var(--amber-bg); color: var(--amber-d); }
+/* Açık pozisyon canlı durum ızgarası — değer/K:Z/R/gün + stop-TP2 senaryoları */
+.ch-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 6px; margin-top: 9px; }
+.cs { display: flex; flex-direction: column; gap: 2px; padding: 7px 9px; border-radius: 9px; background: var(--bg3); border: 1px solid var(--line); min-width: 0; }
+.cs i { font-style: normal; font-size: 9px; font-weight: 800; letter-spacing: .7px; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+.cs b { font-family: var(--mono); font-size: 12.5px; font-variant-numeric: tabular-nums; letter-spacing: -.2px; white-space: nowrap; }
 .ch-note { font-size: 12px; color: var(--muted); line-height: 1.55; margin-top: 14px; padding: 11px 14px; background: var(--bg3); border-radius: 10px; }
 .ch-strat { font-size: 12px; color: var(--ink2); background: var(--bg3); border: 1px solid var(--line); border-radius: 10px; padding: 9px 13px; margin-bottom: 13px; line-height: 1.5; }
 .ch-strat b { color: var(--ink); }

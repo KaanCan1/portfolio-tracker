@@ -389,56 +389,114 @@ function feedSince(iso) {
     : t.toLocaleDateString("tr-TR", { day: "numeric", month: "short" });
   return lbl + " → şimdi";
 }
-function renderFeed() {
-  const host = $("#feedStrip"); if (!host) return;
+const FEED_GRP = [ // pencere içindeki grup sırası + etiketleri
+  { type: "pos",  lbl: "Pozisyonların" },
+  { type: "sig",  lbl: "Sinyaller" },
+  { type: "mkt",  lbl: "Piyasa & Skor" },
+  { type: "alfa", lbl: "Alfa Avı" },
+];
+function feedNewEvents() {
   const f = FEEDDATA;
-  const evs = (f?.events || [])
+  return (f?.events || [])
     .filter((e) => !f.seenAt || e.ts > f.seenAt)
     .sort((a, b) => (FEED_SEVR[a.sev] ?? 3) - (FEED_SEVR[b.sev] ?? 3) || (a.ts < b.ts ? 1 : -1));
-  const sig = evs.map((e) => e.id).join(",") + "|" + FEED_OPENALL;
-  if (host.dataset.fsig === sig) return; // aynı içerik — 2dk'lık poll kullanıcı etkileşimini bozmasın
+}
+function feedRow(e) {
+  const nav = e.sym && e.type === "pos" ? ` data-chsym="${e.sym}" title="Grafiği aç — ${e.sym}"`
+    : FEED_NAV[e.type] ? ` data-fdnav="${FEED_NAV[e.type]}" title="${FEED_NAV[e.type] === "radar" ? "Radar'a git" : "Alfa Avı'na git"}"` : "";
+  return `<div class="fd-row fd-${e.sev || "info"}"${nav} role="listitem">
+    <span class="fd-ic">${svgIcon(FEED_ICON[e.type] || "bell")}</span>
+    <span class="fd-body"><b class="fd-tt">${e.title}</b>${e.detail ? `<span class="fd-dd">${e.detail}</span>` : ""}</span>
+    <span class="fd-t">${feedAgo(e.ts)}${nav ? '<i class="fd-go">→</i>' : ""}</span>
+  </div>`;
+}
+/* Özet şerit: tek satır — ne kadar önemli, tek bakışta. Detay pencerede. */
+function renderFeed() {
+  const host = $("#feedStrip"); if (!host) return;
+  const evs = feedNewEvents();
+  const sig = evs.map((e) => e.id).join(",");
+  if (host.dataset.fsig === sig) return; // aynı içerik — poll etkileşimi bozmasın
   host.dataset.fsig = sig;
-  if (!evs.length) { host.hidden = true; host.innerHTML = ""; return; }
-  const LIM = 6;
-  const shown = FEED_OPENALL ? evs : evs.slice(0, LIM);
-  const row = (e) => {
-    const nav = e.sym && e.type === "pos" ? ` data-chsym="${e.sym}" title="Grafiği aç — ${e.sym}"`
-      : FEED_NAV[e.type] ? ` data-fdnav="${FEED_NAV[e.type]}" title="${FEED_NAV[e.type] === "radar" ? "Radar'a git" : "Alfa Avı'na git"}"` : "";
-    return `<div class="fd-row fd-${e.sev || "info"}"${nav} role="listitem">
-      <span class="fd-ic">${svgIcon(FEED_ICON[e.type] || "bell")}</span>
-      <span class="fd-body"><b class="fd-tt">${e.title}</b>${e.detail ? `<span class="fd-dd">${e.detail}</span>` : ""}</span>
-      <span class="fd-t">${feedAgo(e.ts)}${nav ? '<i class="fd-go">→</i>' : ""}</span>
-    </div>`;
-  };
+  if (!evs.length) { host.hidden = true; host.innerHTML = ""; feedDrawerClose(); return; }
+  const n = { crit: 0, warn: 0, info: 0 };
+  evs.forEach((e) => { n[e.sev in n ? e.sev : "info"]++; });
+  const chip = (k, lbl) => n[k] ? `<span class="fdb-c ${k}">${n[k]} ${lbl}</span>` : "";
+  const peek = evs[0] ? evs[0].title : "";
   host.hidden = false;
   host.innerHTML = `
-    <section class="panel feed-card">
-      <div class="fd-head">
+    <button class="fdb" data-fdopen type="button" aria-haspopup="dialog" title="Sen yokken olan biteni aç">
+      <span class="fdb-ic">${svgIcon("bell")}</span>
+      <span class="fdb-t">Sen yokken</span>
+      ${chip("crit", "kritik")}${chip("warn", "uyarı")}${chip("info", "yeni")}
+      <span class="fdb-peek">${peek}</span>
+      <span class="fdb-go">İncele →</span>
+    </button>`;
+  if (FEED_OPENALL) feedDrawerRender(); // pencere açıkken içerik tazelendiyse yeniden çiz
+}
+/* Açılır pencere: türe göre gruplu — "hangi birine bakacağım" derdine düzen */
+function feedDrawerRender() {
+  let bg = $("#fdDrawerBg");
+  if (!bg) {
+    bg = document.createElement("div");
+    bg.id = "fdDrawerBg"; bg.className = "fdd-bg"; bg.hidden = true;
+    document.body.appendChild(bg);
+    bg.addEventListener("click", async (e) => {
+      if (e.target === bg || e.target.closest("[data-fdclose]")) { feedDrawerClose(); return; }
+      const nv = e.target.closest("[data-fdnav]");
+      if (nv) { feedDrawerClose(); showView(nv.dataset.fdnav); return; }
+      if (e.target.closest("[data-chsym]")) { feedDrawerClose(); return; } // grafik global handler'da açılır
+      if (!e.target.closest("[data-fdseen]")) return;
+      try {
+        const r = await (await fetch("/api/feed/seen", { method: "POST" })).json();
+        if (FEEDDATA) FEEDDATA.seenAt = r.seenAt || new Date().toISOString();
+      } catch { if (FEEDDATA) FEEDDATA.seenAt = new Date().toISOString(); }
+      feedDrawerClose();
+      delete $("#feedStrip").dataset.fsig;
+      renderFeed();
+    });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") feedDrawerClose(); });
+  }
+  const evs = feedNewEvents();
+  const f = FEEDDATA;
+  const groups = FEED_GRP.map(({ type, lbl }) => {
+    const g = evs.filter((e) => e.type === type);
+    if (!g.length) return "";
+    return `<div class="fdd-sec"><span class="fdd-sec-t">${lbl}</span><span class="fdd-sec-n">${g.length}</span></div>
+      <div class="fd-list" role="list">${g.map(feedRow).join("")}</div>`;
+  }).join("");
+  bg.innerHTML = `
+    <aside class="fdd" role="dialog" aria-modal="true" aria-label="Sen yokken">
+      <div class="fdd-head">
         <span class="fd-title">${svgIcon("bell", "h2-ic")}Sen yokken</span>
-        <span class="fd-count">${evs.length} olay</span>
-        <span class="fd-since">${f.seenAt ? feedSince(f.seenAt) : "son 14 gün"}</span>
-        <button class="btn ghost sm fd-seen" data-fdseen type="button" title="Akışı temizle — 'gördüm' imleci cihazlar arası ortaktır">✓ Gördüm</button>
+        <span class="fd-count">${evs.length}</span>
+        <span class="fd-since">${f?.seenAt ? feedSince(f.seenAt) : "son 14 gün"}</span>
+        <button class="fdd-x" data-fdclose type="button" aria-label="Kapat">✕</button>
       </div>
-      <div class="fd-list" role="list">${shown.map(row).join("")}</div>
-      ${evs.length > LIM && !FEED_OPENALL ? `<button class="fd-more" data-fdmore type="button">+${evs.length - LIM} olay daha</button>` : ""}
-    </section>`;
+      <div class="fdd-body">${groups || '<div class="fdd-empty">Yeni olay yok — her şey kontrol altında.</div>'}</div>
+      <div class="fdd-foot">
+        <button class="btn primary sm" data-fdseen type="button" title="'Gördüm' imleci cihazlar arası ortaktır">✓ Tümünü gördüm</button>
+      </div>
+    </aside>`;
+}
+function feedDrawerOpen() {
+  FEED_OPENALL = true;
+  feedDrawerRender();
+  const bg = $("#fdDrawerBg");
+  bg.hidden = false;
+  requestAnimationFrame(() => bg.classList.add("on"));
+}
+function feedDrawerClose() {
+  FEED_OPENALL = false;
+  const bg = $("#fdDrawerBg");
+  if (!bg || bg.hidden) return;
+  bg.classList.remove("on");
+  setTimeout(() => { bg.hidden = true; }, 240);
 }
 async function loadFeed() {
   try { FEEDDATA = await (await fetch("/api/feed")).json(); renderFeed(); } catch {}
 }
-$("#feedStrip")?.addEventListener("click", async (e) => {
-  if (e.target.closest("[data-fdmore]")) { FEED_OPENALL = true; delete $("#feedStrip").dataset.fsig; renderFeed(); return; }
-  const nv = e.target.closest("[data-fdnav]");
-  if (nv) { showView(nv.dataset.fdnav); return; }
-  if (!e.target.closest("[data-fdseen]")) return;
-  try {
-    const r = await (await fetch("/api/feed/seen", { method: "POST" })).json();
-    if (FEEDDATA) FEEDDATA.seenAt = r.seenAt || new Date().toISOString();
-  } catch { if (FEEDDATA) FEEDDATA.seenAt = new Date().toISOString(); }
-  const card = $("#feedStrip .feed-card");
-  if (!card) return renderFeed();
-  card.classList.add("fd-bye"); // yumuşak kapanış → sonra gizle
-  setTimeout(() => { FEED_OPENALL = false; delete $("#feedStrip").dataset.fsig; renderFeed(); }, 280);
+$("#feedStrip")?.addEventListener("click", (e) => {
+  if (e.target.closest("[data-fdopen]")) feedDrawerOpen();
 });
 
 function render() {
@@ -5274,6 +5332,8 @@ function chWatch(openSyms) {
 function chEntryWhy(p) {
   const riskPct = ((p.entry - p.stop) / p.entry) * 100;
   const plan = `→ Giriş $${p.entry.toFixed(2)}, stop $${p.stop.toFixed(2)} (−%${riskPct.toFixed(1)}, risk ${fmtUSD0(p.initRisk || (p.shares * (p.entry - p.stop)))}), TP1 +%${CHALLENGE.tp1}, TP2 +%${CHALLENGE.tp2}, kalan ${CHALLENGE.trailEma} iz süren stop. Pozisyon ~${fmtUSD0(p.notional)}.${p.rai != null ? ` Girişte risk iştahı <b>${p.rai}/100</b>.` : ""}${p.frozen ? ` <span class="ch-frozen" title="Sunucu defterine yazıldı — evren değişse de bu karar değişmez">🔒 defterde</span>` : ""}`;
+  if (p.lane === "ep") // EP / haber trade'i — katalizör günü girişi (QM episodic pivot)
+    return `<b>Giriş — neden?</b> <b>KATALİZÖR günü</b> (EP/haber şeridi): fiyat ${p.gapPct != null ? `<b>+%${p.gapPct}</b> boşluk/hamle yaptı` : "büyük boşluk/hamle yaptı"}, hacim 20g ortalamanın <b>${p.epVolR ?? "—"}×</b>'i — gün güçlü kapandı (gün içi satılmadı). QM episodic pivot kuralı: giriş kapanıştan, <b>stop günün dibinden</b>.${p.news ? `<br><b>Katalizör:</b> “${p.news}”` : ""} ${plan}`;
   if (p.ema50 == null || p.ema8 == null) // donmuş kayıt (analitik yeniden üretilemedi) — plan yine de kesin
     return `<b>Giriş — neden?</b> Strateji tetiği gününde koşullar sağlandı (yükseliş trendi + geri çekilme + hacimli EMA8 kırılımı + QM teyidi); plan sunucu defterinden aynen uygulanıyor. ${plan}`;
   return `<b>Giriş — neden?</b> Yükseliş trendi: fiyat $${p.entry.toFixed(2)} &gt; EMA50 $${p.ema50.toFixed(2)}; EMA21 &gt; EMA50. Geri çekilme sonrası EMA8'i ($${p.ema8.toFixed(2)}) <b>hacimle</b> geri aldı (hacim 20g ort. <b>${(p.volRatio ?? 1).toFixed(1)}×</b>). QM: 6-ay zirvesine %${Math.abs(p.nearHighPct ?? 0).toFixed(0)} yakın, önceki bacak <b>+%${(p.priorLeg ?? 0).toFixed(0)}</b>, ADR %${(p.adr ?? 0).toFixed(1)}. ${plan}`;
@@ -5389,7 +5449,9 @@ async function renderChallenge() {
   const totPct = (equityNow / CHALLENGE.startCapital - 1) * 100;
   const goalPct = Math.max(0, Math.min(100, ((equityNow - CHALLENGE.startCapital) / (CHALLENGE.goal - CHALLENGE.startCapital)) * 100));
 
-  const setup = () => `<span class="ch-setup brk">EMA 8/21/50</span><span class="ch-setup pb">QM</span>`;
+  const setup = (p) => p?.lane === "ep"
+    ? `<span class="ch-setup ep" title="Episodic pivot / haber trade'i — katalizör günü girişi (QM)">EP · HABER</span>`
+    : `<span class="ch-setup brk">EMA 8/21/50</span><span class="ch-setup pb">QM</span>`;
 
   // OPEN kartları — görsel fiyat merdiveni + belirgin seviyeler + katlanır gerekçe
   const openCards = open.length ? open.slice().sort((a, b) => new Date(b.date) - new Date(a.date)).map((p) => {
@@ -5399,15 +5461,33 @@ async function renderChallenge() {
     const toTgt = ((nextTgt - p.mark) / p.mark) * 100, toStop = ((effStop - p.mark) / p.mark) * 100;
     return `
     <div class="ch-card open ch-pos" data-chsym="${p.sym}" title="Grafiği aç — ${p.sym}">
-      <div class="ch-card-top"><div class="ch-card-sym"><b>${p.sym}</b> ${setup()}</div>
+      <div class="ch-card-top"><div class="ch-card-sym"><b>${p.sym}</b> ${setup(p)}</div>
         <div class="ch-card-r"><span class="ch-pill open">Açık</span><span class="ch-card-pnl ${cls(p.unreal)}">${p.unreal >= 0 ? "+" : ""}${fmtUSD0(p.unreal)}</span><span class="ch-card-rr ${cls(p.R)}">${p.R >= 0 ? "+" : ""}${p.R}R</span></div></div>
-      <div class="ch-card-dt">${chFmtD(p.date)} → açık · ~${fmtUSD0(p.notional)} pozisyon · %${(p.rem * 100).toFixed(0)} taşınıyor${p.initRisk ? ` · risk ${fmtUSD0(p.initRisk)}` : ""}</div>
+      <div class="ch-card-dt">${chFmtD(p.date)} → açık · ~${fmtUSD0(p.notional)} pozisyon · %${(p.rem * 100).toFixed(0)} taşınıyor${p.initRisk ? ` · risk ${fmtUSD0(p.initRisk)}` : ""}${Math.abs(p.realized) > 0.5 ? ` · realize <b class="${cls(p.realized)}">${p.realized >= 0 ? "+" : ""}${fmtUSD0(p.realized)}</b>` : ""}</div>
       ${chLadder(p)}
       <div class="ch-dist">
         <span class="cd now ${pct >= 0 ? "up" : "dn"}">${pct >= 0 ? "▲" : "▼"} Şimdi <b>${fmtUSD(p.mark)}</b> · ${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%</span>
         <span class="cd tp">🎯 ${nextLbl} <s>+${Math.max(0, toTgt).toFixed(1)}% uzak</s></span>
         <span class="cd stop">🛑 stop <s>${toStop.toFixed(1)}% uzak</s></span>
       </div>
+      ${(() => { // detaylı canlı durum: değer · anlık K/Z · canlı R · gün · stop/TP2 senaryoları
+        const posVal = p.rem * p.shares * p.mark;
+        const costRem = p.rem * p.shares * p.entry;
+        const upct = costRem ? (p.unreal / costRem) * 100 : 0;
+        const liveR = p.initRisk ? (p.realized + p.unreal) / p.initRisk : null;
+        const days = Math.max(0, Math.round((Date.now() - new Date(p.date)) / 86400000));
+        const wc = p.realized + p.rem * p.shares * (effStop - p.entry); // stopta kapanırsa net sonuç
+        const bc = p.realized + p.rem * p.shares * (p.tp2 - p.entry);   // kalan TP2'den satılırsa net
+        const cell = (l, v, c) => `<span class="cs"><i>${l}</i><b class="${c || ""}">${v}</b></span>`;
+        return `<div class="ch-stats">
+          ${cell("Değer", fmtUSD0(posVal))}
+          ${cell("Anlık K/Z", `${p.unreal >= 0 ? "+" : ""}${fmtUSD0(p.unreal)} · ${upct >= 0 ? "+" : ""}${upct.toFixed(1)}%`, cls(p.unreal))}
+          ${cell("Canlı R", liveR != null ? `${liveR >= 0 ? "+" : ""}${liveR.toFixed(2)}R` : "—", liveR != null ? cls(liveR) : "")}
+          ${cell("Gün", String(days))}
+          ${cell("Stop senaryosu", `${wc >= 0 ? "+" : ""}${fmtUSD0(wc)}`, cls(wc))}
+          ${cell("TP2 senaryosu", `+${fmtUSD0(bc)}`, "win-c")}
+        </div>`;
+      })()}
       <details class="ch-det"><summary>Gerekçe & durum <span class="ch-det-h">giriş nedeni · olaylar · plan</span></summary>
         <div class="ch-why">${chEntryWhy(p)}</div><div class="ch-why">${chExitWhy(p)}</div></details>
     </div>`;
@@ -5429,7 +5509,7 @@ async function renderChallenge() {
 
   const regNow = D.regime;
   const regBadge = regNow.state === "off"
-    ? `<div class="ch-regime off">⛔ <b>Rejim filtresi: YENİ GİRİŞ KAPALI.</b> ${regNow.txt}.${open.length ? ` <b>🛡 Savunma modu:</b> açık ${open.length} pozisyonda kârdakilerin stopu başa-başa kilitlendi (hedeften önce zorla çıkış yok, ama piyasa dönerse kâr korunuyor).` : ""} Koşullar düzelince girişler otomatik açılır.</div>`
+    ? `<div class="ch-regime off">⛔ <b>Rejim filtresi: YENİ GİRİŞ KAPALI.</b> ${regNow.txt}. <b>İstisna:</b> güçlü katalizör günü (EP/haber şeridi) yarım boyutla girebilir — zayıf piyasada göreli güç en net orada görünür.${open.length ? ` <b>🛡 Savunma modu:</b> açık ${open.length} pozisyonda kârdakilerin stopu başa-başa kilitlendi (hedeften önce zorla çıkış yok, ama piyasa dönerse kâr korunuyor).` : ""} Koşullar düzelince girişler otomatik açılır.</div>`
     : regNow.state === "caution"
       ? `<div class="ch-regime warn">🟡 <b>Rejim uyarısı:</b> ${regNow.txt}. Yeni girişler yarım boyutla açılır.</div>`
       : `<div class="ch-regime on">🟢 <b>Rejim sağlıklı:</b> ${regNow.txt}.</div>`;
@@ -5478,7 +5558,7 @@ async function renderChallenge() {
       const pill = st === "win" ? `<span class="ch-pill win">Kâr</span>` : st === "loss" ? `<span class="ch-pill loss">Zarar</span>` : `<span class="ch-pill neu">Başa-baş</span>`;
       const pct = p.notional ? (p.realized / p.notional) * 100 : 0;
       return `<div class="ch-card ${st} ch-pos" data-chsym="${p.sym}" title="Grafiği aç — ${p.sym}">
-        <div class="ch-card-top"><div class="ch-card-sym"><b>${p.sym}</b> ${setup()}</div><div class="ch-card-r">${pill}<span class="ch-card-pnl ${cls(p.realized)}">${p.realized >= 0 ? "+" : ""}${fmtUSD0(p.realized)}</span><span class="ch-card-rr ${cls(p.R)}">${p.R >= 0 ? "+" : ""}${p.R}R</span></div></div>
+        <div class="ch-card-top"><div class="ch-card-sym"><b>${p.sym}</b> ${setup(p)}</div><div class="ch-card-r">${pill}<span class="ch-card-pnl ${cls(p.realized)}">${p.realized >= 0 ? "+" : ""}${fmtUSD0(p.realized)}</span><span class="ch-card-rr ${cls(p.R)}">${p.R >= 0 ? "+" : ""}${p.R}R</span></div></div>
         <div class="ch-card-dt">${chFmtD(p.date)} → ${chFmtD(p.exitDate)} · ~${fmtUSD0(p.notional)} pozisyon · sonuç ${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%</div>
         ${chLadderMini(p)}
         <details class="ch-det"><summary>Gerekçe & durum <span class="ch-det-h">giriş nedeni · çıkış olayları</span></summary>
@@ -7145,9 +7225,11 @@ function buildViewJump(name) {
   if (!view) return;
   view.querySelector(":scope > .view-jump")?.remove();
   if (_jumpObserver) { _jumpObserver.disconnect(); _jumpObserver = null; }
-  const blocks = [...view.children].filter((el) =>
-    !el.classList.contains("view-head") && !el.classList.contains("view-jump") &&
-    (el.matches("section, .panel, .card, .home-drawer")));
+  const blocks = [...view.children]
+    .flatMap((el) => el.classList.contains("duo-grid") ? [...el.children] : [el]) // yan yana panel çiftleri de sekme çipi alır
+    .filter((el) =>
+      !el.classList.contains("view-head") && !el.classList.contains("view-jump") &&
+      (el.matches("section, .panel, .card, .home-drawer")));
   const items = [];
   blocks.forEach((b, i) => {
     let h = b.querySelector(".panel-head h2") || b.querySelector(":scope > h2") || b.querySelector(":scope > h3");
