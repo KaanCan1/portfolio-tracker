@@ -295,6 +295,7 @@ const CH_ENG = {
    * kaçmaz, sürüklenen hisseye maruz kalınmaz). Aynı gün çakışmada RS önceliği zaten var. */
   rsMin: 30, rsStart: "2026-07-14",
   goals: [2500, 5000, 10000], // hedef merdiveni — varılan tarihler led.milestones'ta
+  commission: 1.5, // Midas emir ücreti ($): alışta 1 kez + HER satış emrinde (TP1/TP2/final ayrı emirdir). Replay'e gömülü → nakit/realize/R/sermaye hepsi NET
   minNotional: 350, maxNotional: 850, maxSyms: 60, indexSym: "QQQ", // 40→60: QM evreni bağlandı
   _running: false, lastRun: null, lastSummary: null, lastBoard: null,
 };
@@ -663,6 +664,7 @@ async function chEngineTick(trigger = "timer") {
     const frozenByDate = {};
     for (const t of led.trades) (frozenByDate[t.date] ||= []).push(t);
     let cash = CH_ENG.startCapital, dirty = false;
+    const FEE = CH_ENG.commission; // her emirde düşülür — alış + her kısmi satış (net muhasebe)
     const positions = [];
     const mails = [];
     let prevRegime = "on";
@@ -675,17 +677,17 @@ async function chEngineTick(trigger = "timer") {
         // (bir sonraki barı etkiler — aynı bar içi lookahead yok). Backtest: iz süren EMA'yı
         // EMA8'e sıkıştırmak choppy off-günlerinde whipsaw → DD arttı; sadece stop-yukarı korur+getiriyi artırır.
         const effStop = p.tp1hit ? p.entry : p.stop;
-        if (c.low <= effStop) { const fr = p.rem, gap = c.open != null && c.open < effStop, px = gap ? c.open : effStop, pnl = fr * p.shares * (px - p.entry); cash += fr * p.shares * px; p.realized += pnl; (p.events ||= []).push({ d, k: gap ? "gap" : (p.stop >= p.entry && !p.tp1hit) ? "def" : p.tp1hit ? "be" : "stop", px, fr, pnl }); p.rem = 0; p.open = false; p.exitDate = d; p.exitKind = gap ? "gap ile stop (açılışta boşluk — gerçek fiyattan)" : (p.stop >= p.entry && !p.tp1hit) ? "savunma stopu (başa-baş kilidi)" : p.tp1hit ? "başa-baş stop" : "stop"; continue; }
-        if (!p.tp1hit && c.high >= p.tp1) { const fr = 0.25, pnl = fr * p.shares * (p.tp1 - p.entry); cash += fr * p.shares * p.tp1; p.realized += pnl; p.rem -= fr; p.tp1hit = true; (p.events ||= []).push({ d, k: "tp1", px: p.tp1, fr, pnl }); }
-        if (p.tp1hit && !p.tp2hit && c.high >= p.tp2) { const fr = 0.25, pnl = fr * p.shares * (p.tp2 - p.entry); cash += fr * p.shares * p.tp2; p.realized += pnl; p.rem -= fr; p.tp2hit = true; (p.events ||= []).push({ d, k: "tp2", px: p.tp2, fr, pnl }); }
-        if (p.open && p.rem > 0 && c.close < s.ema21[i]) { const fr = p.rem, pnl = fr * p.shares * (c.close - p.entry); cash += fr * p.shares * c.close; p.realized += pnl; (p.events ||= []).push({ d, k: "trail", px: c.close, fr, pnl }); p.rem = 0; p.open = false; p.exitDate = d; p.exitKind = "EMA21 iz süren stop"; }
+        if (c.low <= effStop) { const fr = p.rem, gap = c.open != null && c.open < effStop, px = gap ? c.open : effStop, pnl = fr * p.shares * (px - p.entry) - FEE; cash += fr * p.shares * px - FEE; p.fees = (p.fees || 0) + FEE; p.realized += pnl; (p.events ||= []).push({ d, k: gap ? "gap" : (p.stop >= p.entry && !p.tp1hit) ? "def" : p.tp1hit ? "be" : "stop", px, fr, pnl, fee: FEE }); p.rem = 0; p.open = false; p.exitDate = d; p.exitKind = gap ? "gap ile stop (açılışta boşluk — gerçek fiyattan)" : (p.stop >= p.entry && !p.tp1hit) ? "savunma stopu (başa-baş kilidi)" : p.tp1hit ? "başa-baş stop" : "stop"; continue; }
+        if (!p.tp1hit && c.high >= p.tp1) { const fr = 0.25, pnl = fr * p.shares * (p.tp1 - p.entry) - FEE; cash += fr * p.shares * p.tp1 - FEE; p.fees = (p.fees || 0) + FEE; p.realized += pnl; p.rem -= fr; p.tp1hit = true; (p.events ||= []).push({ d, k: "tp1", px: p.tp1, fr, pnl, fee: FEE }); }
+        if (p.tp1hit && !p.tp2hit && c.high >= p.tp2) { const fr = 0.25, pnl = fr * p.shares * (p.tp2 - p.entry) - FEE; cash += fr * p.shares * p.tp2 - FEE; p.fees = (p.fees || 0) + FEE; p.realized += pnl; p.rem -= fr; p.tp2hit = true; (p.events ||= []).push({ d, k: "tp2", px: p.tp2, fr, pnl, fee: FEE }); }
+        if (p.open && p.rem > 0 && c.close < s.ema21[i]) { const fr = p.rem, pnl = fr * p.shares * (c.close - p.entry) - FEE; cash += fr * p.shares * c.close - FEE; p.fees = (p.fees || 0) + FEE; p.realized += pnl; (p.events ||= []).push({ d, k: "trail", px: c.close, fr, pnl, fee: FEE }); p.rem = 0; p.open = false; p.exitDate = d; p.exitKind = "EMA21 iz süren stop"; }
         if (defensive && p.open && !p.tp1hit && c.close > p.entry) p.stop = Math.max(p.stop, p.entry); // bar sonu başa-baş ratchet
       }
       const held = new Set(positions.filter((x) => x.open).map((x) => x.sym));
       for (const f of frozenByDate[d] || []) {
         if (held.has(f.sym) || positions.some((p) => p.id === f.id)) continue;
-        cash -= f.notional;
-        positions.push({ ...f, rem: 1, tp1hit: false, tp2hit: false, realized: 0, open: true, events: [] });
+        cash -= f.notional + FEE; // alış komisyonu — realize -FEE ile başlar, sonuçlar net
+        positions.push({ ...f, rem: 1, tp1hit: false, tp2hit: false, realized: -FEE, fees: FEE, open: true, events: [] });
         held.add(f.sym);
       }
       // Savunma modu bildirimi — rejim İLK kez off'a geçtiği barda açık pozisyon varsa (idempotent)
@@ -732,12 +734,12 @@ async function chEngineTick(trigger = "timer") {
         const rsPctV = chRsPct(S, watch, d, sig.sym);
         const weakRs = sig.lane !== "ep" && d >= CH_ENG.rsStart && rsPctV != null && rsPctV < CH_ENG.rsMin;
         if (weakRs) notional = Math.max(280, +(notional / 2).toFixed(0));
-        if (cash < notional) continue;
-        cash -= notional;
+        if (cash < notional + FEE) continue;
+        cash -= notional + FEE;
         const t = { id, sym: sig.sym, date: sig.date, entry: +sig.entry.toFixed(4), stop: +sig.stop.toFixed(4), tp1: +(sig.entry * (1 + CH_ENG.tp1 / 100)).toFixed(4), tp2: +(sig.entry * (1 + CH_ENG.tp2 / 100)).toFixed(4), notional: +notional.toFixed(2), shares: +(notional / sig.entry).toFixed(6), rai: raiD ? raiD.score : null, lane: sig.lane, gapPct: sig.gapPct ?? null, epVolR: sig.lane === "ep" ? sig.volRatio : null, rsPct: rsPctV, weakRs, news: null, frozenAt: new Date().toISOString(), by: "server" };
         if (t.lane === "ep") t.news = await chNewsFor(t.sym, t.date).catch(() => null); // katalizör başlığı (yalnız yeni EP girişleri — nadir, kota dostu)
         led.trades.push(t); (frozenByDate[t.date] ||= []).push(t);
-        positions.push({ ...t, rem: 1, tp1hit: false, tp2hit: false, realized: 0, open: true, events: [] });
+        positions.push({ ...t, rem: 1, tp1hit: false, tp2hit: false, realized: -FEE, fees: FEE, open: true, events: [] });
         held.add(t.sym); dirty = true;
         if (!led.notified[`open:${id}`]) {
           led.notified[`open:${id}`] = new Date().toISOString();
@@ -749,7 +751,7 @@ async function chEngineTick(trigger = "timer") {
             : `TEKNİK — geri çekilme sonrası EMA8'i hacimle geri aldı, trend + QM teyitli`;
           mails.push({
             subject: `🏹 Alfa Avı: ${t.sym} AÇILDI — $${t.entry} (${t.lane === "ep" ? "EP/Haber" : "Teknik"}${half || weakRs ? " · yarım boyut" : ""})`,
-            html: `<h2>🏹 Alfa Avı — yeni pozisyon: ${t.sym}</h2><p>${t.date} kapanışında tetik oluştu. <b>Şerit:</b> ${laneLine}${half ? `<br><b>Boyut:</b> rejim ${regime === "off" ? "risk-off (yalnız EP istisnası)" : "temkin"} nedeniyle YARIM.` : weakRs ? `<br><b>Boyut:</b> göreli güç lider bandında değil (RS %${t.rsPct} &lt; ${CH_ENG.rsMin}) → YARIM.` : ""}</p><ul><li>Giriş: <b>$${t.entry}</b> · Pozisyon: <b>~$${t.notional}</b> (${t.shares} adet)</li><li>Stop: <b>$${t.stop}</b> → riskteki para <b>~$${riskUSD.toFixed(0)}</b> (pozisyonun %${(((t.entry - t.stop) / t.entry) * 100).toFixed(1)}'i)</li><li>TP1 (+%${CH_ENG.tp1}): <b>$${t.tp1}</b> → %25 kâr al · TP2 (+%${CH_ENG.tp2}): <b>$${t.tp2}</b> → %25 daha · kalan EMA21 iz süren</li><li>Ödül/Risk (TP2'ye): <b>${rr.toFixed(1)}R</b>${t.rsPct != null ? ` · Göreli güç: <b>RS %${t.rsPct}</b> (evren yüzdeliği)` : ""}</li><li>Hesap: nakit ~$${cash.toFixed(0)} · açık pozisyon ${positions.filter((x) => x.open).length}</li>${raiLine}</ul><p>Plan sunucu defterine kilitlendi — hedef/stop gerçek mumlarla otomatik ölçülür. Bu oyun parasıdır, yatırım tavsiyesi değildir.</p>`,
+            html: `<h2>🏹 Alfa Avı — yeni pozisyon: ${t.sym}</h2><p>${t.date} kapanışında tetik oluştu. <b>Şerit:</b> ${laneLine}${half ? `<br><b>Boyut:</b> rejim ${regime === "off" ? "risk-off (yalnız EP istisnası)" : "temkin"} nedeniyle YARIM.` : weakRs ? `<br><b>Boyut:</b> göreli güç lider bandında değil (RS %${t.rsPct} &lt; ${CH_ENG.rsMin}) → YARIM.` : ""}</p><ul><li>Giriş: <b>$${t.entry}</b> · Pozisyon: <b>~$${t.notional}</b> (${t.shares} adet) · komisyon $${FEE} düşüldü</li><li>Stop: <b>$${t.stop}</b> → riskteki para <b>~$${riskUSD.toFixed(0)}</b> (pozisyonun %${(((t.entry - t.stop) / t.entry) * 100).toFixed(1)}'i)</li><li>TP1 (+%${CH_ENG.tp1}): <b>$${t.tp1}</b> → %25 kâr al · TP2 (+%${CH_ENG.tp2}): <b>$${t.tp2}</b> → %25 daha · kalan EMA21 iz süren</li><li>Ödül/Risk (TP2'ye): <b>${rr.toFixed(1)}R</b>${t.rsPct != null ? ` · Göreli güç: <b>RS %${t.rsPct}</b> (evren yüzdeliği)` : ""}</li><li>Hesap: nakit ~$${cash.toFixed(0)} · açık pozisyon ${positions.filter((x) => x.open).length}</li>${raiLine}</ul><p>Plan sunucu defterine kilitlendi — hedef/stop gerçek mumlarla otomatik ölçülür. Bu oyun parasıdır, yatırım tavsiyesi değildir.</p>`,
           });
         }
       }
@@ -762,7 +764,7 @@ async function chEngineTick(trigger = "timer") {
       const pnl = +p.realized.toFixed(2);
       mails.push({
         subject: `Alfa Avı: ${p.sym} kapandı — ${pnl >= 0 ? "KÂR" : "ZARAR"} ${pnl >= 0 ? "+" : ""}$${pnl}`,
-        html: `<h2>Alfa Avı — pozisyon kapandı</h2><p><b>${p.sym}</b> (${p.date} girişi) ${p.exitDate} tarihinde <b>${p.exitKind}</b> ile kapandı.</p><p>Net sonuç: <b>${pnl >= 0 ? "+" : ""}$${pnl}</b></p>`,
+        html: `<h2>Alfa Avı — pozisyon kapandı</h2><p><b>${p.sym}</b> (${p.date} girişi) ${p.exitDate} tarihinde <b>${p.exitKind}</b> ile kapandı.</p><p>Net sonuç: <b>${pnl >= 0 ? "+" : ""}$${pnl}</b> (toplam $${(p.fees || 0).toFixed(2)} komisyon düşülmüş)</p>`,
       });
     }
     // 3b) TP vuruş bildirimleri — kısmi kâr alma anları (idempotent; deploy öncesi eski
@@ -777,7 +779,7 @@ async function chEngineTick(trigger = "timer") {
         if (ev.d < mailCutD) continue;
         mails.push({
           subject: `🎯 Alfa Avı: ${p.sym} ${ev.k.toUpperCase()} vurdu — +$${(+ev.pnl).toFixed(0)} realize`,
-          html: `<h2>🎯 ${p.sym} ${ev.k.toUpperCase()} (+%${ev.k === "tp1" ? CH_ENG.tp1 : CH_ENG.tp2})</h2><p>${ev.d} mumunda <b>$${(+ev.px).toFixed(2)}</b> hedefi görüldü → pozisyonun %25'i satıldı, <b>+$${(+ev.pnl).toFixed(2)}</b> realize edildi.</p><p>${ev.k === "tp1" ? "Stop <b>başa-başa</b> çekildi — kalan %75 artık risksiz koşuyor." : "Kalan %50, EMA21 iz süren stopla trendde bırakıldı."}</p><p>Bu oyun parasıdır, yatırım tavsiyesi değildir.</p>`,
+          html: `<h2>🎯 ${p.sym} ${ev.k.toUpperCase()} (+%${ev.k === "tp1" ? CH_ENG.tp1 : CH_ENG.tp2})</h2><p>${ev.d} mumunda <b>$${(+ev.px).toFixed(2)}</b> hedefi görüldü → pozisyonun %25'i satıldı, <b>+$${(+ev.pnl).toFixed(2)}</b> realize edildi ($${CH_ENG.commission} emir komisyonu düşülmüş net).</p><p>${ev.k === "tp1" ? "Stop <b>başa-başa</b> çekildi — kalan %75 artık risksiz koşuyor." : "Kalan %50, EMA21 iz süren stopla trendde bırakıldı."}</p><p>Bu oyun parasıdır, yatırım tavsiyesi değildir.</p>`,
         });
       }
     }
@@ -856,7 +858,7 @@ async function chEngineTick(trigger = "timer") {
     const board = {
       asOf: Date.now(),
       startCapital: CH_ENG.startCapital, goal: 2500, riskPct: CH_ENG.riskPct, tp1: CH_ENG.tp1, tp2: CH_ENG.tp2, trailEma: "EMA21", startDate: CH_ENG.startDate,
-      goals: CH_ENG.goals, milestones: led.milestones || {}, rsMin: CH_ENG.rsMin,
+      goals: CH_ENG.goals, milestones: led.milestones || {}, rsMin: CH_ENG.rsMin, commission: CH_ENG.commission,
       daysElapsed: Math.max(0, Math.round((Date.now() - new Date(CH_ENG.startDate)) / 86400_000)),
       universeCount: watch.length,
       cash: +cash.toFixed(2),
@@ -867,7 +869,7 @@ async function chEngineTick(trigger = "timer") {
         R: p.R, unreal: p.unreal ?? 0, mark: p.mark ?? null, initRisk: p.initRisk ?? null,
         rai: p.rai ?? null, frozen: true, events: p.events || [],
         lane: p.lane || "tech", gapPct: p.gapPct ?? null, epVolR: p.epVolR ?? null, news: p.news || null,
-        rsPct: p.rsPct ?? null, weakRs: !!p.weakRs,
+        rsPct: p.rsPct ?? null, weakRs: !!p.weakRs, fees: +(p.fees || 0).toFixed(2),
       })),
       regime: regTodayObj,
       rai: raiToday ? { score: raiToday.score, comps: raiToday.comps } : null,

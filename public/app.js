@@ -4968,6 +4968,7 @@ const CHALLENGE = {
   startCapital: 1500, goal: 2500, startDate: "2026-07-01",
   riskPct: 3, tp1: 6, tp2: 12, trailEma: "EMA21",
   minNotional: 350, maxNotional: 850,
+  commission: 1.5, // Midas emir ücreti — alış + her satış emrinde düşülür (server ile birebir; sonuçlar NET)
   // Evren dinamik: Radar + Swing defterindeki TÜM semboller + çekirdek liste (chUniverse doldurur)
   coreWatch: ["NVDA", "AMD", "MU", "NBIS", "INTC", "SNDK", "TSLA", "SOFI", "NOW"],
   maxSyms: 60,               // API nezaketi: evren üst sınırı (QM evreni bağlanınca 40→60)
@@ -5206,6 +5207,7 @@ function chRun() {
   if (!ts) return { positions: [], equity: [], cash: P.startCapital };
   const dates = ts.v.map((c) => c.time).filter((d) => d >= P.startDate);
   let cash = P.startCapital; const positions = [], equity = [];
+  const FEE = P.commission || 0; // her emirde: alış + her kısmi satış (net muhasebe, server ile aynı)
   const lastClose = (sym) => { const v = P._sym[sym].v; return v[v.length - 1].close; };
   const todayISO = new Date().toISOString().slice(0, 10);
   // Donmuş açılışları tarihe göre indexle — o gün geldiğinde AYNEN uygulanır (sinyal yeniden sorgulanmaz)
@@ -5218,10 +5220,10 @@ function chRun() {
       const s = P._sym[p.sym], i = s.idx[d]; if (i == null) continue; const c = s.v[i];
       const te = P.trailEma === "EMA8" ? s.ema8[i] : s.ema21[i];
       const effStop = p.tp1hit ? p.entry : p.stop;
-      if (c.low <= effStop) { const fr = p.rem, gap = c.open != null && c.open < effStop, px = gap ? c.open : effStop, pnl = fr * p.shares * (px - p.entry); cash += fr * p.shares * px; p.events.push({ d, k: gap ? "gap" : (p.stop >= p.entry && !p.tp1hit) ? "def" : p.tp1hit ? "be" : "stop", px, fr, pnl }); p.realized += pnl; p.rem = 0; p.open = false; p.exitDate = d; continue; }
-      if (!p.tp1hit && c.high >= p.tp1) { const fr = 0.25, pnl = fr * p.shares * (p.tp1 - p.entry); cash += fr * p.shares * p.tp1; p.realized += pnl; p.rem -= fr; p.tp1hit = true; p.events.push({ d, k: "tp1", px: p.tp1, fr, pnl }); }
-      if (p.tp1hit && !p.tp2hit && c.high >= p.tp2) { const fr = 0.25, pnl = fr * p.shares * (p.tp2 - p.entry); cash += fr * p.shares * p.tp2; p.realized += pnl; p.rem -= fr; p.tp2hit = true; p.events.push({ d, k: "tp2", px: p.tp2, fr, pnl }); }
-      if (p.open && p.rem > 0 && c.close < te) { const fr = p.rem, pnl = fr * p.shares * (c.close - p.entry); cash += fr * p.shares * c.close; p.realized += pnl; p.events.push({ d, k: "trail", px: c.close, fr, pnl }); p.rem = 0; p.open = false; p.exitDate = d; }
+      if (c.low <= effStop) { const fr = p.rem, gap = c.open != null && c.open < effStop, px = gap ? c.open : effStop, pnl = fr * p.shares * (px - p.entry) - FEE; cash += fr * p.shares * px - FEE; p.fees = (p.fees || 0) + FEE; p.events.push({ d, k: gap ? "gap" : (p.stop >= p.entry && !p.tp1hit) ? "def" : p.tp1hit ? "be" : "stop", px, fr, pnl, fee: FEE }); p.realized += pnl; p.rem = 0; p.open = false; p.exitDate = d; continue; }
+      if (!p.tp1hit && c.high >= p.tp1) { const fr = 0.25, pnl = fr * p.shares * (p.tp1 - p.entry) - FEE; cash += fr * p.shares * p.tp1 - FEE; p.fees = (p.fees || 0) + FEE; p.realized += pnl; p.rem -= fr; p.tp1hit = true; p.events.push({ d, k: "tp1", px: p.tp1, fr, pnl, fee: FEE }); }
+      if (p.tp1hit && !p.tp2hit && c.high >= p.tp2) { const fr = 0.25, pnl = fr * p.shares * (p.tp2 - p.entry) - FEE; cash += fr * p.shares * p.tp2 - FEE; p.fees = (p.fees || 0) + FEE; p.realized += pnl; p.rem -= fr; p.tp2hit = true; p.events.push({ d, k: "tp2", px: p.tp2, fr, pnl, fee: FEE }); }
+      if (p.open && p.rem > 0 && c.close < te) { const fr = p.rem, pnl = fr * p.shares * (c.close - p.entry) - FEE; cash += fr * p.shares * c.close - FEE; p.fees = (p.fees || 0) + FEE; p.realized += pnl; p.events.push({ d, k: "trail", px: c.close, fr, pnl, fee: FEE }); p.rem = 0; p.open = false; p.exitDate = d; }
       // Savunma modu (rejim off): kârdaki pozisyonun stopu başa-başa ratchet'lenir (bar sonu, tek yön yukarı)
       if (defensive && p.open && !p.tp1hit && c.close > p.entry) p.stop = Math.max(p.stop, p.entry);
     }
@@ -5231,8 +5233,8 @@ function chRun() {
       if (held.has(f.sym) || positions.some((p) => p.id === f.id)) continue;
       const s = P._sym[f.sym]; const i = s ? s.idx[d] : null;
       const disp = (s && i != null ? chSignal(f.sym, i) : null) || {}; // sadece gerekçe metni için analitik
-      cash -= f.notional;
-      positions.push({ ...disp, id: f.id, sym: f.sym, date: f.date, entry: f.entry, stop: f.stop, tp1: f.tp1, tp2: f.tp2, notional: f.notional, shares: f.shares, frozen: true, rem: 1, tp1hit: false, tp2hit: false, realized: 0, open: true, events: [] });
+      cash -= f.notional + FEE;
+      positions.push({ ...disp, id: f.id, sym: f.sym, date: f.date, entry: f.entry, stop: f.stop, tp1: f.tp1, tp2: f.tp2, notional: f.notional, shares: f.shares, frozen: true, rem: 1, tp1hit: false, tp2hit: false, realized: -FEE, fees: FEE, open: true, events: [] });
       held.add(f.sym);
     }
     // 2) Yeni sinyaller — açılır açılmaz sunucu defterine dondurulur (kapanmış barlar)
@@ -5249,9 +5251,9 @@ function chRun() {
       if (sct && positions.some((p) => p.open && (P._sect || {})[p.sym] === sct)) continue; // sektör tavanı
       let notional = chSize(sig.entry, sig.stop);
       if (regime === "caution") notional = Math.max(280, +(notional / 2).toFixed(0)); // erken uyarı → yarım boyut
-      if (cash < notional) continue;
-      cash -= notional;
-      const t = { ...sig, id, notional, shares: notional / sig.entry, tp1: sig.entry * (1 + P.tp1 / 100), tp2: sig.entry * (1 + P.tp2 / 100), rai: raiD ? raiD.score : null, rem: 1, tp1hit: false, tp2hit: false, realized: 0, open: true, events: [] };
+      if (cash < notional + FEE) continue;
+      cash -= notional + FEE;
+      const t = { ...sig, id, notional, shares: notional / sig.entry, tp1: sig.entry * (1 + P.tp1 / 100), tp2: sig.entry * (1 + P.tp2 / 100), rai: raiD ? raiD.score : null, rem: 1, tp1hit: false, tp2hit: false, realized: -FEE, fees: FEE, open: true, events: [] };
       positions.push(t);
       held.add(sig.sym);
       if (d < todayISO) chFreeze(t); // gün kapanmışsa karar kesindir → dondur (bugünün barı hâlâ oluşuyor olabilir)
@@ -5347,7 +5349,7 @@ function chExitWhy(p) {
     if (e.k === "tp2") return li(`<span class="win-c">TP2 (+%${CHALLENGE.tp2})</span> ${chFmtD(e.d)}: %25 daha kâr alındı (+${fmtUSD0(e.pnl)}).`);
     if (e.k === "trail") return li(`İz süren stop ${chFmtD(e.d)}: kalan %${(e.fr * 100).toFixed(0)}, ${CHALLENGE.trailEma} altında $${e.px.toFixed(2)}'de çıktı (${e.pnl >= 0 ? "+" : ""}${fmtUSD0(e.pnl)}).`);
     if (e.k === "def") return li(`<span class="neu-c">🛡 Savunma stopu</span> ${chFmtD(e.d)}: piyasa risk-off'a geçince stop başa-başa çekilmişti, $${e.px.toFixed(2)}'de risksiz kapandı (kâr kilidi korudu, ${e.pnl >= 0 ? "+" : ""}${fmtUSD0(e.pnl)}).`);
-    if (e.k === "be") return li(`<span class="neu-c">Başa-baş stop</span> ${chFmtD(e.d)}: kalan %${(e.fr * 100).toFixed(0)} risksiz kapandı (±$0).`);
+    if (e.k === "be") return li(`<span class="neu-c">Başa-baş stop</span> ${chFmtD(e.d)}: kalan %${(e.fr * 100).toFixed(0)} risksiz kapandı (${e.pnl != null && Math.abs(e.pnl) > 0.01 ? `${e.pnl >= 0 ? "+" : ""}${fmtUSD0(e.pnl)} — komisyon` : "±$0"}).`);
     if (e.k === "gap") return li(`<span class="loss-c">Gap ile stop</span> ${chFmtD(e.d)}: fiyat açılışta stopun <b>altında boşluk (gap)</b> yaptı — gerçek çıkış stop fiyatından DEĞİL, açılış $${e.px.toFixed(2)}'den (dürüst ölçüm, ${fmtUSD0(e.pnl)}).`);
     return li(`<span class="loss-c">Stop</span> ${chFmtD(e.d)}: stop $${e.px.toFixed(2)} deldi, kapatıldı (${fmtUSD0(e.pnl)}).`);
   }).join("");
@@ -5357,7 +5359,7 @@ function chExitWhy(p) {
   }
   const pct = p.notional ? (p.realized / p.notional) * 100 : 0;
   const verdict = p.realized > 1 ? `<span class="win-c">KÂR</span>` : p.realized < -1 ? `<span class="loss-c">ZARAR</span>` : `<span class="neu-c">BAŞA-BAŞ</span>`;
-  return `<b>Çıkış — neden?</b><ul class="ch-ev">${evs}</ul><b>Sonuç: ${verdict}</b> — net ${p.realized >= 0 ? "+" : ""}${fmtUSD0(p.realized)} (${pct >= 0 ? "+" : ""}${pct.toFixed(1)}% · ${p.R >= 0 ? "+" : ""}${p.R}R).`;
+  return `<b>Çıkış — neden?</b><ul class="ch-ev">${evs}</ul><b>Sonuç: ${verdict}</b> — net ${p.realized >= 0 ? "+" : ""}${fmtUSD0(p.realized)} (${pct >= 0 ? "+" : ""}${pct.toFixed(1)}% · ${p.R >= 0 ? "+" : ""}${p.R}R${p.fees ? ` · $${(+p.fees).toFixed(2)} komisyon düşülmüş` : ""}).`;
 }
 
 // Açık pozisyon için görsel fiyat merdiveni — stop · giriş · TP1 · TP2 tek eksende, canlı fiyat işaretçisi kayar.
@@ -5468,7 +5470,7 @@ async function chLoadBoard() {
     if (!r.ok) return null;
     const b = await r.json();
     if (!b || !Array.isArray(b.positions) || !Array.isArray(b.watch) || !b.regime) return null;
-    return { positions: b.positions, cash: b.cash, watch: b.watch, regime: b.regime, rai: b.rai, universeCount: b.universeCount, vixReal: !!b.vixReal, goals: b.goals, milestones: b.milestones, rsMin: b.rsMin, source: "server" };
+    return { positions: b.positions, cash: b.cash, watch: b.watch, regime: b.regime, rai: b.rai, universeCount: b.universeCount, vixReal: !!b.vixReal, goals: b.goals, milestones: b.milestones, rsMin: b.rsMin, commission: b.commission, source: "server" };
   } catch { return null; }
 }
 async function chLocalBoard(el) {
@@ -5507,7 +5509,7 @@ async function renderChallenge() {
     <div class="ch-card open ch-pos" data-chsym="${p.sym}" title="Grafiği aç — ${p.sym}">
       <div class="ch-card-top"><div class="ch-card-sym"><b>${p.sym}</b> ${setup(p)}</div>
         <div class="ch-card-r"><span class="ch-pill open">Açık</span><span class="ch-card-pnl ${cls(p.unreal)}">${p.unreal >= 0 ? "+" : ""}${fmtUSD0(p.unreal)}</span><span class="ch-card-rr ${cls(p.R)}">${p.R >= 0 ? "+" : ""}${p.R}R</span></div></div>
-      <div class="ch-card-dt">${chFmtD(p.date)} → açık · ~${fmtUSD0(p.notional)} pozisyon · %${(p.rem * 100).toFixed(0)} taşınıyor${p.initRisk ? ` · risk ${fmtUSD0(p.initRisk)}` : ""}${Math.abs(p.realized) > 0.5 ? ` · realize <b class="${cls(p.realized)}">${p.realized >= 0 ? "+" : ""}${fmtUSD0(p.realized)}</b>` : ""}</div>
+      <div class="ch-card-dt">${chFmtD(p.date)} → açık · ~${fmtUSD0(p.notional)} pozisyon · %${(p.rem * 100).toFixed(0)} taşınıyor${p.initRisk ? ` · risk ${fmtUSD0(p.initRisk)}` : ""}${Math.abs(p.realized) > (D.commission ?? 1.5) + 0.5 ? ` · realize <b class="${cls(p.realized)}" title="komisyonlar düşülmüş net">${p.realized >= 0 ? "+" : ""}${fmtUSD0(p.realized)}</b>` : ""}</div>
       ${chLadder(p)}
       <div class="ch-dist">
         <span class="cd now ${pct >= 0 ? "up" : "dn"}">${pct >= 0 ? "▲" : "▼"} Şimdi <b>${fmtUSD(p.mark)}</b> · ${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%</span>
@@ -5515,13 +5517,14 @@ async function renderChallenge() {
         <span class="cd stop">🛑 stop <s>${toStop.toFixed(1)}% uzak</s></span>
       </div>
       ${(() => { // detaylı canlı durum: değer · anlık K/Z · canlı R · gün · stop/TP2 senaryoları
+        const fee = D.commission ?? CHALLENGE.commission ?? 0; // son satış emrinin komisyonu senaryoya dahil
         const posVal = p.rem * p.shares * p.mark;
         const costRem = p.rem * p.shares * p.entry;
         const upct = costRem ? (p.unreal / costRem) * 100 : 0;
         const liveR = p.initRisk ? (p.realized + p.unreal) / p.initRisk : null;
         const days = Math.max(0, Math.round((Date.now() - new Date(p.date)) / 86400000));
-        const wc = p.realized + p.rem * p.shares * (effStop - p.entry); // stopta kapanırsa net sonuç
-        const bc = p.realized + p.rem * p.shares * (p.tp2 - p.entry);   // kalan TP2'den satılırsa net
+        const wc = p.realized + p.rem * p.shares * (effStop - p.entry) - fee; // stopta kapanırsa net sonuç
+        const bc = p.realized + p.rem * p.shares * (p.tp2 - p.entry) - fee;   // kalan TP2'den satılırsa net
         const cell = (l, v, c) => `<span class="cs"><i>${l}</i><b class="${c || ""}">${v}</b></span>`;
         return `<div class="ch-stats">
           ${cell("Değer", fmtUSD0(posVal))}
@@ -5530,7 +5533,7 @@ async function renderChallenge() {
           ${cell("Gün", String(days))}
           ${p.rsPct != null ? cell("RS", `%${p.rsPct}${p.weakRs ? " · yarım" : ""}`, p.weakRs ? "" : p.rsPct >= 70 ? "win-c" : "") : ""}
           ${cell("Stop senaryosu", `${wc >= 0 ? "+" : ""}${fmtUSD0(wc)}`, cls(wc))}
-          ${cell("TP2 senaryosu", `+${fmtUSD0(bc)}`, "win-c")}
+          ${cell("TP2 senaryosu", `${bc >= 0 ? "+" : ""}${fmtUSD0(bc)}`, cls(bc))}
         </div>`;
       })()}
       <details class="ch-det"><summary>Gerekçe & durum <span class="ch-det-h">giriş nedeni · olaylar · plan</span></summary>
@@ -5577,7 +5580,7 @@ async function renderChallenge() {
     </div>`;
   })() : "";
   el.innerHTML = `
-    <div class="ch-strat">Strateji: <b>Swing Momentum (8/21/50 EMA)</b> + <b>Qullamaggie</b> teyidi · <b>bugünden ileri</b> canlı hesap · evren: <b>Radar + Swing defteri (${D.universeCount} hisse)</b> · sadece tetikte açar (asla stop'suz değil) · riske göre ~%${CHALLENGE.riskPct}/işlem · kademeli kâr-al (TP1 +%${CHALLENGE.tp1}/TP2 +%${CHALLENGE.tp2}, sonra ${CHALLENGE.trailEma} iz süren stop) · <b>rejim kapısı: QQQ &lt; EMA21 veya risk iştahı &lt; 30 → giriş yok</b> · aynı gün çok tetikte <b>göreli güç</b> önce · <b>bilanço karartması</b>: bilançoya ≤3 gün kala giriş yok · <b>sektör tavanı</b>: sektör başına 1 pozisyon.</div>
+    <div class="ch-strat">Strateji: <b>Swing Momentum (8/21/50 EMA)</b> + <b>Qullamaggie</b> teyidi · <b>bugünden ileri</b> canlı hesap · evren: <b>Radar + Swing defteri (${D.universeCount} hisse)</b> · sadece tetikte açar (asla stop'suz değil) · riske göre ~%${CHALLENGE.riskPct}/işlem · kademeli kâr-al (TP1 +%${CHALLENGE.tp1}/TP2 +%${CHALLENGE.tp2}, sonra ${CHALLENGE.trailEma} iz süren stop) · <b>rejim kapısı: QQQ &lt; EMA21 veya risk iştahı &lt; 30 → giriş yok</b> · aynı gün çok tetikte <b>göreli güç</b> önce · <b>bilanço karartması</b>: bilançoya ≤3 gün kala giriş yok · <b>sektör tavanı</b>: sektör başına 1 pozisyon · <b>komisyon</b>: emir başına $${(D.commission ?? CHALLENGE.commission).toFixed(2)} (alış + her satış, Midas) — tüm rakamlar net.</div>
     ${raiPanel}
     ${regBadge}
     <div class="ch-kpis">
