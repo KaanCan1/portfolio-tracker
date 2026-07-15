@@ -973,6 +973,8 @@ const ICONS = {
   trendDown: '<polyline points="22 17 13.5 8.5 8.5 13.5 2 7"/><polyline points="16 17 22 17 22 11"/>',
   alertTriangle: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
   coins: '<circle cx="8" cy="8" r="6"/><path d="M18.09 10.37A6 6 0 1 1 10.34 18"/><path d="M7 6h1v4"/><path d="m16.71 13.88.7.71-2.82 2.82"/>',
+  refresh: '<path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/>',
+  link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
 };
 function svgIcon(name, cls) {
   const p = ICONS[name]; if (!p) return "";
@@ -4000,7 +4002,7 @@ function unifiedRow(u) {
     <td class="rb-score">${scoreCell}</td>
     <td>${tierCell}</td>
     <td class="l rb-sigs">${dotFor("mom")}${dotFor("ana")}${dotFor("fun")}${dotFor("ins")}
-      <button class="btn icon rb-analiz" data-analiz="${u.symbol}" title="Teknik analizi aç / en güncel veriyle yenile">🔄</button></td>
+      <button class="btn icon rb-analiz" data-analiz="${u.symbol}" title="Teknik analizi aç / en güncel veriyle yenile">${svgIcon("refresh", "ic-sm")}</button></td>
     <td class="l rb-swcell">${swCell}</td>
   </tr>${radarDetail(u)}`;
 }
@@ -5760,8 +5762,8 @@ function renderTopPicks() {
       const tp1 = price * 1.10, tp2 = price * 1.20;
       const hasTgt = p.targetMean != null && p.upsidePct != null;
       return `<div class="tp-target">
-        <div class="tp-h">🎯 Hedef &amp; kâr-al seviyeleri</div>
-        ${hasTgt ? `<div class="tp-trow tp-tgt"><span>Analist hedefi</span><b>${fmtUSD(p.targetMean)} <span class="pill ${cls(p.upsidePct)}">${p.upsidePct >= 0 ? "+" : ""}${p.upsidePct.toFixed(0)}% potansiyel</span></b></div>` : ""}
+        <div class="tp-h">Hedef &amp; kâr-al seviyeleri</div>
+        ${hasTgt ? `<div class="tp-trow tp-tgt"><span>Analist hedefi</span><b>${fmtUSD(p.targetMean)} <span class="pill ${cls(p.upsidePct)}" title="analist hedefine potansiyel">${p.upsidePct >= 0 ? "+" : ""}${p.upsidePct.toFixed(0)}%</span></b></div>` : ""}
         <div class="tp-trow"><span>Kâr-al 1 · %25 sat</span><b>${fmtUSD(tp1)} <span class="pill pos">+10%</span></b></div>
         <div class="tp-trow"><span>Kâr-al 2 · %25 sat</span><b>${fmtUSD(tp2)} <span class="pill pos">+20%</span></b></div>
         ${p.costUSD != null
@@ -6501,7 +6503,7 @@ async function renderDayAnalysis(dateStr) {
     cards.push(`<div class="ch-card ${a.verdict === "pos" ? "win" : a.verdict === "warn" ? "neu" : "loss"}">
       <div class="ch-card-top"><div class="ch-card-sym"><b>${t.symbol}</b> ${srcTag}</div><div class="ch-card-r">${pill}</div></div>
       <div class="ch-card-dt">${head}${t.note ? ` · “${t.note}”` : ""}</div>
-      <div class="ch-why"><ul class="ch-ev">${a.findings.map((f) => `<li class="da-${f.tone}">${f.tone === "pos" ? "✅" : f.tone === "warn" ? "⚠️" : "❌"} ${f.txt}</li>`).join("") || "<li>Veri yetersiz — mum geçmişi alınamadı.</li>"}</ul></div>
+      <div class="ch-why"><ul class="ch-ev">${a.findings.map((f) => `<li class="da-${f.tone}">${f.txt}</li>`).join("") || "<li>Veri yetersiz — mum geçmişi alınamadı.</li>"}</ul></div>
     </div>`);
   }
   const sums = [`${all.length} işlem`, `${posN} doğru`, warnN ? `${warnN} tartışmalı` : null, negN ? `${negN} hatalı` : null, `net realize <b class="${cls(net)}">${fmtUSD(net)}</b>`].filter(Boolean).join(" · ");
@@ -7490,7 +7492,7 @@ function renderNotes() {
       ${n.title ? `<div class="note-title">${noteEsc(n.title)}</div>` : ""}
       <div class="note-body">${noteEsc(n.text).replace(/\n/g, "<br>")}</div>
       ${levels}
-      ${n.url ? `<a class="note-src" href="${noteEsc(n.url)}" target="_blank" rel="noopener noreferrer">🔗 kaynak</a>` : ""}
+      ${n.url ? `<a class="note-src" href="${noteEsc(n.url)}" target="_blank" rel="noopener noreferrer">${svgIcon("link", "ic-xs")} kaynak</a>` : ""}
     </div>`;
   }).join("");
 }

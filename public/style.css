@@ -107,6 +107,8 @@ body {
 .btn.danger:hover { background: #f5ddd9; }
 .btn.icon { padding: 6px 10px; font-size: 14px; background: transparent; border: 1px solid transparent; border-radius: 999px; }
 .btn.icon:hover { background: var(--bg2); }
+.btn.icon svg.ic-sm { width: 14px; height: 14px; display: block; color: var(--muted); }
+.btn.icon:hover svg.ic-sm { color: var(--green-d); }
 .btn:disabled { opacity: .55; cursor: not-allowed; }
 
 /* ---- Cards ---- */
@@ -512,19 +514,19 @@ body.privacy [data-pm="1"] { user-select: none; }
 
 .tbl-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); box-shadow: var(--shadow-md); }
 table { width: 100%; border-collapse: collapse; font-size: 12.5px; min-width: 700px; }
-/* KOYU başlık bandı — belirgin, premium his */
+/* AÇIK başlık bandı — sıcak kağıt üstünde sessiz mikro-etiket (koyu slab İPTAL, zarafet turu) */
 thead th {
-  background: linear-gradient(180deg, var(--hero) 0%, var(--hero2) 100%); color: rgba(255,255,255,.82);
-  border-bottom: 2px solid var(--hero2);
-  text-align: right; padding: 10px 11px; font-weight: 800; font-size: 10.5px;
-  white-space: nowrap; text-transform: uppercase; letter-spacing: .5px;
+  background: var(--bg2); color: var(--muted);
+  border-bottom: 1px solid var(--line-strong);
+  text-align: right; padding: 9px 11px; font-weight: 700; font-size: 10.5px;
+  white-space: nowrap; text-transform: uppercase; letter-spacing: .55px;
 }
 thead th:first-child { border-top-left-radius: 13px; }
 thead th:last-child { border-top-right-radius: 13px; }
 thead th:first-child, thead th.l { text-align: left; }
 thead th.sortable { cursor: pointer; user-select: none; transition: color .15s; }
-thead th.sortable:hover { color: #fff; }
-thead th.sortable.active { color: var(--green-l); }
+thead th.sortable:hover { color: var(--ink); }
+thead th.sortable.active { color: var(--green-d); }
 tbody td { padding: 9px 11px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
 tbody td.l { text-align: left; }
 tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--bg2) 55%, transparent); }
@@ -602,7 +604,7 @@ tfoot td.l { text-align: left; }
 /* Tablo */
 .trade-list-wrap { border: 1px solid var(--line); border-radius: 14px; overflow: auto; max-height: 300px; margin-bottom: 18px; box-shadow: var(--shadow-sm, 0 1px 2px rgba(0,0,0,.04)); }
 .trade-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 620px; }
-.trade-table thead th { position: sticky; top: 0; z-index: 1; background: linear-gradient(180deg, var(--hero) 0%, var(--hero2) 100%); color: rgba(255,255,255,.85); text-align: right; padding: 11px 14px; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; }
+.trade-table thead th { position: sticky; top: 0; z-index: 1; background: var(--bg2); color: var(--muted); border-bottom: 1px solid var(--line-strong); text-align: right; padding: 11px 14px; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .55px; }
 .trade-table thead th.l { text-align: left; }
 .trade-table td { padding: 11px 14px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; vertical-align: middle; }
 .trade-table td.l { text-align: left; white-space: normal; }
@@ -1460,7 +1462,8 @@ tfoot td.l { text-align: left; }
 @media (max-width: 560px) { .ri-grid { grid-template-columns: 1fr; } }
 
 /* ==================== En Büyük 3 Pozisyon (olumlu/olumsuz + haber) ============ */
-.tp-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 12px; min-width: 0; }
+/* Uyarlanabilir sütun: duo-grid yarım genişlikte 3×1fr sıkışıp taşıyordu (kırpılan chip'ler) */
+.tp-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(235px, 1fr)); gap: 14px; margin-top: 12px; min-width: 0; }
 @media (max-width: 900px) { .tp-grid { grid-template-columns: 1fr; } }
 .tp-card { border: 1px solid var(--line); border-radius: 12px; padding: 14px; background: var(--card); display: flex; flex-direction: column; gap: 10px; min-width: 0; overflow: hidden; }
 .tp-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; min-width: 0; }
@@ -1480,8 +1483,8 @@ tfoot td.l { text-align: left; }
 .tp-news-summary { font-size: 11.5px; line-height: 1.5; color: var(--ink2); margin: 0; overflow-wrap: break-word; word-break: break-word; }
 /* Hedef & kâr-al seviyeleri (En Büyük 3) */
 .tp-target { border-top: 1px solid var(--line); padding-top: 9px; display: flex; flex-direction: column; gap: 4px; }
-.tp-trow { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; }
-.tp-trow > span { color: var(--muted); }
+.tp-trow { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; min-width: 0; }
+.tp-trow > span { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tp-trow > b { font-variant-numeric: tabular-nums; font-weight: 700; white-space: nowrap; color: var(--ink); }
 .tp-trow.tp-tgt { padding-bottom: 3px; margin-bottom: 2px; border-bottom: 1px dashed var(--line); }
 .pill { display: inline-block; font-size: 10.5px; font-weight: 700; padding: 1px 6px; border-radius: 6px; background: var(--bg2); color: var(--muted); }
@@ -2404,24 +2407,26 @@ button.sw-goal-target:hover { background: var(--bg2); border-color: var(--line);
 .pr-hint { font-size: 11.5px; font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--ink-soft, #9aa3af); }
 /* KPI'lar */
 .pr-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
-.pr-kpi { background: var(--surface-2, #f5f7f9); border: 1px solid var(--line, #e6e9ee); border-radius: 12px; padding: 12px 14px; }
-.pr-kpi.good { border-color: var(--green-line, #cfe9da); background: var(--green-soft, #eef8f2); }
-.pr-kpi.warn { border-color: #f0dcb0; background: #fdf6e7; }
-.pr-kpi.bad { border-color: #f3c9c9; background: #fdecec; }
-.pr-kpi-l { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: var(--ink-soft, #8a93a0); }
+/* KPI kartları: pastel yıkama İPTAL — nötr yüzey, anlam değer renginde (open-design kuralı) */
+.pr-kpi { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; box-shadow: var(--shadow); }
+.pr-kpi.good .pr-kpi-v { color: var(--green-d); }
+.pr-kpi.warn .pr-kpi-v { color: var(--amber-d); }
+.pr-kpi.bad .pr-kpi-v { color: var(--red-d); }
+.pr-kpi-l { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); }
 .pr-kpi-v { font-size: 21px; font-weight: 700; font-variant-numeric: tabular-nums; margin: 3px 0 1px; }
-.pr-kpi-s { font-size: 11.5px; color: var(--ink-soft, #8a93a0); }
+.pr-kpi-s { font-size: 11.5px; color: var(--muted); }
 /* Korelasyon matrisi */
 .pr-corr-wrap { overflow-x: auto; }
 .pr-corr { border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
-.pr-corr th { padding: 5px 8px; font-weight: 700; color: var(--ink-soft, #6b7280); position: sticky; }
-.pr-corr td { padding: 6px 9px; text-align: center; font-weight: 600; border-radius: 4px; color: #1f2329; }
-.pr-corr .cc-self { background: #e9edf1; color: #b4bcc6; }
-.pr-corr .cc-h { background: #e8553c; color: #fff; }      /* yüksek korelasyon = riskli */
-.pr-corr .cc-m { background: #f3a26b; }
-.pr-corr .cc-l { background: #f6e7b8; }
-.pr-corr .cc-z { background: #e3eef0; }
-.pr-corr .cc-n { background: #bfe3cb; }                    /* negatif = en iyi çeşitlendirme */
+.pr-corr th { padding: 5px 8px; font-weight: 700; color: var(--muted); position: sticky; }
+.pr-corr td { padding: 6px 9px; text-align: center; font-weight: 600; border-radius: 4px; color: var(--ink2); }
+/* Isı skalası: sıcak-kağıt ailesinde yumuşatılmış tonlar (doygun turuncu İPTAL) — anlam korunur */
+.pr-corr .cc-self { background: var(--bg2); color: #b7b3a6; }
+.pr-corr .cc-h { background: #eab0a5; color: #78241f; }   /* yüksek korelasyon = riskli */
+.pr-corr .cc-m { background: #f3d5b9; color: #7a4a1c; }
+.pr-corr .cc-l { background: #f5ecd3; color: #6f5c22; }
+.pr-corr .cc-z { background: #eef0e8; color: #5b6153; }
+.pr-corr .cc-n { background: #d3e9da; color: #1b6a40; }   /* negatif = en iyi çeşitlendirme */
 /* Risk katkısı */
 .pr-rc { display: flex; flex-direction: column; gap: 7px; }
 .pr-rc-row { display: grid; grid-template-columns: 56px 1fr auto; align-items: center; gap: 10px; }
@@ -2786,7 +2791,7 @@ ul.sw-qm-list li b { font-weight: 700; color: var(--ink); }
 .ch-wk-v { font-size: 10.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .ch-wk-l { font-size: 10px; color: var(--muted); }
 .ch-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.ch-table thead th { position: sticky; top: 0; background: linear-gradient(180deg, var(--hero) 0%, var(--hero2) 100%); color: rgba(255,255,255,.82); text-align: right; padding: 9px 12px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px; white-space: nowrap; }
+.ch-table thead th { position: sticky; top: 0; background: var(--bg2); color: var(--muted); border-bottom: 1px solid var(--line-strong); text-align: right; padding: 9px 12px; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .55px; white-space: nowrap; }
 .ch-table thead th.l { text-align: left; }
 .ch-table tbody td { text-align: right; padding: 9px 12px; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .ch-table tbody td.l { text-align: left; }
@@ -2851,8 +2856,9 @@ ul.sw-qm-list li b { font-weight: 700; color: var(--ink); }
 .chl { margin: 6px 0 10px; }
 .chl-bar { position: relative; height: 12px; border-radius: 999px; background: var(--bg2); margin-top: 34px; }
 .chl-seg { position: absolute; top: 0; height: 100%; }
-.chl-seg.risk { background: linear-gradient(90deg, var(--red-d), color-mix(in srgb, var(--red) 30%, var(--card))); border-radius: 999px 0 0 999px; }
-.chl-seg.reward { background: linear-gradient(90deg, color-mix(in srgb, var(--green-d) 28%, var(--card)), var(--green-d)); border-radius: 0 999px 999px 0; }
+/* Risk rampası yumuşatıldı: tam doygun kırmızı yalnız stop işaretinde, şerit sessiz (zarafet turu) */
+.chl-seg.risk { background: linear-gradient(90deg, color-mix(in srgb, var(--red) 52%, var(--card)), color-mix(in srgb, var(--red) 14%, var(--card))); border-radius: 999px 0 0 999px; }
+.chl-seg.reward { background: linear-gradient(90deg, color-mix(in srgb, var(--green-d) 16%, var(--card)), color-mix(in srgb, var(--green-d) 62%, var(--card))); border-radius: 0 999px 999px 0; }
 .chl-t { position: absolute; top: 50%; width: 3px; height: 18px; transform: translate(-50%, -50%); border-radius: 2px; z-index: 1; }
 .chl-t.stop { background: var(--red-d); }
 .chl-t.entry { width: 12px; height: 12px; border-radius: 3px; background: var(--ink); transform: translate(-50%, -50%) rotate(45deg); box-shadow: 0 0 0 3px var(--card); }
@@ -2981,9 +2987,17 @@ ul.sw-qm-list li b { font-weight: 700; color: var(--ink); }
 .da-date:focus-visible { outline: none; box-shadow: var(--ring); border-color: var(--green); }
 .da-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; color: var(--ink2); background: var(--bg3); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; margin-bottom: 12px; }
 .da-summary .da-coach { margin-left: auto; font-weight: 600; color: var(--ink); }
+/* Denetim bulguları: emoji madde işareti İPTAL — ton, renkli işaretleyicide (anti-slop) */
+.ch-ev li.da-pos, .ch-ev li.da-warn, .ch-ev li.da-neg { list-style: none; position: relative; padding-left: 2px; }
+.ch-ev li.da-pos::before, .ch-ev li.da-warn::before, .ch-ev li.da-neg::before {
+  content: ""; position: absolute; left: -14px; top: .52em; width: 7px; height: 7px; border-radius: 50%;
+}
 .ch-ev li.da-pos { color: var(--ink2); }
+.ch-ev li.da-pos::before { background: var(--green); }
 .ch-ev li.da-warn { color: var(--amber-d); }
+.ch-ev li.da-warn::before { background: var(--amber); }
 .ch-ev li.da-neg { color: var(--red-d); }
+.ch-ev li.da-neg::before { background: var(--red); border-radius: 2px; }
 .tr-src-swing { font-size: 10px; font-weight: 800; color: var(--amber-d); background: var(--amber-bg); border: 1px solid var(--amber-line); border-radius: 6px; padding: 1px 6px; vertical-align: 1px; }
 .tr-src-port { font-size: 10px; font-weight: 700; color: var(--muted); background: var(--bg2); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; vertical-align: 1px; }
 @media (max-width: 720px) { .da-summary .da-coach { margin-left: 0; width: 100%; } }
@@ -3172,8 +3186,9 @@ ul.sw-qm-list li b { font-weight: 700; color: var(--ink); }
 .note-price { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .note-levels { display: flex; gap: 14px; margin-top: 8px; font-size: 12.5px; color: var(--muted); }
 .note-levels b { font-family: var(--mono); font-variant-numeric: tabular-nums; }
-.note-src { display: inline-block; margin-top: 7px; font-size: 12px; color: var(--sky); text-decoration: none; }
+.note-src { display: inline-flex; align-items: center; gap: 4px; margin-top: 7px; font-size: 12px; color: var(--green-d); text-decoration: none; }
 .note-src:hover { text-decoration: underline; }
+.note-src svg.ic-xs { width: 12px; height: 12px; }
 .note-act.pin-on { color: var(--green-d); }
 .win-c { color: var(--green-d); } .loss-c { color: var(--red); }
 
