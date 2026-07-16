@@ -344,6 +344,14 @@ tr.opt-detail .muted { color: var(--muted); }
 .lg-pct { margin-left: auto; color: var(--muted); font-weight: 700; font-variant-numeric: tabular-nums; }
 .lg-val { min-width: 76px; text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
 .lg-usd { min-width: 62px; text-align: right; color: var(--muted); font-weight: 600; font-variant-numeric: tabular-nums; }
+/* Dar pencere (641-1100): sabit min-width'ler 190px'lik lejanta sığmaz → SAYFA yatay kayar.
+ * İsim kırpılır, $ referansı gizlenir (₺ esas) — taşma yerine feragat. ≤640 kuralları ayrıca var. */
+@media (max-width: 1100px) {
+  .lg-item { min-width: 0; }
+  .lg-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lg-val, .lg-pct { min-width: 0; }
+  .lg-usd { display: none; }
+}
 .alloc-empty { color: var(--muted); font-weight: 600; margin-top: 24px; text-align: center; }
 /* Mobil: donut üstte, legend altta tam genişlik (yatay taşmayı önler) */
 @media (max-width: 560px) {
@@ -1242,7 +1250,9 @@ tfoot td.l { text-align: left; }
 .sector-syms { font-size: 11.5px; color: var(--muted); }
 
 /* Vergi tablosu */
-.tax-table, .wk-table, .bt-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+/* Dar içerik tabloları: global `table { min-width:700px }` kuralından MUAF —
+ * sarmalayıcısız yaşarlar; 700'e zorlanınca dar grid hücresinde SAYFAYI yatay kaydırırlar */
+.tax-table, .wk-table, .bt-table { width: 100%; min-width: 0; border-collapse: collapse; font-size: 13.5px; }
 .tax-table th, .bt-table th { text-align: right; font-size: 11.5px; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); padding: 6px 8px; border-bottom: 1px solid var(--line); }
 .tax-table th.l, .bt-table th.l { text-align: left; }
 .tax-table td, .wk-table td, .bt-table td { text-align: right; padding: 8px; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
@@ -2056,7 +2066,7 @@ tbody tr:hover .row-actions .btn.icon { color: var(--ink2); }
 @media (max-width: 640px) { .dj-tbls { grid-template-columns: 1fr; } .dj-matrix { gap: 7px; } }
 .dj-tbl { overflow-x: auto; }
 .dj-tbl-h { font-size: 12px; font-weight: 700; color: var(--ink2); margin-bottom: 6px; }
-.dj-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.dj-table { width: 100%; min-width: 0; border-collapse: collapse; font-size: 12.5px; }
 .dj-table th { font-size: 10.5px; text-transform: uppercase; letter-spacing: .3px; color: var(--muted); font-weight: 700; text-align: right; padding: 4px 6px; border-bottom: 1px solid var(--line); }
 .dj-table th.l, .dj-table td.l { text-align: left; }
 .dj-table td { text-align: right; padding: 6px; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
@@ -2423,7 +2433,7 @@ button.sw-goal-target:hover { background: var(--bg2); border-color: var(--line);
 .pr-kpi-s { font-size: 11.5px; color: var(--muted); }
 /* Korelasyon matrisi */
 .pr-corr-wrap { overflow-x: auto; }
-.pr-corr { border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+.pr-corr { min-width: 0; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
 .pr-corr th { padding: 5px 8px; font-weight: 700; color: var(--muted); position: sticky; }
 .pr-corr td { padding: 6px 9px; text-align: center; font-weight: 600; border-radius: 4px; color: var(--ink2); }
 /* Isı skalası: sıcak-kağıt ailesinde yumuşatılmış tonlar (doygun turuncu İPTAL) — anlam korunur */

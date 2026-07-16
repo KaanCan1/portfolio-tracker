@@ -787,6 +787,13 @@ const server = createServer(async (req, res) => {
     };
     res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify(board)); return;
   }
+  if (url === "/api/weekly") {
+    const wk = { portfolio: { fromDate: iso(Y, M, 9), toDate: iso(Y, M, 16), changeTRY: -22019, pct: -10.92 },
+      best: { symbol: "NVDA", pct: 4.11 }, worst: { symbol: "NBIS", pct: -7.84 },
+      stocks: [ { symbol: "NVDA", pct: 4.11 }, { symbol: "AMD", pct: 2.27 }, { symbol: "SOFI", pct: 0.79 },
+        { symbol: "DELL", pct: -4.47 }, { symbol: "MU", pct: -4.69 }, { symbol: "NBIS", pct: -7.84 } ] };
+    res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify(wk)); return;
+  }
   if (url === "/api/lab/backtest" && req.method === "POST") {
     const b = await readBody(req);
     const rec = { start: b.start || "2025-07-01", universe: 18, params: b,
