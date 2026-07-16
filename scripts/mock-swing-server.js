@@ -787,6 +787,34 @@ const server = createServer(async (req, res) => {
     };
     res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify(board)); return;
   }
+  if (url === "/api/lab/backtest" && req.method === "POST") {
+    const b = await readBody(req);
+    const rec = { start: b.start || "2025-07-01", universe: 18, params: b,
+      baseline: { islem: 33, acik: 2, isabet: 52, ortR: 0.88, getiriPct: 65.9, maksDususPct: -8.6, sermaye: 2489, komisyon: 148.5 },
+      variant: { islem: 26, acik: 2, isabet: 58, ortR: 0.94, getiriPct: 48.2, maksDususPct: -7.1, sermaye: 2223, komisyon: 117.0 },
+      not: "Evren bugünün evrenidir (hafif survivorship). Sonuç geçmiştir, garanti değildir; komisyon dahil NET rakamlardır. (MOCK)" };
+    setTimeout(() => { res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify(rec)); }, 700);
+    return;
+  }
+  if (url.startsWith("/api/edge-reports")) {
+    const ym = new Date(Y, M, 0).toISOString().slice(0, 7); // geçen ay
+    const rep = { [ym]: { ym, at: new Date().toISOString(), model: "claude-opus-4-8 (mock)",
+      stats: { ym, kapanan: 4, kazanan: 3, kaybeden: 1, isabet: 75, realizedUSD: 512.4, ortKazanc: 214.3, ortKayip: -96,
+        planUyum: { yes: { n: 3, kazanan: 3, pnl: 642.9 }, no: { n: 1, kazanan: 0, pnl: -96 } },
+        guvenKalibrasyonu: { A: { n: 2, kazanan: 2, pnl: 490 }, B: { n: 2, kazanan: 1, pnl: 22.4 } },
+        setupKirilimi: { breakout: { n: 2, kazanan: 2, pnl: 430 }, pullback: { n: 1, kazanan: 1, pnl: 178.4 }, ep: { n: 1, kazanan: 0, pnl: -96 } },
+        hataEtiketleri: { "early-fear": { n: 1, kazanan: 0, pnl: -96 } },
+        enIyi: { sym: "PLTR", pnl: 320 }, enKotu: { sym: "TSLA", pnl: -96 }, islemler: [],
+        alfa: { islem: 2, kazanan: 1, pnl: 36.6, komisyon: 7.5 },
+        netDeger: { getiriPct: 3.4, maksDususPct: -2.1, gunSayisi: 21 } },
+      ai: { ozet: "Disiplinli bir ay: kazançların plana uyduğun işlemlerden geldi, tek kayıp plansız EP denemesiydi. (MOCK yanıt.)",
+        guclu_yonler: ["Kırılım setup'ında %100 isabet — sistemin çekirdeği çalışıyor", "A-güven işlemlerin hepsi kazandı: kalibrasyon sağlıklı"],
+        zayif_yonler: ["Plansız tek işlem ayın tek zararı — 'erken korku' etiketi yine göründü"],
+        ay_dersi: "Para plana uyduğunda kazanılıyor; istisna yaptığın tek işlem ayın faturası oldu.",
+        gelecek_ay_kurali: "EP trade'ine yalnız yazılı plan + yarım boyutla gir.",
+        alfa_kiyasi: "Alfa aynı ayda 2 işlemde net +$36.6 aldı — sen daha kârlısın ama motorun hiç plansız işlemi yok." } } };
+    res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify(rep)); return;
+  }
   if (url.startsWith("/api/")) { res.writeHead(200, { "content-type": "application/json" }); res.end("{}"); return; }
   // statik
   try {

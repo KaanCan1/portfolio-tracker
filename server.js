@@ -1,4 +1,5 @@
 import express from "express";
+import webpush from "web-push";
 import Anthropic from "@anthropic-ai/sdk";
 import http2 from "node:http2";
 import crypto from "node:crypto";
@@ -84,7 +85,8 @@ function parseCookies(header) {
 function isAuthed(req) { return verifySession(parseCookies(req.headers.cookie).sid); }
 
 // Kapı: korunmayan yollar dışında her şey geçerli oturum ister
-const OPEN_PATHS = new Set(["/login", "/login.html", "/style.css", "/api/login", "/healthz", "/brand.svg", "/panda.svg"]);
+const OPEN_PATHS = new Set(["/login", "/login.html", "/style.css", "/api/login", "/healthz", "/brand.svg", "/panda.svg",
+  "/manifest.json", "/sw.js", "/icon-192.png", "/icon-512.png", "/apple-touch-icon.png"]); // PWA varlıkları — tarayıcı bunları çerezsiz de çekebilir
 app.use((req, res, next) => {
   if (!AUTH.hash) return next(); // şifre yapılandırılmamış → açık mod (lokal/demo; canlıda AUTH_PASSWORD ayarla)
   if (OPEN_PATHS.has(req.path) || isAuthed(req)) return next();
@@ -942,6 +944,12 @@ function feedPush(ev) {
   const cut = new Date(Date.now() - FEED_DAYS * 86400_000).toISOString();
   FEED.events = FEED.events.filter((e) => e.ts >= cut).slice(0, FEED_MAX);
   feedSaveSoon();
+  // Bildirim köprüsü: kritik/uyarı + Alfa olayları cebe düşer; info akışta sessiz kalır (spam yok).
+  // Key-dedup yukarıda olduğundan replay'ler tekrar bildirim ÜRETMEZ.
+  if (ev.sev === "crit" || ev.sev === "warn" || ev.type === "alfa") {
+    const pfx = ev.sev === "crit" ? "🔴 " : ev.sev === "warn" ? "🟠 " : "🏹 ";
+    pushSend(pfx + ev.title, ev.detail || "", { tag: ev.key }).catch(() => {});
+  }
   return true;
 }
 // Rejim / duygu bölge değişimi — önceki değer state'te; ilk görüşte yalnız kaydeder
@@ -987,6 +995,59 @@ app.post("/api/feed/seen", async (_req, res) => {
   res.json({ ok: true, seenAt: f.seenAt });
 });
 feedGet().catch(() => {}); // boot'ta yükle → sync üreticiler FEED'i hazır bulur
+
+/* ===== Cep bildirimleri (Web Push / PWA) ==========================================
+ * Feed'e düşen kritik/uyarı + Alfa olayları telefona anlık bildirim olur (info sessiz
+ * — spam yok, akışta durur). VAPID anahtarı env'de yoksa BİR KEZ üretilip app_data
+ * ("push_state") içinde saklanır — elle kurulum adımı yok. Abonelikler aynı kayıtta;
+ * ölü abonelik (404/410) gönderimde otomatik düşer. Mail kanalı YEDEK olarak kalır. */
+let PUSH = null; // { keys: {publicKey, privateKey}, subs: [] }
+async function pushGet() {
+  if (PUSH) return PUSH;
+  const v = await kvLoad("push_state").catch(() => null);
+  PUSH = v && Array.isArray(v.subs) ? v : { keys: null, subs: [] };
+  if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY)
+    PUSH.keys = { publicKey: process.env.VAPID_PUBLIC_KEY, privateKey: process.env.VAPID_PRIVATE_KEY };
+  if (!PUSH.keys) { PUSH.keys = webpush.generateVAPIDKeys(); await kvSave("push_state", PUSH).catch(() => {}); }
+  return PUSH;
+}
+async function pushSend(title, body, opts = {}) {
+  try {
+    const P = await pushGet();
+    if (!P.subs.length) return 0;
+    webpush.setVapidDetails(`mailto:${await notifyTo() || "admin@localhost"}`, P.keys.publicKey, P.keys.privateKey);
+    const payload = JSON.stringify({ title, body, tag: opts.tag || "portfoy", url: opts.url || "/" });
+    let sent = 0; const dead = [];
+    for (const sub of P.subs) {
+      try { await webpush.sendNotification(sub, payload); sent++; }
+      catch (e) { if (e?.statusCode === 404 || e?.statusCode === 410) dead.push(sub.endpoint); }
+    }
+    if (dead.length) { P.subs = P.subs.filter((s) => !dead.includes(s.endpoint)); kvSave("push_state", P).catch(() => {}); }
+    return sent;
+  } catch { return 0; }
+}
+app.get("/api/push/pubkey", async (_req, res) => {
+  const P = await pushGet();
+  res.json({ key: P.keys.publicKey, subs: P.subs.length });
+});
+app.post("/api/push/subscribe", async (req, res) => {
+  const sub = req.body?.sub;
+  if (!sub?.endpoint) return res.status(400).json({ error: "abonelik eksik" });
+  const P = await pushGet();
+  if (!P.subs.some((s) => s.endpoint === sub.endpoint)) { P.subs.push(sub); await kvSave("push_state", P).catch(() => {}); }
+  res.json({ ok: true, subs: P.subs.length });
+});
+app.post("/api/push/unsubscribe", async (req, res) => {
+  const endpoint = req.body?.endpoint;
+  const P = await pushGet();
+  P.subs = P.subs.filter((s) => s.endpoint !== endpoint);
+  await kvSave("push_state", P).catch(() => {});
+  res.json({ ok: true, subs: P.subs.length });
+});
+app.post("/api/push/test", async (_req, res) => {
+  const sent = await pushSend("🧪 Test bildirimi", "Cep bildirimleri çalışıyor — bekçi artık cebinde.");
+  res.json({ sent });
+});
 
 /* ===== Portföy Bekçisi — ani hareket / risk uyarı e-postaları =====================
  * Saatte bir gerçek portföyü tarar (Alfa Avı'ndan bağımsız). Amaç: kârı KORU + uzun
@@ -6257,6 +6318,242 @@ app.delete("/api/flows/:id", async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+/* ===== Strateji Laboratuvarı ======================================================
+ * Alfa kurallarının parametreli backtest'i — DEFTERE ASLA YAZMAZ (tam kum havuzu).
+ * Motorla aynı sinyal/çıkış mantığı, ama işlemler geçmiş üzerinde yeniden türetilir
+ * (dondurulmuş defter değil) → "kural X olsaydı ne olurdu?" sorusuna dürüst cevap.
+ * Tek seferde baseline (canlı kurallar) + varyant koşulur, yan yana döner.
+ * DÜRÜST NOT: evren bugünün evreni (radar+swing+çekirdek) — hafif survivorship var. */
+const LAB = { _running: false, last: null };
+const labClamp = (v, lo, hi, def) => { const n = Number(v); return isFinite(n) ? Math.min(hi, Math.max(lo, n)) : def; };
+function labParams(q = {}) {
+  const tp1 = labClamp(q.tp1, 2, 20, CH_ENG.tp1);
+  return {
+    start: /^\d{4}-\d{2}-\d{2}$/.test(q.start || "") && q.start >= "2025-01-01" ? q.start : "2025-07-01",
+    tp1, tp2: labClamp(q.tp2, tp1 + 1, 40, CH_ENG.tp2),
+    riskPct: labClamp(q.riskPct, 1, 6, CH_ENG.riskPct),
+    commission: labClamp(q.commission, 0, 5, CH_ENG.commission),
+    rsMode: ["off", "half", "gate"].includes(q.rsMode) ? q.rsMode : "half", // canlı kural: half
+    rsMin: labClamp(q.rsMin, 1, 95, CH_ENG.rsMin),
+    ep: q.ep !== false && q.ep !== "false",          // EP/haber şeridi
+    regimeGate: q.regimeGate !== false && q.regimeGate !== "false", // rejim kapısı
+  };
+}
+async function labCtx(start) {
+  // Motorun bağlam kurulumunun kum havuzu kopyası (defter YOK)
+  const data = await loadData().catch(() => ({}));
+  const syms = new Set(CH_ENG.core);
+  (RADAR_SYMBOLS || []).forEach((s) => syms.add(String(s).toUpperCase()));
+  (data.swingTrades || []).forEach((t) => t?.symbol && syms.add(String(t.symbol).toUpperCase()));
+  (CUMA_SYMBOLS || []).forEach((s) => syms.add(String(s).toUpperCase()));
+  (data.holdings || []).forEach((h) => { if (h?.type === "stock" && h.symbol) syms.add(String(h.symbol).toUpperCase()); });
+  const universe = [...syms].slice(0, CH_ENG.maxSyms);
+  const S = {};
+  for (const sym of universe) {
+    const v = candleCache[sym]?.candles;
+    if (v && v.length >= 60) S[sym] = { v, ema8: chEmaArr(v, 8), ema21: chEmaArr(v, 21), ema50: chEmaArr(v, 50), vma: chVmaArr(v, 20), idx: Object.fromEntries(v.map((c, i) => [c.time, i])) };
+  }
+  let Q = null; try { Q = chMkSeries(await getCandles(CH_ENG.indexSym)); } catch {}
+  const E = {}; for (const s of RAI_ETFS) { try { E[s] = chMkSeries(await getCandles(s)); } catch {} }
+  let VIXSER = null; try { VIXSER = chMkSeries(await getFredVix()); } catch {}
+  const RAIX = { Q, vol: VIXSER ? { ser: VIXSER, kind: "vix" } : E.VIXY ? { ser: E.VIXY, kind: "vixy" } : null, credit: chRatioSeries(E.HYG, E.IEF), rot: chRatioSeries(E.XLY, E.XLP), S };
+  await chRefreshEarnings(universe).catch(() => {});
+  await chRefreshSectors(universe).catch(() => {});
+  const emaGateAt = (d) => { if (!Q) return "on"; const i = chNear(Q, d); if (i == null || i < 21) return "on"; const c = Q.v[i].close; return c < Q.ema21[i] ? "off" : c < Q.ema8[i] ? "caution" : "on"; };
+  const regimeAt = (d) => { const g = emaGateAt(d); const rb = chRaiBand(chRaiAt(RAIX, d)?.score); return chWorse(g, rb === "riskoff" ? "off" : rb === "temkin" ? "caution" : "on"); };
+  const watch = universe.filter((s) => S[s]);
+  return { S, watch, regimeAt, start };
+}
+function labReplay(ctx, P) {
+  const { S, watch, regimeAt } = ctx;
+  const ref = S[watch[0]]; if (!ref) return { error: "önbellekte mum yok" };
+  const todayISO = new Date().toISOString().slice(0, 10);
+  const dates = ref.v.map((c) => c.time).filter((d) => d >= P.start && d < todayISO);
+  const size = (entry, stop) => { const frac = (entry - stop) / entry; const riskUSD = CH_ENG.startCapital * P.riskPct / 100; return Math.max(CH_ENG.minNotional, Math.min(CH_ENG.maxNotional, riskUSD / Math.max(0.001, frac))); };
+  let cash = CH_ENG.startCapital, peak = CH_ENG.startCapital, maxDD = 0, fees = 0;
+  const positions = [];
+  for (const d of dates) {
+    const regime = P.regimeGate ? regimeAt(d) : "on";
+    const defensive = regime === "off";
+    for (const p of positions.filter((x) => x.open)) {
+      const s = S[p.sym], i = s.idx[d]; if (i == null) continue; const c = s.v[i];
+      const effStop = p.tp1hit ? p.entry : p.stop;
+      if (c.low <= effStop) { const fr = p.rem, px = c.open != null && c.open < effStop ? c.open : effStop, pnl = fr * p.shares * (px - p.entry) - P.commission; cash += fr * p.shares * px - P.commission; fees += P.commission; p.realized += pnl; p.rem = 0; p.open = false; continue; }
+      if (!p.tp1hit && c.high >= p.tp1) { const pnl = 0.25 * p.shares * (p.tp1 - p.entry) - P.commission; cash += 0.25 * p.shares * p.tp1 - P.commission; fees += P.commission; p.realized += pnl; p.rem -= 0.25; p.tp1hit = true; }
+      if (p.tp1hit && !p.tp2hit && c.high >= p.tp2) { const pnl = 0.25 * p.shares * (p.tp2 - p.entry) - P.commission; cash += 0.25 * p.shares * p.tp2 - P.commission; fees += P.commission; p.realized += pnl; p.rem -= 0.25; p.tp2hit = true; }
+      if (p.open && p.rem > 0 && c.close < s.ema21[i]) { const fr = p.rem, pnl = fr * p.shares * (c.close - p.entry) - P.commission; cash += fr * p.shares * c.close - P.commission; fees += P.commission; p.realized += pnl; p.rem = 0; p.open = false; }
+      if (defensive && p.open && !p.tp1hit && c.close > p.entry) p.stop = Math.max(p.stop, p.entry);
+    }
+    const held = new Set(positions.filter((x) => x.open).map((x) => x.sym));
+    const free = (sym) => S[sym].idx[d] != null && !held.has(sym);
+    const sigs = regime === "off" ? [] : watch.filter(free)
+      .map((sym) => { const i = S[sym].idx[d]; const g = chSrvSignal(S, sym, i); return g ? { ...g, lane: "tech", rs: chRsAt(S[sym], i) } : null; })
+      .filter(Boolean).sort((a, b) => b.rs - a.rs || b.volRatio - a.volRatio);
+    const eps = P.ep ? watch.filter(free)
+      .map((sym) => { const i = S[sym].idx[d]; const g = chSrvEpSignal(S, sym, i); return g ? { ...g, lane: "ep" } : null; })
+      .filter(Boolean).sort((a, b) => b.volRatio - a.volRatio) : [];
+    const seen = new Set(); const cands = [];
+    for (const x of [...eps, ...sigs]) { if (!seen.has(x.sym)) { seen.add(x.sym); cands.push(x); } }
+    for (const sig of cands) {
+      if (chEarnBlocked(sig.sym, d)) continue;
+      const sct = CH_SECT.map[sig.sym];
+      if (sct && positions.some((p) => p.open && CH_SECT.map[p.sym] === sct)) continue;
+      const rsPctV = chRsPct(S, watch, d, sig.sym);
+      if (P.rsMode === "gate" && sig.lane !== "ep" && rsPctV != null && rsPctV < P.rsMin) continue;
+      let notional = size(sig.entry, sig.stop);
+      const half = regime === "caution" || (regime === "off" && sig.lane === "ep");
+      if (half) notional = Math.max(280, +(notional / 2).toFixed(0));
+      if (P.rsMode === "half" && sig.lane !== "ep" && rsPctV != null && rsPctV < P.rsMin) notional = Math.max(280, +(notional / 2).toFixed(0));
+      if (cash < notional + P.commission) continue;
+      cash -= notional + P.commission; fees += P.commission;
+      const shares = notional / sig.entry;
+      positions.push({ sym: sig.sym, lane: sig.lane, date: d, entry: sig.entry, stop: sig.stop,
+        tp1: sig.entry * (1 + P.tp1 / 100), tp2: sig.entry * (1 + P.tp2 / 100),
+        shares, notional, initRisk: shares * (sig.entry - sig.stop), realized: -P.commission, rem: 1, tp1hit: false, tp2hit: false, open: true });
+    }
+    let mtm = 0; for (const p of positions.filter((x) => x.open)) { const s = S[p.sym], i = s.idx[d]; if (i != null) mtm += p.rem * p.shares * s.v[i].close; }
+    const eq = cash + mtm; peak = Math.max(peak, eq); maxDD = Math.min(maxDD, eq / peak - 1);
+  }
+  // Kapanış istatistikleri (açık kalanlar son kapanışla değerlenir, "işlem" sayılmaz)
+  const closed = positions.filter((p) => !p.open);
+  const wins = closed.filter((p) => p.realized > 1);
+  const rs = closed.filter((p) => p.initRisk > 0).map((p) => p.realized / p.initRisk);
+  let mtmEnd = 0; for (const p of positions.filter((x) => x.open)) { const s = S[p.sym]; mtmEnd += p.rem * p.shares * s.v[s.v.length - 1].close; }
+  const equity = cash + mtmEnd;
+  return {
+    islem: closed.length, acik: positions.length - closed.length,
+    isabet: closed.length ? Math.round((wins.length / closed.length) * 100) : null,
+    ortR: rs.length ? +(rs.reduce((a, b) => a + b, 0) / rs.length).toFixed(2) : null,
+    getiriPct: +(((equity / CH_ENG.startCapital) - 1) * 100).toFixed(1),
+    maksDususPct: +(maxDD * 100).toFixed(1),
+    sermaye: +equity.toFixed(0), komisyon: +fees.toFixed(2),
+  };
+}
+app.post("/api/lab/backtest", async (req, res) => {
+  if (LAB._running) return res.status(429).json({ error: "laboratuvar meşgul — önceki koşu bitsin" });
+  LAB._running = true;
+  try {
+    const P = labParams(req.body || {});
+    const ctx = await labCtx(P.start);
+    const baseline = labReplay(ctx, labParams({ start: P.start })); // canlı kurallar, aynı pencere
+    const variant = labReplay(ctx, P);
+    LAB.last = new Date().toISOString();
+    res.json({ start: P.start, universe: ctx.watch.length, params: P, baseline, variant,
+      not: "Evren bugünün evrenidir (hafif survivorship). Sonuç geçmiştir, garanti değildir; komisyon dahil NET rakamlardır." });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+  finally { LAB._running = false; }
+});
+
+/* ===== Aylık Edge Raporu =========================================================
+ * Ay kapanınca (yeni ayın ilk kontrolünde, 6 saatte bir bakılır) geçen ay tek karneye
+ * iner: swing kapanışları + karar defteri kalitesi (güven/setup/plan-uyum/hata etiketi)
+ * + Alfa sicili + net değer seyri. Önce deterministik istatistik; ANTHROPIC_API_KEY
+ * varsa Claude yalnız SÜREÇ yorumu yazar (sayı uydurmaz — payload'daki veriyle sınırlı).
+ * KV "edge_reports" = { [YYYY-MM]: rapor }. Mail + push + Sen Yokken olayı düşer. */
+function edgePrevYm() { const d = new Date(); d.setUTCDate(1); d.setUTCDate(0); return d.toISOString().slice(0, 7); }
+
+function edgeStats(data, board, ym) {
+  const inYm = (iso) => (iso || "").slice(0, 7) === ym;
+  const trades = data.swingTrades || [];
+  const closed = trades.filter((t) => t.status === "closed" && inYm(t.closedAt));
+  const tradePnl = (t) => (t.realizedLots?.length
+    ? t.realizedLots.reduce((a, l) => a + (Number(l.pnlUSD) || 0), 0)
+    : (t.exitPrice != null && t.qty ? (t.exitPrice - t.entry) * t.qty : 0));
+  const rows = closed.map((t) => ({ sym: t.symbol, pnl: +tradePnl(t).toFixed(2), conf: t.conf || null, setup: t.setupKind || null, plan: t.planFollow || null, hata: t.mistakeTag || null, tez: (t.thesis || "").slice(0, 90) }));
+  const wins = rows.filter((r) => r.pnl > 1), losses = rows.filter((r) => r.pnl < -1);
+  const realizedUSD = +trades.flatMap((t) => (t.realizedLots || []).filter((l) => inYm(l.date)))
+    .reduce((a, l) => a + (Number(l.pnlUSD) || 0), 0).toFixed(2);
+  const grp = (key) => { const m = {}; for (const r of rows) { const k = r[key] || "—"; (m[k] ||= { n: 0, kazanan: 0, pnl: 0 }); m[k].n++; if (r.pnl > 1) m[k].kazanan++; m[k].pnl = +(m[k].pnl + r.pnl).toFixed(2); } return m; };
+  const sorted = rows.slice().sort((a, b) => b.pnl - a.pnl);
+  // Alfa sicili — pano replay'inden o ay kapananlar (rakamlar komisyon dahil NET)
+  const aPos = (board?.positions || []).filter((p) => !p.open && inYm(p.exitDate));
+  const alfa = { islem: aPos.length, kazanan: aPos.filter((p) => p.realized > 1).length,
+    pnl: +aPos.reduce((a, p) => a + (p.realized || 0), 0).toFixed(2),
+    komisyon: +aPos.reduce((a, p) => a + (p.fees || 0), 0).toFixed(2) };
+  // Net değer seyri (her snapshot kendi günkü kuruyla USD'ye çevrilir)
+  const snaps = (data.snapshots || []).filter((s) => inYm(s.date) && s.total > 0 && s.usdtry > 0).map((s) => s.total / s.usdtry);
+  let getiri = null, maksDusus = null;
+  if (snaps.length >= 2) {
+    getiri = +(((snaps[snaps.length - 1] / snaps[0]) - 1) * 100).toFixed(2);
+    let peak = -Infinity, mdd = 0;
+    for (const v of snaps) { peak = Math.max(peak, v); mdd = Math.min(mdd, v / peak - 1); }
+    maksDusus = +(mdd * 100).toFixed(2);
+  }
+  return {
+    ym, kapanan: rows.length, kazanan: wins.length, kaybeden: losses.length,
+    isabet: rows.length ? Math.round((wins.length / rows.length) * 100) : null,
+    realizedUSD,
+    ortKazanc: wins.length ? +(wins.reduce((a, r) => a + r.pnl, 0) / wins.length).toFixed(2) : null,
+    ortKayip: losses.length ? +(losses.reduce((a, r) => a + r.pnl, 0) / losses.length).toFixed(2) : null,
+    planUyum: grp("plan"), guvenKalibrasyonu: grp("conf"), setupKirilimi: grp("setup"), hataEtiketleri: grp("hata"),
+    enIyi: sorted[0] || null, enKotu: sorted[sorted.length - 1] || null, islemler: rows,
+    alfa, netDeger: { getiriPct: getiri, maksDususPct: maksDusus, gunSayisi: snaps.length },
+  };
+}
+
+const AI_EDGE_SCHEMA = {
+  type: "object", additionalProperties: false,
+  required: ["ozet", "guclu_yonler", "zayif_yonler", "ay_dersi", "gelecek_ay_kurali", "alfa_kiyasi"],
+  properties: {
+    ozet: { type: "string", description: "Ayın 2-3 cümlelik dürüst değerlendirmesi (süreç odaklı, sonuç değil)" },
+    guclu_yonler: { type: "array", items: { type: "string" }, description: "Verilerle desteklenen 2-3 güçlü yön" },
+    zayif_yonler: { type: "array", items: { type: "string" }, description: "Verilerle desteklenen 2-3 zayıf yön / tekrar eden kalıp" },
+    ay_dersi: { type: "string", description: "Bu ayın tek cümlelik en önemli dersi" },
+    gelecek_ay_kurali: { type: "string", description: "Gelecek ay ekrana yapıştırılabilecek kadar somut TEK kural" },
+    alfa_kiyasi: { type: "string", description: "Kaan'ın işlemleri ile Alfa Avı motorunun aynı aydaki sicili arasında 1-2 cümlelik disiplin kıyası" },
+  },
+};
+const AI_EDGE_SYSTEM = `Sen acımasız ama adil bir trading koçusun. Kaan'ın BİR AYLIK işlem karnesini süreç kalitesine göre değerlendireceksin — sonuca göre değil.
+Kurallar:
+- SADECE verilen JSON istatistiklerine dayan; sayı/olay uydurma. Alan boşsa "veri az" de, doldurmaya çalışma.
+- planUyum/guvenKalibrasyonu/setupKirilimi/hataEtiketleri kırılımlarındaki KALIPLARI ara: hangi setup para kazandırıyor, güven notu isabetle uyumlu mu, hangi hata tekrar ediyor.
+- alfa: aynı ayda kural motorunun (Alfa Avı) sicili — Kaan'la kıyasla ama küçümseme; amaç motoru övmek değil, disiplin farkını göstermek.
+- Türkçe, kısa, keskin. Yatırım tavsiyesi değil, süreç denetimi.`;
+
+async function edgeBuild(ym, { force = false } = {}) {
+  const store = (await kvLoad("edge_reports").catch(() => null)) || {};
+  if (store[ym] && !force) return store[ym];
+  const data = await loadData();
+  const stats = edgeStats(data, CH_ENG.lastBoard, ym);
+  const rec = { ym, at: new Date().toISOString(), stats, ai: null };
+  if (aiEnabled() && (stats.kapanan > 0 || stats.alfa.islem > 0)) {
+    try { const r = await askClaude({ system: AI_EDGE_SYSTEM, payload: stats, schema: AI_EDGE_SCHEMA, maxTokens: 4000 }); rec.ai = r.result; rec.model = r.model; }
+    catch (e) { rec.aiErr = aiErrMsg(e); } // AI süsü — çekirdek istatistik her koşulda kalır
+  }
+  store[ym] = rec;
+  await kvSave("edge_reports", store).catch(() => {});
+  return rec;
+}
+
+async function edgeTick() {
+  try {
+    const ym = edgePrevYm();
+    const store = (await kvLoad("edge_reports").catch(() => null)) || {};
+    if (store[ym]) return; // geçen ayın karnesi zaten çıkmış
+    const rec = await edgeBuild(ym);
+    const s = rec.stats;
+    const line = `${s.kapanan} kapanış · isabet %${s.isabet ?? "—"} · realize $${s.realizedUSD} · Alfa: ${s.alfa.islem} işlem $${s.alfa.pnl}`;
+    const aiHtml = rec.ai ? `<h3>Koç yorumu</h3><p>${rec.ai.ozet}</p><p><b>Ayın dersi:</b> ${rec.ai.ay_dersi}</p><p><b>Gelecek ay kuralı:</b> ${rec.ai.gelecek_ay_kurali}</p>` : "";
+    await chSendMail(`📊 Aylık Edge Raporu — ${ym}`,
+      `<h2>📊 ${ym} karnesi hazır</h2><p>${line}</p>
+       <ul><li>Ortalama kazanç ${s.ortKazanc != null ? `$${s.ortKazanc}` : "—"} · ortalama kayıp ${s.ortKayip != null ? `$${s.ortKayip}` : "—"}</li>
+       <li>En iyi: ${s.enIyi ? `<b>${s.enIyi.sym}</b> +$${s.enIyi.pnl}` : "—"} · en kötü: ${s.enKotu ? `<b>${s.enKotu.sym}</b> $${s.enKotu.pnl}` : "—"}</li>
+       <li>Net değer: ${s.netDeger.getiriPct != null ? `%${s.netDeger.getiriPct}` : "—"} · ay içi maks. düşüş ${s.netDeger.maksDususPct != null ? `%${s.netDeger.maksDususPct}` : "—"}</li></ul>
+       ${aiHtml}<p>Detaylı kırılım (setup · güven · plan uyumu · hata etiketleri) panoda: <b>Günlük Raporlar → Aylık Edge Raporu</b>.</p>`);
+    pushSend(`📊 Aylık Edge Raporu hazır — ${ym}`, line).catch(() => {});
+    try { await feedGet(); feedPush({ key: `edge:${ym}`, type: "mkt", sev: "info", sym: null, title: `Aylık Edge Raporu hazır (${ym})`, detail: line }); } catch {}
+  } catch (e) { console.error("edgeTick:", e.message); }
+}
+setTimeout(() => edgeTick().catch(() => {}), 3 * 60_000);
+setInterval(() => edgeTick().catch(() => {}), 6 * 60 * 60_000);
+
+app.get("/api/edge-reports", async (_req, res) => res.json((await kvLoad("edge_reports").catch(() => null)) || {}));
+app.post("/api/edge-reports/build", async (req, res) => {
+  const ym = String(req.query.ym || req.body?.ym || edgePrevYm());
+  if (!/^\d{4}-\d{2}$/.test(ym)) return res.status(400).json({ error: "ym biçimi YYYY-MM olmalı" });
+  try { res.json(await edgeBuild(ym, { force: true })); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.listen(PORT, () => {

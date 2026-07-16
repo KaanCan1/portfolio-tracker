@@ -8,6 +8,13 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500;600;700&display=swap" rel="stylesheet" />
   <link rel="icon" href="brand.svg" type="image/svg+xml" />
+  <!-- PWA: ana ekrana eklenebilir + Web Push (iOS 16.4+ yalnız ana-ekran PWA'da destekler) -->
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#16211a" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Portföy" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -50,6 +57,7 @@
       <div class="sidebar-foot">
         <div class="sb-mkt" id="sbMkt" hidden><span class="sbm-dot"></span><span class="sbm-t">—</span></div>
         <div class="updated" id="updated">—</div>
+        <button class="sb-push" id="pushBtn" hidden>Bildirimleri aç</button>
         <div class="sidebar-actions">
           <button class="btn ghost sm" id="refreshBtn" title="Yenile">↻ Yenile</button>
           <button class="btn ghost sm" id="logoutBtn" title="Çıkış yap">⏻ Çıkış</button>
@@ -412,6 +420,13 @@
           <p class="view-sub">$1.500 oyun parası · yapay zekânın kendi swing işlemleri · Radar + Swing evreninin tamamı taranır · gerçek fiyatlarla otomatik ölçülür (gerçek portföyden bağımsız)</p>
         </div>
         <section class="panel"><div id="challengeBox"><div class="rk-empty">Alfa Avı yükleniyor…</div></div></section>
+        <section class="panel" id="labPanel">
+          <div class="panel-head">
+            <div><h2>🧪 Strateji Laboratuvarı <span class="tip" data-tip="Alfa kurallarının parametreli backtest'i — deftere ASLA yazmaz. Aynı geçmiş pencerede canlı kurallar (baseline) ile senin varyantın yan yana koşulur: kuralı canlıya almadan önce burada test et. Not: evren bugünün evrenidir (hafif survivorship), sonuçlar geçmiştir — garanti değildir.">?</span></h2>
+            <span class="chart-sub">kuralı canlıya almadan test et — baseline vs varyant</span></div>
+          </div>
+          <div id="labBox"></div>
+        </section>
       </section>
 
       <!-- ===== Görünüm: Günlük Raporlar ===== -->
@@ -423,6 +438,14 @@
             <input type="date" id="daDate" class="da-date" />
           </div>
           <div id="dayAnalysisBox"><div class="rk-empty">İşlem analizi yükleniyor…</div></div>
+        </section>
+        <section class="panel" id="edgePanel">
+          <div class="panel-head">
+            <div><h2>📊 Aylık Edge Raporu <span class="tip" data-tip="Ay kapanınca otomatik: swing kapanışların + karar defteri kaliten + Alfa sicili tek karnede. Önce deterministik istatistik, üstüne (varsa) Claude'un süreç yorumu. Amaç sonucu övmek değil: hangi setup para kazandırıyor, güvenin kalibre mi, en pahalı hatan ne — onu göstermek.">?</span></h2>
+            <span class="chart-sub">ay biter, karne çıkar — edge ölçülür</span></div>
+            <select id="edgeMonthSel" class="da-date" hidden></select>
+          </div>
+          <div id="edgeBox"><div class="rk-empty">Rapor yükleniyor…</div></div>
         </section>
         <section class="panel" id="reportsPanel">
           <div class="panel-head">
@@ -907,7 +930,16 @@
   </nav>
 
   <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
-  <script src="app.js"></script>
+  <!-- app.js modüllere bölündü (15 Tem 2026) — SIRA ÖNEMLİ: klasik script'ler global kapsamı paylaşır -->
+  <script src="js/01-cekirdek.js"></script>
+  <script src="js/02-radar-motoru.js"></script>
+  <script src="js/03-tablolar-modallar.js"></script>
+  <script src="js/04-pano-realize.js"></script>
+  <script src="js/05-radar-view.js"></script>
+  <script src="js/06-analiz.js"></script>
+  <script src="js/07-alfa-oneriler.js"></script>
+  <script src="js/08-swing-defteri.js"></script>
+  <script src="js/09-boot-notlar-ai.js"></script>
   <script src="fx.js"></script>
 </body>
 </html>

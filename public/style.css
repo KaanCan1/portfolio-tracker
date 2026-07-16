@@ -1023,6 +1023,12 @@ tfoot td.l { text-align: left; }
 .sb-mkt.on .sbm-dot { background: #4ad07f; box-shadow: 0 0 0 3px rgba(74,208,127,.18); animation: livePulse 2.4s ease-in-out infinite; }
 .sb-mkt.half .sbm-dot { background: #e0a93c; box-shadow: 0 0 0 3px rgba(224,169,60,.15); }
 .sidebar-foot .updated { color: rgba(255,255,255,.45); font-size: 11px; margin-bottom: 10px; padding: 0 4px; }
+/* Cep bildirimleri düğmesi — sidebar diliyle sessiz pill; abonelikte yeşil vurgu */
+.sb-push { display: block; width: 100%; margin: 0 0 9px; padding: 7px 11px; border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.06); color: rgba(255,255,255,.82);
+  font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; text-align: center; transition: background .15s, border-color .15s; }
+.sb-push:hover { background: rgba(255,255,255,.12); }
+.sb-push.on { border-color: rgba(74,208,127,.45); color: #7bc89b; }
 .sidebar-actions { display: flex; gap: 8px; }
 .sidebar-actions .btn.ghost {
   flex: 1; background: rgba(255,255,255,.08); color: #fff; border-color: rgba(255,255,255,.15);
@@ -3412,3 +3418,27 @@ svg.fx-pop { animation: fxPop .7s cubic-bezier(.22,1,.36,1) both; transform-orig
   to   { opacity: 1; transform: none; }
 }
 @media (prefers-reduced-motion: reduce) { .modal-bg:not([hidden]) .modal { animation: none !important; } }
+
+/* ---- Aylık Edge Raporu ---- */
+.edge-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 9px; margin-bottom: 12px; }
+.edge-kpi { background: var(--bg3); border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; display: flex; flex-direction: column; gap: 2px; }
+.edge-kpi i { font-style: normal; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); }
+.edge-kpi b { font-size: 16.5px; font-variant-numeric: tabular-nums; letter-spacing: -.2px; }
+.edge-line { font-size: 12.5px; color: var(--ink2); margin: 2px 0 12px; }
+.edge-grps { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; margin-bottom: 12px; }
+@media (max-width: 720px) { .edge-grps { grid-template-columns: 1fr; } }
+.edge-grp .tp-h { margin-bottom: 5px; }
+.edge-grp .dj-table { width: 100%; min-width: 0; }
+.edge-ai { border: 1px solid var(--green-line); background: var(--bg3); border-radius: 12px; padding: 12px 14px; margin-top: 4px; }
+.edge-ai p { font-size: 13px; color: var(--ink2); margin: 6px 0; }
+.edge-ai .ch-ev { margin: 6px 0 6px 14px; }
+
+/* ---- Strateji Laboratuvarı ---- */
+.lab-form { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-end; margin-bottom: 13px; }
+.lab-f { display: flex; flex-direction: column; gap: 3px; font-size: 12.5px; color: var(--ink2); }
+.lab-f i { font-style: normal; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); }
+.lab-f input[type="number"], .lab-f select { width: 92px; padding: 6px 8px; border: 1px solid var(--line-strong); border-radius: 9px; background: var(--card); font: inherit; font-size: 12.5px; }
+.lab-f select { width: auto; min-width: 120px; }
+.lab-f.lab-chk { flex-direction: row; align-items: center; gap: 6px; padding-bottom: 7px; font-weight: 600; }
+.lab-tbl table { min-width: 0; }
+.lab-tbl td b { font-variant-numeric: tabular-nums; }
