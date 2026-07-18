@@ -783,6 +783,76 @@ function renderRule1() { // panel: "Portföy Önerileri" (#rule1Panel id'si koru
   }
 }
 
+/* ====================== Risk Bütçesi — aylık zarar freni (Genel Bakış) ============
+ * Sunucu hesaplar (/api/risk-budget): bütçe = ay başı sermayenin %X'i; tüketim =
+ * ay içi net realize zarar + stoplu pozisyonların açık riski. Burada yalnız gösterim
+ * + yüzde ayarı vardır. Dolunca "yeni giriş yok" freni görünür (öneri, emir değil). */
+let RBUD = { d: null, t: 0 };
+async function renderRiskBudget(force) {
+  const el = $("#riskBudgetPanel");
+  if (!el) return;
+  try {
+    if (force || !RBUD.d || Date.now() - RBUD.t > 5 * 60_000) {
+      RBUD.d = await (await fetch("/api/risk-budget")).json();
+      RBUD.t = Date.now();
+    }
+  } catch { return; }
+  const r = RBUD.d;
+  if (!r || r.error || !(r.budget > 0)) { el.innerHTML = ""; return; }
+  const pctFill = Math.max(0, Math.min(100, r.ratio));
+  const tone = r.level === "full" ? "full" : r.level === "warn" ? "warn" : r.level === "watch" ? "watch" : "ok";
+  const msg = r.level === "full"
+    ? `<div class="rbud-brake">🧯 Bütçe doldu — bu ay <b>yeni swing girişi önerilmez</b>. Mevcutları planına göre yönet, stopları koru (Kural 1).</div>`
+    : r.level === "warn"
+    ? `<div class="rbud-brake soft">⚠ Bütçenin %${Math.round(r.ratio)}'i dolu — yeni girişte pozisyonu küçült ya da bekle.</div>`
+    : "";
+  const rows = (r.rows || []).slice(0, 5).map((x) =>
+    `<span class="rbud-row"><b>${x.sym}</b> ${fmtUSD0(x.risk)}<i>${x.kind === "swing" ? "swing" : "uzun vade"}</i></span>`).join("");
+  el.innerHTML = `
+    <section class="panel rbud-panel">
+      <div class="panel-head">
+        <div>
+          <h2>${svgIcon("shield", "h2-ic")}Risk Bütçesi <span class="sw-chip">${r.ym}</span> ${tipIcon("Aylık kayıp bütçesi: ay başı sermayenin %" + r.pct + "'i. Tüketim = ay içi net realize zarar + stoplu pozisyonların stopa mesafesi (açık risk). Stopsuz uzun vadeler dahil değildir — onların riski tez bazlıdır. Bütçe dolunca ay sonuna kadar yeni giriş önerilmez: kötü ay felakete dönmesin (Kural 1). Öneridir, emir değil.")}</h2>
+          <span class="chart-sub">Kural 1 freni · bütçe ${fmtUSD0(r.budget)} (sermayenin %${r.pct}'i) — <b class="${r.level === "ok" ? "pos" : r.level === "full" ? "neg" : ""}">${fmtUSD0(r.left)} kaldı</b></span>
+        </div>
+        <button class="btn icon" id="rbudCfgBtn" title="Bütçe yüzdesini değiştir">${svgIcon("settings", "ic-sm") || "⚙"}</button>
+      </div>
+      <div class="rbud-bar"><i class="rbud-fill ${tone}" style="width:${pctFill.toFixed(1)}%"></i>
+        <span class="rbud-mark m80" title="%80 uyarı eşiği"></span></div>
+      <div class="rbud-split">
+        <span>Realize zarar <b class="${r.lossUsed > 0 ? "neg" : ""}">${fmtUSD0(r.lossUsed)}</b>${r.realizedNet > 0 ? ` <i class="rbud-net">(ay net +${fmtUSD0(r.realizedNet)} — bütçe yemiyor)</i>` : ""}</span>
+        <span>Açık stop riski <b>${fmtUSD0(r.openRisk)}</b></span>
+        <span class="rbud-pct ${tone}">%${Math.round(r.ratio)}</span>
+      </div>
+      ${rows ? `<div class="rbud-rows">${rows}</div>` : ""}
+      ${msg}
+      <form class="rbud-cfg" id="rbudCfgForm" hidden>
+        <label>Bütçe (sermayenin %'i) <input type="number" name="pct" min="0.5" max="10" step="0.5" value="${r.pct}" /></label>
+        <button class="btn primary sm" type="submit">Kaydet</button>
+      </form>
+    </section>`;
+  if (!el._rbudBound) {
+    el._rbudBound = true;
+    el.addEventListener("click", (ev) => {
+      if (ev.target.closest("#rbudCfgBtn")) {
+        const f = $("#rbudCfgForm");
+        if (f) f.hidden = !f.hidden;
+      }
+    });
+    el.addEventListener("submit", async (ev) => {
+      if (!ev.target.closest("#rbudCfgForm")) return;
+      ev.preventDefault();
+      const pct = Number(new FormData(ev.target).get("pct"));
+      try {
+        const rr = await fetch("/api/risk-budget", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pct }) });
+        if (!rr.ok) throw new Error((await rr.json()).error || "kaydedilemedi");
+        toast("Risk bütçesi güncellendi");
+        renderRiskBudget(true);
+      } catch (e) { toast(e.message || "kaydedilemedi", "err"); }
+    });
+  }
+}
+
 /* ====================== En Büyük 3 Pozisyon (olumlu/olumsuz + haber) ============ */
 const RECO_LBL = { strong_buy: "Güçlü Al", buy: "Al", hold: "Tut", sell: "Sat", strong_sell: "Güçlü Sat" };
 function renderTopPicks() {

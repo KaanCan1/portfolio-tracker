@@ -29,17 +29,52 @@ let trades = [
   { id: "sw-3", symbol: "TSLA", entry: 240, stop: 225, target: 270, qty: 12, openedAt: iso(Y, M - 4, 6), status: "closed", exitPrice: 232, closedAt: iso(Y, M - 4, 9), note: "stop yedi", thesis: "kırılım denemesi, zayıf hacim", conf: "B", setupKind: "breakout", planFollow: "yes" },
   { id: "sw-4", symbol: "MSFT", entry: 410, stop: 398, target: 440, qty: 8, openedAt: iso(Y, M - 3, 1), status: "closed", exitPrice: 436, closedAt: iso(Y, M - 3, 22), note: "", thesis: "gap sonrası EP", conf: "B", setupKind: "ep", planFollow: "no", mistakeTag: "target-close" },
   { id: "sw-5", symbol: "PLTR", entry: 24.5, stop: 22, target: 31, qty: 200, openedAt: iso(Y, M - 2, 4), status: "closed", exitPrice: 28.1, closedAt: iso(Y, M - 2, 19), note: "", thesis: "10MA geri çekilme, trend güçlü", conf: "A", setupKind: "pullback", planFollow: "yes" },
-  { id: "sw-6", symbol: "AAPL", entry: 188, stop: 181, target: 205, qty: 30, openedAt: iso(Y, M - 1, 7), status: "closed", exitPrice: 197, closedAt: iso(Y, M - 1, 24), note: "", thesis: "20MA sıçrama", conf: "C", setupKind: "pullback", planFollow: "yes" },
-  { id: "sw-7", symbol: "SMCI", entry: 42, stop: 38, target: 52, qty: 60, openedAt: iso(Y, M, 2), status: "closed", exitPrice: 46.5, closedAt: iso(Y, M, 8), note: "kısmi", thesis: "episodic pivot, kazanç gap'i", conf: "C", setupKind: "ep", planFollow: "partial", mistakeTag: "early-fear" },
-  // açık
-  { id: "sw-8", symbol: "NVDA", entry: 130, stop: 122, target: 150, qty: 35, openedAt: iso(Y, M, 5), status: "open", note: "trend devam" },
+  { id: "sw-6", symbol: "AAPL", entry: 188, stop: 181, target: 205, qty: 30, openedAt: iso(Y, M - 1, 7), status: "closed", exitPrice: 197, closedAt: iso(Y, M - 1, 24), note: "", thesis: "20MA sıçrama", conf: "C", setupKind: "pullback", planFollow: "yes", planWeek: "2026-W26", planned: true },
+  { id: "sw-7", symbol: "SMCI", entry: 42, stop: 38, target: 52, qty: 60, openedAt: iso(Y, M, 2), status: "closed", exitPrice: 46.5, closedAt: iso(Y, M, 8), note: "kısmi", thesis: "episodic pivot, kazanç gap'i", conf: "C", setupKind: "ep", planFollow: "partial", mistakeTag: "early-fear", planWeek: "2026-W27", planned: false },
+  // açık — planWeek/planned: Hafta Sonu Rutini rozet + karne testi
+  { id: "sw-8", symbol: "NVDA", entry: 130, stop: 122, target: 150, qty: 35, openedAt: iso(Y, M, 5), status: "open", note: "trend devam", planWeek: "2026-W28", planned: true },
   { id: "sw-8b", symbol: "NVDA", entry: 138, stop: 128, target: 160, qty: 15, openedAt: iso(Y, M, 9), status: "open", note: "2. swing ekleme" },
   { id: "sw-9", symbol: "META", entry: 580, stop: 555, target: 640, qty: 6, openedAt: iso(Y, M, 9), status: "open", note: "" },
-  { id: "sw-10", symbol: "GOOGL", entry: 172, stop: 165, target: 190, qty: 20, openedAt: iso(Y, M, 11), status: "open", note: "boğa bayrağı" },
+  { id: "sw-10", symbol: "GOOGL", entry: 172, stop: 165, target: 190, qty: 20, openedAt: iso(Y, M, 11), status: "open", note: "boğa bayrağı", planWeek: "2026-W28", planned: false },
 ];
 // META hedefini geçti (target uyarısı), GOOGL stop'u deldi (stop uyarısı)
 const live = { NVDA: { price: 141.2, stale: false }, META: { price: 642, stale: false }, GOOGL: { price: 163.5, stale: false } };
 let goal = { min: 600, max: 700, capital: 50000, riskPct: 1 };
+// Risk Bütçesi fikstürü — %86 dolu (warn bandı görünür test edilir)
+const RBUD_FIX = { ym: new Date().toISOString().slice(0, 7), pct: 3, capital: 24000, budget: 720,
+  realizedNet: -310, lossUsed: 310, openRisk: 309.5, sells: 4,
+  rows: [{ sym: "NVDA", kind: "swing", risk: 182 }, { sym: "GOOGL", kind: "swing", risk: 78.5 }, { sym: "NVDA", kind: "uzun", risk: 49 }] };
+// Hafta Sonu Rutini fikstürü — ISO hafta + bellek-içi plan (boş başlar, sihirbazla dolar)
+const WK_YW = (() => { const d = new Date(); const dt = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const day = dt.getUTCDay() || 7; dt.setUTCDate(dt.getUTCDate() + 4 - day);
+  const w = Math.ceil(((dt - Date.UTC(dt.getUTCFullYear(), 0, 1)) / 86400000 + 1) / 7);
+  return `${dt.getUTCFullYear()}-W${String(w).padStart(2, "0")}`; })();
+let WK_PLAN = { candidates: [
+    { sym: "NVDA", setup: "breakout", entry: 142.5, stop: 136, qty: 15, note: "ORH kırılımı + hacim" },
+    { sym: "AMD", setup: "pullback", entry: 156, stop: 149.5, qty: 20, note: "EMA21 geri çekilme" },
+  ], watch: ["MU", "INTC"], regime: { band: "SAKİN", vix: 16.78, fng: 37 },
+  note: "Yalnız A-kalite kurulum; Perşembe TÜFE günü yeni giriş yok.",
+  createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+// Fırsat radarı fikstürü (sihirbaz 2. adım + Haftalık Fırsatlar görünümü)
+const oppFix = (symbol, name, score, setupType, entry, stop, target, rr, owned, watched) => ({
+  symbol, name, theme: null, owned, watched, cuma: false,
+  price: entry * 0.995, dayChangePct: 1.2, rsi: 58, score,
+  trend: "yükseliş", setup: setupType ? { type: setupType, label: setupType } : null,
+  verdict: { key: "buy", label: "Girilebilir" }, grade: score >= 80 ? "A" : "B",
+  entry, entryType: "kırılım", stop, target, target2: null, rr,
+  riskPct: +((entry - stop) / entry * 100).toFixed(1), rewardPct: +((target - entry) / entry * 100).toFixed(1),
+  pattern: null, weekly: { dir: "up", tone: "good" }, hitRate: null,
+  ret1M: 6.2, ret3M: 18.4, fromHighPct: 4.1, spark: null, insider: null, news: [],
+  why: [{ tone: "good", text: "50g üstünde, hacim teyitli kırılım bölgesi. (MOCK)" }],
+});
+const OPPS_FIX = { updated: Date.now(), refreshing: false, total: 18, scanned: 6, hitRates: {},
+  items: [
+    oppFix("NVDA", "NVIDIA", 86, "breakout", 142.5, 136, 158, 2.5, true, false),
+    oppFix("AMD", "Advanced Micro", 79, "pullback", 156, 149.5, 172, 2.4, false, true),
+    oppFix("MU", "Micron", 74, "breakout", 118, 112.5, 131, 2.3, false, true),
+    oppFix("AVGO", "Broadcom", 71, "ep", 172, 164, 190, 2.2, false, false),
+    oppFix("INTC", "Intel", 63, "pullback", 23.4, 22.1, 26.5, 2.4, false, true),
+  ] };
 const CH_LEDGER = { trades: [] }; // Alfa Avı immutable defter (önizleme: bellek-içi)
 // Günlük İşlem Analizi önizlemesi: BUGÜNE tarihli örnek işlemler (1 swing satış, 1 uzun satış, 1 alım)
 const _daToday = new Date().toISOString().slice(0, 10);
@@ -786,6 +821,38 @@ const server = createServer(async (req, res) => {
       ],
     };
     res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify(board)); return;
+  }
+  // Risk Bütçesi — aylık zarar freni (uyarı eşiği testi için %86 dolu)
+  if (url === "/api/risk-budget" && req.method === "PUT") {
+    const b = await readBody(req);
+    RBUD_FIX.pct = Math.min(10, Math.max(0.5, +b.pct || 3));
+    RBUD_FIX.budget = +(RBUD_FIX.capital * RBUD_FIX.pct / 100).toFixed(2);
+    res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify({ pct: RBUD_FIX.pct })); return;
+  }
+  if (url === "/api/risk-budget") {
+    const r = { ...RBUD_FIX };
+    r.used = +(r.lossUsed + r.openRisk).toFixed(2);
+    r.left = +Math.max(0, r.budget - r.used).toFixed(2);
+    r.ratio = +(r.used / r.budget * 100).toFixed(1);
+    r.level = r.ratio >= 100 ? "full" : r.ratio >= 80 ? "warn" : r.ratio >= 50 ? "watch" : "ok";
+    res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify(r)); return;
+  }
+  // Hafta Sonu Rutini — haftalık plan (bellek-içi)
+  if (url === "/api/weekly-plan" && req.method === "POST") {
+    const b = await readBody(req);
+    WK_PLAN = { candidates: (b.candidates || []).slice(0, 10), watch: (b.watch || []).slice(0, 15),
+      regime: b.regime || null, note: String(b.note || "").slice(0, 400),
+      createdAt: WK_PLAN?.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() };
+    res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify({ ok: true, yw: WK_YW, plan: WK_PLAN })); return;
+  }
+  if (url === "/api/weekly-plan") {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ yw: WK_YW, plan: WK_PLAN, recent: WK_PLAN ? [{ yw: WK_YW, count: WK_PLAN.candidates.length, updatedAt: WK_PLAN.updatedAt }] : [] })); return;
+  }
+  // Fırsat radarı (sihirbaz 2. adım + Haftalık Fırsatlar) — kompakt fikstür
+  if (url === "/api/opportunities") {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify(OPPS_FIX)); return;
   }
   if (url === "/api/weekly") {
     const wk = { portfolio: { fromDate: iso(Y, M, 9), toDate: iso(Y, M, 16), changeTRY: -22019, pct: -10.92 },

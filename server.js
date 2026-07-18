@@ -1151,6 +1151,22 @@ async function guardTick(trigger = "timer") {
         feedPush({ key: `swtarget:${sym}:${today}`, type: "pos", sev: "warn", sym,
           title: `Swing: ${sym} hedefe ulaştı — kâr-al planı`, detail: `${usd0(q.price)} ≥ hedef ${usd0(target)}` });
     }
+    // Risk Bütçesi kontrolü — bekçinin zaten çektiği fiyatlarla, ek istek yok
+    try {
+      const rb = rbCompute(data, qmap);
+      if (rb.budget > 0 && rb.ratio >= 80 && rb.ratio < 100)
+        feedPush({ key: `riskbudget:${rb.ym}:80`, type: "pos", sev: "warn", sym: null,
+          title: `Risk bütçesinin %${Math.round(rb.ratio)}'i dolu`,
+          detail: `Realize zarar ${usd0(rb.lossUsed)} + açık stop riski ${usd0(rb.openRisk)} / bütçe ${usd0(rb.budget)} · yeni girişte küçül` });
+      if (rb.budget > 0 && rb.ratio >= 100) {
+        feedPush({ key: `riskbudget:${rb.ym}:100`, type: "pos", sev: "crit", sym: null,
+          title: "Risk bütçesi DOLDU — bu ay yeni giriş yok",
+          detail: `Kullanım ${usd0(rb.used)} / ${usd0(rb.budget)} (%${Math.round(rb.ratio)}) · ay sonuna kadar yalnız yönet (Kural 1)` });
+        if (mark(`rbfull:${rb.ym}`))
+          mails.push({ subject: `🧯 Risk bütçesi doldu (%${Math.round(rb.ratio)}) — bu ay yeni giriş yok`,
+            html: `<h2>🧯 Aylık risk bütçen doldu</h2><p>Ay içi realize zarar <b>${usd0(rb.lossUsed)}</b> + açık stop riski <b>${usd0(rb.openRisk)}</b> = <b>${usd0(rb.used)}</b>; bütçen ${usd0(rb.budget)} (sermayenin %${rb.pct}'i) idi.</p><p><b>Fren:</b> ay sonuna kadar yeni swing girişi önerilmez — mevcutları planına göre yönet, stopları koru. Kötü ay felakete dönmesin (Kural 1). Karar senin; bu bir hatırlatmadır, emir değil.</p>` });
+      }
+    } catch {}
     if (changed) await guardSave(notified);
     for (const m of mails) await chSendMail(m.subject, m.html);
     GUARD.last = new Date().toISOString();
@@ -1163,6 +1179,186 @@ setTimeout(() => guardTick("startup").catch(() => {}), 120_000);
 setInterval(() => guardTick("timer").catch(() => {}), 60 * 60_000);
 app.post("/api/guard/scan", async (_req, res) => res.json(await guardTick("manual")));
 app.get("/api/guard/status", (_req, res) => res.json({ last: GUARD.last, lastSummary: GUARD.lastSummary, mailConfigured: !!process.env.RESEND_API_KEY }));
+
+/* ===== Risk Bütçesi — aylık zarar freni ==========================================
+ * Kural 1'in somut hali: ay için bir kayıp bütçesi (ay başı sermayenin %X'i) vardır.
+ * Tüketim = ay içi NET realize zarar + stoplu pozisyonların stopa mesafesi (açık risk).
+ * Stopsuz uzun vadeler bilinçli olarak DIŞARIDA (onların riski tez bazlı, stop yok).
+ * %80'de uyarı, %100'de "bu ay yeni giriş yok" freni — feed key-dedup ile tek bildirim.
+ * Yasak değil öneri: uygulama emir vermez, görünür fren + itiraf kaydı tutar. */
+function rbConfig(data) {
+  const pct = Number(data?.riskBudget?.pct);
+  return { pct: isFinite(pct) && pct >= 0.5 && pct <= 10 ? pct : 3 };
+}
+function rbMonthStartCapitalUSD(data, ym) {
+  const snaps = (data.snapshots || []).filter((s) => Number(s.total) > 0 && Number(s.usdtry) > 0);
+  const inM = snaps.filter((s) => String(s.date).slice(0, 7) === ym);
+  const pick = inM[0] || snaps[snaps.length - 1] || null; // ay başı yoksa son bilinen
+  return pick ? Number(pick.total) / Number(pick.usdtry) : 0;
+}
+function rbCompute(data, qmap) {
+  const ym = new Date().toISOString().slice(0, 7);
+  const { pct } = rbConfig(data);
+  const capital = rbMonthStartCapitalUSD(data, ym);
+  const budget = capital * pct / 100;
+  // Ay içi NET realize (işlem geçmişi satışları; Midas satış komisyonu düşülür)
+  let realizedNet = 0, sells = 0;
+  for (const t of (data.trades || [])) {
+    if (t.kind !== "sell" || String(t.date).slice(0, 7) !== ym) continue;
+    realizedNet += (Number(t.shares) || 0) * ((Number(t.sellUSD) || 0) - (Number(t.buyUSD) || 0)) - MIDAS_FEE;
+    sells++;
+  }
+  const lossUsed = Math.max(0, -realizedNet); // ay net kârdaysa bütçe yemez
+  // Açık risk: stoplu pozisyonlar — (fiyat − stop) × adet
+  const rows = [];
+  for (const t of (data.swingTrades || []).filter((x) => x.status === "open" && Number(x.qty) > 0 && Number(x.stop) > 0)) {
+    const sym = String(t.symbol).toUpperCase();
+    const px = qmap?.[sym]?.price > 0 ? qmap[sym].price : Number(t.entry) || 0;
+    rows.push({ sym, kind: "swing", risk: +Math.max(0, (px - Number(t.stop)) * Number(t.qty)).toFixed(2) });
+  }
+  for (const h of (data.holdings || []).filter((x) => x.type === "stock" && Number(x.quantity) > 0 && Number(x.planStop) > 0)) {
+    const sym = String(h.symbol).toUpperCase();
+    // Havuzdan açık swinglere kilitli adet düşülür — aynı risk iki kez sayılmasın
+    const locked = (data.swingTrades || []).filter((t) => t.status === "open" && String(t.symbol).toUpperCase() === sym)
+      .reduce((a, t) => a + (Number(t.qty) || 0), 0);
+    const qty = Math.max(0, Number(h.quantity) - locked);
+    if (!(qty > 0)) continue;
+    const px = qmap?.[sym]?.price > 0 ? qmap[sym].price : Number(h.costUSD) || 0;
+    rows.push({ sym, kind: "uzun", risk: +Math.max(0, (px - Number(h.planStop)) * qty).toFixed(2) });
+  }
+  rows.sort((a, b) => b.risk - a.risk);
+  const openRisk = +rows.reduce((a, r) => a + r.risk, 0).toFixed(2);
+  const used = +(lossUsed + openRisk).toFixed(2);
+  const ratio = budget > 0 ? +(used / budget * 100).toFixed(1) : 0;
+  const level = ratio >= 100 ? "full" : ratio >= 80 ? "warn" : ratio >= 50 ? "watch" : "ok";
+  return { ym, pct, capital: +capital.toFixed(2), budget: +budget.toFixed(2),
+    realizedNet: +realizedNet.toFixed(2), lossUsed: +lossUsed.toFixed(2),
+    openRisk, used, left: +Math.max(0, budget - used).toFixed(2), ratio, level, rows: rows.slice(0, 8), sells };
+}
+app.get("/api/risk-budget", async (_req, res) => {
+  try {
+    const data = await loadData();
+    const syms = [...new Set([
+      ...(data.swingTrades || []).filter((t) => t.status === "open" && Number(t.stop) > 0).map((t) => String(t.symbol).toUpperCase()),
+      ...(data.holdings || []).filter((h) => h.type === "stock" && Number(h.planStop) > 0).map((h) => String(h.symbol).toUpperCase()),
+    ])];
+    const qmap = syms.length ? await fetchStocks(syms).catch(() => ({})) : {};
+    res.json(rbCompute(data, qmap));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.put("/api/risk-budget", async (req, res) => {
+  try {
+    const pct = Number(req.body?.pct);
+    if (!(pct >= 0.5 && pct <= 10)) return res.status(400).json({ error: "bütçe %0.5–10 arasında olmalı" });
+    const data = await loadData();
+    data.riskBudget = { pct: +pct.toFixed(1) };
+    await saveData(data);
+    res.json(data.riskBudget);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/* ===== Hafta Sonu Rutini — haftalık plan + Pazar brifingi =========================
+ * Plan KV "weekly_plans"ta ISO hafta anahtarıyla durur ({plans, state}). Cumartesi/
+ * Pazar yazılan plan GELECEK haftayı hedefler (ISO haftası pazartesi başlar), hafta
+ * içi düzenleme o haftaya işler. Swing açılışında sembol plandaysa kayda planlı/plansız
+ * işareti düşer → Karar Defteri "plana uyum"u tahmin değil kayıt olur. Pazar 18:00 TR
+ * sonrası: plan varsa brifing maili+push, yoksa nazik hatırlatma (haftada bir, idempotent). */
+let WKND = null;
+async function wkndGet() {
+  if (WKND) return WKND;
+  const v = await kvLoad("weekly_plans").catch(() => null);
+  WKND = v && v.plans ? v : { plans: {}, state: {} };
+  WKND.state = WKND.state || {};
+  return WKND;
+}
+function isoYw(dateStr) {
+  const [y, m, d] = String(dateStr).slice(0, 10).split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  const day = dt.getUTCDay() || 7;
+  dt.setUTCDate(dt.getUTCDate() + 4 - day);
+  const yy = dt.getUTCFullYear();
+  const w = Math.ceil(((dt - Date.UTC(yy, 0, 1)) / 86400_000 + 1) / 7);
+  return `${yy}-W${String(w).padStart(2, "0")}`;
+}
+function trNowParts() {
+  const p = new Intl.DateTimeFormat("en-US", { timeZone: "Europe/Istanbul", weekday: "short", hour: "numeric", hour12: false, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
+  const g = (t) => p.find((x) => x.type === t)?.value;
+  return { wd: g("weekday"), hour: +g("hour"), date: `${g("year")}-${g("month")}-${g("day")}` };
+}
+function wkndTargetYw() {
+  const { wd, date } = trNowParts();
+  const d = new Date(date + "T12:00:00Z");
+  if (wd === "Sat") d.setUTCDate(d.getUTCDate() + 2);
+  if (wd === "Sun") d.setUTCDate(d.getUTCDate() + 1);
+  return isoYw(d.toISOString());
+}
+function wkndNorm(b, prev) {
+  const num = (v) => (v == null || v === "" || !isFinite(Number(v)) ? null : Number(v));
+  const candidates = (Array.isArray(b.candidates) ? b.candidates : []).slice(0, 10).map((c) => ({
+    sym: String(c.sym || "").toUpperCase().split(/\s/)[0].slice(0, 8),
+    setup: c.setup ? String(c.setup).slice(0, 20) : null,
+    entry: num(c.entry), stop: num(c.stop), qty: num(c.qty),
+    note: String(c.note || "").slice(0, 140),
+  })).filter((c) => c.sym);
+  const watch = [...new Set((Array.isArray(b.watch) ? b.watch : []).map((s) => String(s).toUpperCase().slice(0, 8)).filter(Boolean))].slice(0, 15);
+  const regime = b.regime && typeof b.regime === "object"
+    ? { band: String(b.regime.band || "").slice(0, 30), vix: num(b.regime.vix), fng: num(b.regime.fng) } : null;
+  return { candidates, watch, regime, note: String(b.note || "").slice(0, 400),
+    createdAt: prev?.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() };
+}
+app.get("/api/weekly-plan", async (_req, res) => {
+  try {
+    const W = await wkndGet();
+    const yw = wkndTargetYw();
+    const recent = Object.keys(W.plans).sort().reverse().slice(0, 6)
+      .map((k) => ({ yw: k, count: (W.plans[k].candidates || []).length, updatedAt: W.plans[k].updatedAt }));
+    res.json({ yw, plan: W.plans[yw] || null, recent });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post("/api/weekly-plan", async (req, res) => {
+  try {
+    const W = await wkndGet();
+    const yw = wkndTargetYw();
+    const plan = wkndNorm(req.body || {}, W.plans[yw]);
+    if (!plan.candidates.length && !plan.watch.length) return res.status(400).json({ error: "en az bir aday ya da izleme sembolü seç" });
+    W.plans[yw] = plan;
+    // Eski haftaları buda (son 16 hafta kalsın)
+    for (const k of Object.keys(W.plans).sort().reverse().slice(16)) delete W.plans[k];
+    await kvSave("weekly_plans", W);
+    await feedGet().catch(() => {});
+    feedPush({ key: `wknd:${yw}:made:${plan.updatedAt.slice(0, 10)}`, type: "plan", sev: "info", sym: null,
+      title: `Haftalık plan hazır — ${plan.candidates.length} aday`, detail: plan.candidates.map((c) => c.sym).join(" · ") || "izleme listesi" });
+    res.json({ ok: true, yw, plan });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+async function wkndTick() {
+  const { wd, hour } = trNowParts();
+  if (wd !== "Sun" || hour < 18) return;
+  const W = await wkndGet();
+  const yw = wkndTargetYw(); // Pazar → gelecek hafta
+  if (W.state.briefedYw === yw) return;
+  const plan = W.plans[yw];
+  await feedGet().catch(() => {});
+  if (plan && (plan.candidates || []).length) {
+    const rows = plan.candidates.map((c) =>
+      `<tr><td style="padding:6px 10px"><b>${c.sym}</b></td><td style="padding:6px 10px">${c.setup || "—"}</td><td style="padding:6px 10px">${c.entry != null ? usd0(c.entry) : "—"}</td><td style="padding:6px 10px">${c.stop != null ? usd0(c.stop) : "—"}</td><td style="padding:6px 10px">${c.qty ?? "—"}</td></tr>`).join("");
+    await chSendMail(`🗓️ Haftalık planın hazır — ${plan.candidates.length} aday`,
+      `<h2>🗓️ ${yw} planı</h2>${plan.regime?.band ? `<p>Rejim: <b>${plan.regime.band}</b>${plan.regime.vix != null ? ` · VIX ${plan.regime.vix}` : ""}</p>` : ""}
+       <table style="border-collapse:collapse;font-size:14px"><tr><th style="padding:6px 10px;text-align:left">Sembol</th><th style="padding:6px 10px">Setup</th><th style="padding:6px 10px">Giriş</th><th style="padding:6px 10px">Stop</th><th style="padding:6px 10px">Adet</th></tr>${rows}</table>
+       ${plan.note ? `<p><i>${plan.note}</i></p>` : ""}<p style="color:#888;font-size:12px">Hafta içinde yalnız plandaki adaylara gir — plan dışı işlem Karar Defteri'nde itiraf ister.</p>`);
+    pushSend("🗓️ Haftalık plan cepte", `${plan.candidates.length} aday: ${plan.candidates.map((c) => c.sym).join(", ")}`, { tag: `wknd:${yw}` }).catch(() => {});
+    feedPush({ key: `wknd:${yw}:brief`, type: "plan", sev: "info", sym: null,
+      title: "Pazar brifingi gönderildi", detail: `${plan.candidates.length} aday — haftaya hazırsın` });
+  } else {
+    pushSend("🧭 Hafta sonu rutini bekliyor", "Pazar akşamı — 10 dakikada haftalık planını çıkar.", { tag: `wknd:${yw}:remind` }).catch(() => {});
+    feedPush({ key: `wknd:${yw}:remind`, type: "plan", sev: "info", sym: null,
+      title: "Haftalık plan yapılmadı", detail: "Swing sekmesinden Hafta Sonu Rutini'ni başlat" });
+  }
+  W.state.briefedYw = yw;
+  await kvSave("weekly_plans", W).catch(() => {});
+}
+setTimeout(() => wkndTick().catch(() => {}), 4 * 60_000);
+setInterval(() => wkndTick().catch(() => {}), 30 * 60_000);
 
 // "YYYY-MM-DD" → vergi yılı (Number); geçersizse içinde bulunduğumuz yıl.
 function yearOf(dateStr) {
@@ -5471,6 +5667,9 @@ function normalizeSwing(s, id) {
     setupKind: ["breakout", "ep", "pullback"].includes(s.setupKind) ? s.setupKind : null, // Qullamaggie
     planFollow: ["yes", "partial", "no"].includes(s.planFollow) ? s.planFollow : null,      // kapanışta plana uyum
     mistakeTag: String(s.mistakeTag || "").slice(0, 40) || null,     // partial/no ise itiraf etiketi
+    // ── Hafta Sonu Rutini bağı — açılışta sunucu doldurur, düzenlemede korunur ──
+    planWeek: /^\d{4}-W\d{2}$/.test(s.planWeek || "") ? s.planWeek : null,   // hangi haftalık plana denk geldi
+    planned: s.planned === true ? true : s.planned === false ? false : null, // sembol o haftanın planında mıydı
   };
 }
 
@@ -5546,6 +5745,17 @@ app.post("/api/swing-trades", async (req, res) => {
     }
     if (!(entry > 0)) return res.status(400).json({ error: "giriş maliyeti bulunamadı — fiyat gir ya da portföyde maliyetli bir pozisyon seç" });
     const s = normalizeSwing({ ...b, entry });
+    // Hafta Sonu Rutini: açılış haftasının planı varsa planlı/plansız işareti düş
+    // (Karar Defteri "plana uyum"u böylece kayıt olur, hafıza değil)
+    try {
+      const W = await wkndGet();
+      const yw = isoYw(s.openedAt);
+      const plan = W.plans[yw];
+      if (plan && (plan.candidates || []).length) {
+        s.planWeek = yw;
+        s.planned = plan.candidates.some((c) => c.sym === s.symbol);
+      }
+    } catch {}
     if (s.status === "closed" && s.exitPrice != null) {
       if (!s.exitUsdtry) s.exitUsdtry = await currentUsdTry(data);
       syncSwingToR26(data, s);

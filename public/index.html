@@ -138,6 +138,7 @@
           <section id="rule1Panel"></section>
           <section id="topInsights"></section>
         </div>
+        <section id="riskBudgetPanel"></section>
         <div class="duo-grid">
           <section id="dailyBoard"></section>
           <section id="earningsWatch"></section>
@@ -271,6 +272,7 @@
           <button class="seg" data-swseg="swingdefteri" role="tab">💹 Defter</button>
           <button class="seg" data-swseg="buyume" role="tab">💎 Büyüme</button>
         </div>
+        <section id="weeklyPlanBox"></section>
         <div id="swingDeck"></div>
       </section>
 
@@ -750,6 +752,21 @@
           <button type="submit" class="btn primary">Kapat &amp; Kaydet</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- Hafta Sonu Rutini sihirbazı (adımlar JS'te kurulur — 08 modülü) -->
+  <div class="modal-bg" id="wkndBg" hidden>
+    <div class="modal wide wknd-modal">
+      <h3>🧭 Hafta Sonu Rutini <span class="wknd-yw" id="wkndYw"></span></h3>
+      <div class="wknd-steps" id="wkndSteps"></div>
+      <div id="wkndBody"><div class="loading"><span class="spin">↻</span> hazırlanıyor…</div></div>
+      <div class="modal-actions wknd-actions">
+        <button type="button" class="btn ghost" id="wkndCancelBtn">Vazgeç</button>
+        <span class="wknd-spacer"></span>
+        <button type="button" class="btn ghost" id="wkndPrevBtn" hidden>← Geri</button>
+        <button type="button" class="btn primary" id="wkndNextBtn">İleri →</button>
+      </div>
     </div>
   </div>
 

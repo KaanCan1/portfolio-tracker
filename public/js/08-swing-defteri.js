@@ -29,6 +29,7 @@ async function loadSwingDeck() {
   } catch { SWINGDECK._loaded = true; }
   renderSwingDeck();
   renderDailyBoard(); // home "Swing Nöbeti" şeridi güncel swing verisiyle yenilensin
+  loadWeeklyPlan();   // Hafta Sonu Rutini paneli (sekme tepesi) — hafif KV okuması
 }
 
 // Tek pozisyon için türetilmiş metrikler
@@ -202,7 +203,7 @@ function decisionRecs(closed) {
     const origQty = (t.qty || 0) + lots.reduce((a, l) => a + (l.shares || 0), 0);
     const riskPS = t.stop != null ? t.entry - t.stop : null;
     const rMul = riskPS && riskPS > 0 && origQty > 0 ? realized / (riskPS * origQty) : null;
-    return { sym: t.symbol, realized, rMul, win: realized > 0, conf: t.conf || null, setupKind: t.setupKind || null, planFollow: t.planFollow || null, mistakeTag: t.mistakeTag || null };
+    return { sym: t.symbol, realized, rMul, win: realized > 0, conf: t.conf || null, setupKind: t.setupKind || null, planFollow: t.planFollow || null, mistakeTag: t.mistakeTag || null, planned: t.planned === true ? true : t.planned === false ? false : null };
   });
 }
 
@@ -262,6 +263,14 @@ function decisionScorecardPanel(closed) {
     ${matrix ? `<div class="dj-block"><div class="dj-block-h">Şans / Beceri matrisi <span class="sw-muted">${pf.length} tam kapanış</span></div>
       ${matrix}${insight ? `<div class="dj-insight">${insight}</div>` : ""}
       ${followPct != null ? `<div class="dj-follow">Plana uyum: <b class="${followPct >= 70 ? "pos" : followPct >= 40 ? "" : "neg"}">${Math.round(followPct)}%</b> <span class="sw-muted">(${pf.filter((r) => r.planFollow === "yes").length}/${pf.length} işlemde "Evet")</span></div>` : ""}
+      ${(() => { // Hafta Sonu Rutini disiplini: haftalık planı olan haftalarda açılan işlemler
+        const pl = recs.filter((r) => r.planned != null);
+        if (!pl.length) return "";
+        const inP = pl.filter((r) => r.planned), outP = pl.filter((r) => !r.planned);
+        const wr = (a) => a.length ? Math.round(a.filter((r) => r.win).length / a.length * 100) : null;
+        const cmp = inP.length >= 2 && outP.length >= 2 ? ` · isabet planlıda %${wr(inP)} vs plan dışında %${wr(outP)}` : "";
+        return `<div class="dj-follow">Plan disiplini: <b class="${outP.length === 0 ? "pos" : outP.length > inP.length ? "neg" : ""}">${inP.length}/${pl.length}</b> <span class="sw-muted">işlem haftalık plandan geldi${cmp}</span></div>`;
+      })()}
       ${mistakeList.length ? `<div class="dj-mistakes"><span class="dj-mist-l">En sık itiraf:</span> ${mistakeList.map(([k, n]) => `<span class="dj-mist"><b>${n}×</b> ${DJ_MISTAKE[k] || k}</span>`).join("")}</div>` : ""}
     </div>` : ""}
     ${(byConf.length || bySetup.length) ? `<div class="dj-tbls">
@@ -433,6 +442,7 @@ function renderSwingDeck() {
         <div class="sw-pos-top">
           <div class="sw-pos-id">
             <b>${t.symbol}</b>
+            ${t.planWeek ? (t.planned ? `<span class="wkp-chip in" title="Açıldığı haftanın planında vardı (${t.planWeek})">📋 planlı</span>` : `<span class="wkp-chip out" title="Açıldığı haftanın planında yoktu (${t.planWeek})">plan dışı</span>`) : ""}
             <span class="sw-muted">${fmtNum(t.qty, 4)} × ${fmtUSD(t.entry)}</span>
           </div>
           <div class="sw-pos-pnl ${pnlCls(m.pnl)}">
@@ -1159,3 +1169,195 @@ async function delSwing(id) {
   loadSwingDeck();
 }
 
+
+/* ====================== Hafta Sonu Rutini — haftalık plan + sihirbaz ======================
+ * Plan sunucuda ISO hafta anahtarıyla durur (/api/weekly-plan). Sihirbaz 3 adım:
+ * Rejim (nabız + haftalık not) → Adaylar (fırsat radarından seç / elle ekle) →
+ * Seviyeler (giriş/stop/adet — boyut önerisi risk sermayesinden). Kaydedilen plan
+ * Swing sekmesinin tepesinde yaşar; hafta içinde açılan swing sembol plandaysa
+ * sunucu "planlı" işareti düşer → Karar Defteri plana-uyumu kayıtla ölçer. */
+let WKP = { data: null, sent: null, opps: null, step: 1, sel: new Map(), watch: new Set(), noteTxt: "", saving: false };
+
+async function loadWeeklyPlan() {
+  try { WKP.data = await (await fetch("/api/weekly-plan")).json(); } catch { WKP.data = null; }
+  renderWeeklyPlanBox();
+}
+
+function renderWeeklyPlanBox() {
+  const el = $("#weeklyPlanBox");
+  if (!el) return;
+  const d = WKP.data;
+  if (!d || d.error) { el.innerHTML = ""; return; }
+  const p = d.plan;
+  const rb = (typeof RBUD !== "undefined" && RBUD.d && RBUD.d.budget > 0) ? RBUD.d : null;
+  const rbChip = rb && (rb.level === "full" || rb.level === "warn")
+    ? `<span class="wkp-rb ${rb.level}">${rb.level === "full" ? "🧯 risk bütçesi dolu" : `⚠ bütçe %${Math.round(rb.ratio)}`}</span>` : "";
+  if (!p || !((p.candidates || []).length || (p.watch || []).length)) {
+    el.innerHTML = `<section class="panel wkp-panel">
+      <div class="panel-head"><div><h2>🧭 Haftalık Plan <span class="sw-chip">${d.yw}</span> ${rbChip}</h2>
+        <span class="chart-sub">Hafta sonu rutini: rejim → adaylar → seviyeler · plan yazılır, hafta planla oynanır</span></div>
+        <button class="btn primary sm" id="wkndStartBtn">🧭 Rutini Başlat</button></div>
+      <p class="wkp-none">Bu hafta için plan yok. Pazar akşamı 10 dakika yeter — plan dışı işlem Karar Defteri'nde itiraf ister.</p>
+    </section>`;
+  } else {
+    const rows = (p.candidates || []).map((c) => `<tr>
+      <td class="l"><b>${c.sym}</b></td><td class="l">${c.setup || "—"}</td>
+      <td>${c.entry != null ? fmtUSD(c.entry) : "—"}</td><td>${c.stop != null ? fmtUSD(c.stop) : "—"}</td>
+      <td>${c.qty != null ? fmtNum(c.qty, 2) : "—"}</td><td class="l wkp-cnote">${c.note || ""}</td></tr>`).join("");
+    el.innerHTML = `<section class="panel wkp-panel">
+      <div class="panel-head"><div><h2>🧭 Haftalık Plan <span class="sw-chip">${d.yw}</span> ${rbChip}</h2>
+        <span class="chart-sub">${p.regime?.band ? `Rejim: <b>${p.regime.band}</b>${p.regime.vix != null ? ` · VIX ${fmtNum(p.regime.vix, 1)}` : ""} · ` : ""}${(p.candidates || []).length} aday${(p.watch || []).length ? ` · izleme: ${p.watch.join(", ")}` : ""}</span></div>
+        <button class="btn ghost sm" id="wkndStartBtn">Düzenle</button></div>
+      ${rows ? `<div class="tbl-wrap wkp-tblwrap"><table class="wkp-table"><thead><tr><th class="l">Sembol</th><th class="l">Setup</th><th>Giriş</th><th>Stop</th><th>Adet</th><th class="l">Not</th></tr></thead><tbody>${rows}</tbody></table></div>` : ""}
+      ${p.note ? `<div class="wkp-plannote">“${p.note}”</div>` : ""}
+    </section>`;
+  }
+  const btn = $("#wkndStartBtn");
+  if (btn) btn.onclick = openWknd;
+}
+
+/* ---- sihirbaz ---- */
+const wkndBg = $("#wkndBg");
+function wkndPaintSteps() {
+  const names = ["Rejim", "Adaylar", "Seviyeler"];
+  $("#wkndSteps").innerHTML = names.map((n, i) =>
+    `<span class="wknd-step${WKP.step === i + 1 ? " on" : ""}${WKP.step > i + 1 ? " done" : ""}">${i + 1}. ${n}</span>`).join(`<i class="wknd-sep">→</i>`);
+  $("#wkndPrevBtn").hidden = WKP.step === 1;
+  $("#wkndNextBtn").textContent = WKP.step === 3 ? "Planı Kaydet ✓" : "İleri →";
+}
+async function openWknd() {
+  WKP.step = 1;
+  WKP.sel = new Map();
+  const p = WKP.data?.plan;
+  if (p) for (const c of (p.candidates || [])) WKP.sel.set(c.sym, { ...c });
+  WKP.watch = new Set(p?.watch || []);
+  WKP.noteTxt = p?.note || "";
+  $("#wkndYw").textContent = WKP.data?.yw || "";
+  wkndBg.hidden = false;
+  wkndPaintSteps();
+  $("#wkndBody").innerHTML = `<div class="loading"><span class="spin">↻</span> rejim ve fırsatlar okunuyor…</div>`;
+  const [sent, opps] = await Promise.all([
+    fetch("/api/sentiment").then((r) => r.json()).catch(() => null),
+    fetch("/api/opportunities").then((r) => r.json()).catch(() => null),
+  ]);
+  WKP.sent = sent; WKP.opps = opps;
+  wkndPaint();
+}
+function wkndPaint() {
+  wkndPaintSteps();
+  const body = $("#wkndBody");
+  if (WKP.step === 1) {
+    const rg = WKP.sent?.regime, fng = WKP.sent?.fearGreed;
+    const rb = (typeof RBUD !== "undefined" && RBUD.d && RBUD.d.budget > 0) ? RBUD.d : null;
+    body.innerHTML = `
+      <div class="wknd-regime">
+        ${rg ? `<div class="wknd-rg"><span class="wknd-rg-l">Piyasa rejimi</span><b>${rg.band || "—"}</b><span class="wknd-rg-s">VIX ${fmtNum(rg.vix, 1)}${rg.note ? ` · ${rg.note}` : ""}</span></div>` : `<div class="wknd-rg"><span class="wknd-rg-l">Piyasa rejimi</span><span class="sw-muted">veri yok</span></div>`}
+        ${fng ? `<div class="wknd-rg"><span class="wknd-rg-l">Aç Gözlülük</span><b>${fng.score ?? "—"}/100</b><span class="wknd-rg-s">${fng.band || ""}</span></div>` : ""}
+        ${rb ? `<div class="wknd-rg"><span class="wknd-rg-l">Risk bütçesi</span><b class="${rb.level === "full" ? "neg" : rb.level === "warn" ? "" : "pos"}">%${Math.round(rb.ratio)} dolu</b><span class="wknd-rg-s">${fmtUSD0(rb.left)} pay kaldı</span></div>` : ""}
+      </div>
+      <p class="wknd-hint">${rb && rb.level === "full" ? "🧯 Bütçe dolu — bu hafta plan <b>küçük</b> olsun ya da yalnız izleme yaz." : "Rejim sertse (VIX yüksek / bütçe dolmaya yakın) haftayı küçük planla — Kural 1."}</p>
+      <label class="wknd-notelbl">Haftanın notu <i>(niyetin, tek cümle)</i>
+        <textarea id="wkndNote" rows="2" maxlength="400" placeholder="ör. Yalnız A-kalite breakout; kazanç sezonu — bilanço günü pozisyon yok">${WKP.noteTxt}</textarea>
+      </label>`;
+  } else if (WKP.step === 2) {
+    const items = WKP.opps?.items || [];
+    const opp = items.map((o) => {
+      const on = WKP.sel.has(o.symbol);
+      const setup = o.setup?.type || null;
+      return `<label class="wknd-opp${on ? " on" : ""}">
+        <input type="checkbox" data-wsym="${o.symbol}" ${on ? "checked" : ""} />
+        <b>${o.symbol}</b><span class="wknd-opp-score">${o.score}</span>
+        <span class="wknd-opp-meta">${setup || "—"}${o.rr != null ? ` · R/Ö ${fmtNum(o.rr, 1)}` : ""}${o.entry != null ? ` · giriş ~${fmtUSD(o.entry)}` : ""}</span>
+        ${o.owned ? `<span class="wkp-chip in">portföyde</span>` : ""}${o.watched ? `<span class="wkp-chip">izlemede</span>` : ""}
+      </label>`;
+    }).join("");
+    body.innerHTML = `
+      ${items.length ? `<div class="wknd-hint">Fırsat radarının bu haftaki sıralaması — en fazla <b>5 aday</b> seç (odak, çeşit değil).</div><div class="wknd-opps">${opp}</div>`
+        : `<div class="wknd-hint">Fırsat verisi şu an yok — adayları elle yaz.</div>`}
+      <label class="wknd-notelbl">Elle aday ekle <i>(virgülle: NVDA, AMD)</i>
+        <input type="text" id="wkndManual" placeholder="sembol, sembol…" /></label>
+      <label class="wknd-notelbl">Yalnız izleme listesi <i>(girmeyeceğin ama bakacağın)</i>
+        <input type="text" id="wkndWatch" value="${[...WKP.watch].join(", ")}" placeholder="sembol, sembol…" /></label>`;
+  } else {
+    const goal = SWINGDECK.goal || {};
+    const riskCap = Number(goal.capital) > 0 && Number(goal.riskPct) > 0 ? goal.capital * goal.riskPct / 100 : null;
+    const rows = [...WKP.sel.values()].map((c) => {
+      const sizeHint = riskCap && c.entry > 0 && c.stop > 0 && c.entry > c.stop
+        ? Math.floor(riskCap / (c.entry - c.stop)) : null;
+      return `<div class="wknd-lvl" data-wrow="${c.sym}">
+        <b class="wknd-lvl-sym">${c.sym}</b>
+        <label>Giriş <input type="number" step="any" data-wf="entry" value="${c.entry ?? ""}" placeholder="$" /></label>
+        <label>Stop <input type="number" step="any" data-wf="stop" value="${c.stop ?? ""}" placeholder="$" /></label>
+        <label>Adet <input type="number" step="any" data-wf="qty" value="${c.qty ?? ""}" placeholder="${sizeHint ?? ""}" /></label>
+        <label class="wknd-lvl-note">Not <input type="text" maxlength="140" data-wf="note" value="${(c.note || "").replace(/"/g, "&quot;")}" placeholder="tetik/koşul" /></label>
+        ${sizeHint ? `<span class="wknd-size" title="Risk sermayesi ${fmtUSD0(goal.capital)} × %${goal.riskPct} = işlem başı ${fmtUSD0(riskCap)} risk">öneri ≈ ${sizeHint} adet</span>` : ""}
+      </div>`;
+    }).join("");
+    body.innerHTML = rows
+      ? `<div class="wknd-hint">Her adaya <b>giriş + stop</b> yaz — stopsuz aday plana giremez sayılır. Adet boşsa öneriyi kullan.</div><div class="wknd-lvls">${rows}</div>`
+      : `<div class="wknd-hint">Aday seçmedin — yalnız izleme listesiyle de kaydedebilirsin.</div>`;
+  }
+}
+function wkndCollect() {
+  // adım 2/3 girdilerini WKP'ye işle (adım değişmeden önce çağrılır)
+  if (WKP.step === 1) {
+    WKP.noteTxt = $("#wkndNote")?.value || WKP.noteTxt;
+  } else if (WKP.step === 2) {
+    document.querySelectorAll("#wkndBody [data-wsym]").forEach((cb) => {
+      const sym = cb.dataset.wsym;
+      if (cb.checked && !WKP.sel.has(sym)) {
+        const o = (WKP.opps?.items || []).find((x) => x.symbol === sym);
+        WKP.sel.set(sym, { sym, setup: o?.setup?.type || null, entry: o?.entry ?? null, stop: o?.stop ?? null, qty: null, note: "" });
+      }
+      if (!cb.checked) WKP.sel.delete(sym);
+    });
+    for (const s of ($("#wkndManual")?.value || "").split(",").map((x) => x.trim().toUpperCase()).filter(Boolean))
+      if (!WKP.sel.has(s) && WKP.sel.size < 10) WKP.sel.set(s, { sym: s, setup: null, entry: null, stop: null, qty: null, note: "" });
+    WKP.watch = new Set(($("#wkndWatch")?.value || "").split(",").map((x) => x.trim().toUpperCase()).filter(Boolean).slice(0, 15));
+  } else {
+    document.querySelectorAll("#wkndBody [data-wrow]").forEach((row) => {
+      const c = WKP.sel.get(row.dataset.wrow);
+      if (!c) return;
+      row.querySelectorAll("[data-wf]").forEach((inp) => {
+        const v = inp.value.trim();
+        c[inp.dataset.wf] = inp.dataset.wf === "note" ? v : (v === "" ? null : Number(v));
+      });
+    });
+  }
+}
+async function wkndSave() {
+  if (WKP.saving) return;
+  WKP.saving = true;
+  $("#wkndNextBtn").disabled = true;
+  try {
+    const body = {
+      candidates: [...WKP.sel.values()],
+      watch: [...WKP.watch],
+      note: WKP.noteTxt,
+      regime: WKP.sent?.regime ? { band: WKP.sent.regime.band, vix: WKP.sent.regime.vix, fng: WKP.sent?.fearGreed?.score ?? null } : null,
+    };
+    const r = await fetch("/api/weekly-plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || "plan kaydedilemedi");
+    WKP.data = { ...(WKP.data || {}), yw: j.yw, plan: j.plan };
+    wkndBg.hidden = true;
+    toast("Haftalık plan kaydedildi — Pazar akşamı brifingi cebe gelir");
+    renderWeeklyPlanBox();
+    loadFeed?.();
+  } catch (e) { toast(e.message || "plan kaydedilemedi", "err"); }
+  WKP.saving = false;
+  $("#wkndNextBtn").disabled = false;
+}
+$("#wkndCancelBtn")?.addEventListener("click", () => (wkndBg.hidden = true));
+wkndBg?.addEventListener("click", (e) => { if (e.target === wkndBg) wkndBg.hidden = true; });
+$("#wkndPrevBtn")?.addEventListener("click", () => { wkndCollect(); WKP.step = Math.max(1, WKP.step - 1); wkndPaint(); });
+$("#wkndNextBtn")?.addEventListener("click", () => {
+  wkndCollect();
+  if (WKP.step < 3) { WKP.step++; wkndPaint(); return; }
+  wkndSave();
+});
+// adım 2'de tık → kart vurgusu canlı kalsın
+$("#wkndBody")?.addEventListener("change", (e) => {
+  const cb = e.target.closest("[data-wsym]");
+  if (cb) cb.closest(".wknd-opp")?.classList.toggle("on", cb.checked);
+});
