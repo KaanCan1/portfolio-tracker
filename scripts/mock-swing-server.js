@@ -384,6 +384,7 @@ const feedFix = () => {
     { id: "f7", ts: h(30), type: "alfa", sev: "info", sym: "WT",    title: "Alfa Avı: WT TP1 vurdu — %25 kâr alındı", detail: "$9.84 · +$38 · dünkü mum" },
     { id: "f8", ts: h(31), type: "alfa", sev: "info", sym: "ANET",  title: "Alfa Avı: ANET pozisyon açtı", detail: "giriş $126.9 · stop $122.4" },
     { id: "f9", ts: h(40), type: "mkt",  sev: "info", sym: null,    title: "Piyasa rejimi değişti: Gergin → Sakin", detail: "Normal piyasa — dengeli pozisyon." },
+    { id: "f10", ts: h(12), type: "plan", sev: "info", sym: null,   title: "Haftalık plan hazır — 3 aday", detail: "NVDA · AMD · MU" },
   ];
 };
 
@@ -854,6 +855,33 @@ const server = createServer(async (req, res) => {
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify(OPPS_FIX)); return;
   }
+  // ── 19 Tem taraması: fikstürsüz uçlar (boş uç = önizlemede hiç test edilmeyen bileşen tuzağı) ──
+  // NOT: /api/backtest + /api/signal-stats fikstürleri EKLENMEDİ — istemcideki tüketicileri
+  // (renderBacktest/renderLedger) 3 Tem'de kaldırılan görünümlerin ölü kalıntısıydı, silindi.
+  // Radar · geçmiş Top-10 fırsat sonucu (istemci kümesi şu an yetim — ürün kararı bekliyor)
+  if (url === "/api/opportunities/history") {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ totalPicks: 42, days: 12, firstDate: iso(Y, M, 1), open: { n: 7 },
+      realized: { n: 9, winRate: 56, avgRet: 2.4, avgR: 0.4, target: 5, stop: 4 },
+      recent: [
+        { symbol: "ANET", ret: 8.2, date: iso(Y, M, 10), status: "target" },
+        { symbol: "VRT", ret: -4.5, date: iso(Y, M, 9), status: "stop" },
+        { symbol: "AVGO", ret: 6.1, date: iso(Y, M, 8), status: "target" },
+      ] })); return;
+  }
+  // Aksiyon stub'ları — önizlemede akış tıklanabilir kalsın (kalıcı yazma yok)
+  if (url === "/api/trades" && req.method === "POST") {
+    const b = await readBody(req);
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ ok: true, trade: { id: "t-mock-" + Date.now().toString(36) }, sync: `MOCK: ${b.symbol || "?"} işlem önizlemede kaydedildi (kalıcı değil)` })); return;
+  }
+  if (url === "/api/cash" && req.method === "PUT") { await readBody(req); res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify({ ok: true })); return; }
+  if (url === "/api/flows" && req.method === "POST") { await readBody(req); res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify({ ok: true })); return; }
+  if (url === "/api/watchlist" && req.method === "POST") { await readBody(req); res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify({ ok: true })); return; }
+  if (url === "/api/radar/refresh" && req.method === "POST") { res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify({ ok: true })); return; }
+  if (url === "/api/realized2026/sync-trades" && req.method === "POST") { res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify({ ok: true, added: 0 })); return; }
+  if (url === "/api/edge-reports/build" && req.method === "POST") { await readBody(req).catch(() => ({})); res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify({ ok: true })); return; }
+  if (url === "/api/logout" && req.method === "POST") { res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify({ ok: true })); return; }
   if (url === "/api/weekly") {
     const wk = { portfolio: { fromDate: iso(Y, M, 9), toDate: iso(Y, M, 16), changeTRY: -22019, pct: -10.92 },
       best: { symbol: "NVDA", pct: 4.11 }, worst: { symbol: "NBIS", pct: -7.84 },

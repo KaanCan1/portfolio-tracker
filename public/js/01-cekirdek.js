@@ -369,8 +369,8 @@ async function loadSentiment() {
  * imleci. Yeni olay yoksa kart hiç çizilmez — sayfa temiz kalır. */
 let FEEDDATA = null;
 let FEED_OPENALL = false;
-const FEED_ICON = { pos: "shield", sig: "zap", mkt: "activity", alfa: "trophy" };
-const FEED_NAV = { sig: "radar", alfa: "challenge" }; // satır tıklaması ilgili sekmeye götürür
+const FEED_ICON = { pos: "shield", sig: "zap", mkt: "activity", alfa: "trophy", plan: "calendar" };
+const FEED_NAV = { sig: "radar", alfa: "challenge", plan: "swingdefteri" }; // satır tıklaması ilgili sekmeye götürür
 const FEED_SEVR = { crit: 0, warn: 1, info: 2 };
 function feedClock(t) { return String(t.getHours()).padStart(2, "0") + ":" + String(t.getMinutes()).padStart(2, "0"); }
 function feedAgo(ts) {
@@ -397,6 +397,7 @@ const FEED_GRP = [ // pencere içindeki grup sırası + etiketleri
   { type: "sig",  lbl: "Sinyaller" },
   { type: "mkt",  lbl: "Piyasa & Skor" },
   { type: "alfa", lbl: "Alfa Avı" },
+  { type: "plan", lbl: "Haftalık Plan" }, // Hafta Sonu Rutini olayları — listede olmayan tür pencerede KAYBOLUR, yeni tür eklerken buraya da ekle
 ];
 function feedNewEvents() {
   const f = FEEDDATA;
