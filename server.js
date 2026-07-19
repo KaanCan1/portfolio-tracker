@@ -120,20 +120,25 @@ app.post("/api/logout", (_req, res) => {
   res.json({ ok: true });
 });
 
-// Asset cache-busting: index.html sunulurken style.css/app.js'e dosya mtime'ından sürüm
-// eklenir (her deploy'da değişir → tarayıcı/Render CDN eski CSS/JS'i önbellekten vermez).
+// Asset cache-busting: index.html sunulurken TÜM yerel .css/.js referanslarına dosya
+// mtime'ından sürüm eklenir (her deploy'da değişir → tarayıcı/CDN eskisini veremez).
 // HTML'in kendisi no-cache → sürüm sorgusu her zaman taze okunur.
+// NOT: app.js döneminden kalan tekil replace, modülerleşmede js/*.js'i sürümsüz
+// bırakmıştı → istemciler günlerce bayat JS çalıştırdı (hero işaret fix'i vakası).
 const assetVer = (f) => { try { return Math.floor(statSync(join(__dirname, "public", f)).mtimeMs).toString(36); } catch { return "1"; } };
 app.get(["/", "/index.html"], (_req, res) => {
   try {
     const html = readFileSync(join(__dirname, "public", "index.html"), "utf8")
-      .replace('href="style.css"', `href="style.css?v=${assetVer("style.css")}"`)
-      .replace('src="app.js"', `src="app.js?v=${assetVer("app.js")}"`);
+      .replace(/(href|src)="((?:js\/)?[\w.-]+\.(?:css|js))"/g, (_m, attr, file) => `${attr}="${file}?v=${assetVer(file)}"`);
     res.set("Cache-Control", "no-cache").type("html").send(html);
   } catch { res.sendFile(join(__dirname, "public", "index.html")); }
 });
 
-app.use(express.static(join(__dirname, "public")));
+// CSS/JS: her istekte ETag ile doğrulat (no-cache) — sürümlü URL değişmese bile
+// bayat kopya yaşayamaz; içerik aynıysa 304 döner, maliyeti yok denecek kadar az.
+app.use(express.static(join(__dirname, "public"), {
+  setHeaders: (res, path) => { if (/\.(?:css|js)$/.test(path)) res.setHeader("Cache-Control", "no-cache"); },
+}));
 
 /* ----------------------------- Veri deposu ----------------------------- */
 /* ----------------------------- Kalıcı depolama -----------------------------
