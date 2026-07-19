@@ -617,7 +617,7 @@ function render() {
         ${(() => {
           const segs = buildCompare(STATE.history, grandTotal, STATE.dayOpen?.total);
           return segs.length ? `<div class="hero-compare">${segs.map((s) =>
-            `<div class="hc-seg ${s.pct >= 0 ? "up" : "down"}"><span class="hc-k">${s.label}</span><span class="hc-v">${s.pct >= 0 ? "▲" : "▼"} ${fmtPct(Math.abs(s.pct))}</span></div>`
+            `<div class="hc-seg ${s.pct >= 0 ? "up" : "down"}"><span class="hc-k">${s.label}</span><span class="hc-v">${s.pct >= 0 ? "▲" : "▼"} ${fmtPct(s.pct)}</span></div>`
           ).join("")}</div>` : "";
         })()}
         <div class="meta">${healthy ? (fx.usdtry ? `Varlık ${fmtUSD0(totalMarket / fx.usdtry)} + Nakit ${fmtUSD0(cashTL / fx.usdtry)}${optMarket ? ` · içinde Opsiyon ${fmtUSD0(optMarket / fx.usdtry)}` : ""}` : `Varlık ${fmtTRY0(totalMarket)} + Nakit ${fmtTRY0(cashTL)}`) : "↻ Veriler yenileniyor · son bilinen değer"}</div>
