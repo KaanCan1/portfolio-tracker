@@ -3534,3 +3534,49 @@ svg.fx-pop { animation: fxPop .7s cubic-bezier(.22,1,.36,1) both; transform-orig
   .wknd-lvl { grid-template-columns: 1fr 1fr; }
   .wknd-lvl-sym { grid-column: 1 / -1; }
 }
+
+/* ════════ Bootstrap güven aralığı (Strateji Laboratuvarı) ════════ */
+.lab-ci { display: block; font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; margin-top: 2px; font-weight: 500; }
+.lab-ci-box { margin-top: 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 11px 13px; background: var(--bg2); }
+.lab-ci-box.ok { border-color: var(--green-line); background: var(--green-soft); }
+.lab-ci-box.warn { border-color: var(--amber-line); background: var(--amber-bg); }
+.lab-ci-box.noise { border-color: var(--line-strong); }
+.lab-ci-box.thin { background: var(--bg2); }
+.lab-ci-h { font-size: 13px; font-weight: 700; display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; }
+.lab-ci-box.ok .lab-ci-h { color: var(--green-d); }
+.lab-ci-box.warn .lab-ci-h { color: var(--amber-d); }
+.lab-ci-n { font-size: 11px; font-weight: 600; color: var(--muted); }
+.lab-ci-t { font-size: 12.5px; line-height: 1.55; color: var(--ink2); margin-top: 5px; }
+/* Aralık çubuğu: 0 çizgisi ortada; bant 0'ı kesiyorsa fark kanıtlanamıyor demektir */
+.lab-ci-bar { position: relative; height: 12px; margin-top: 11px; border-radius: 6px; background: var(--card); border: 1px solid var(--line); }
+.lci-zero { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ink); opacity: .55; transform: translateX(-50%); border-radius: 2px; }
+.lci-range { position: absolute; top: 2px; bottom: 2px; background: var(--green); opacity: .38; border-radius: 4px; }
+.lab-ci-box.noise .lci-range { background: var(--muted); }
+.lci-med { position: absolute; top: -2px; bottom: -2px; width: 3px; background: var(--green-d); border-radius: 2px; transform: translateX(-50%); }
+.lab-ci-box.noise .lci-med { background: var(--ink2); }
+.lab-ci-legend { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); margin-top: 4px; font-weight: 600; }
+
+/* ════════ Masada Bıraktığın Para (plana-uyum karşı-olgusu) ════════ */
+.pg-hero { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 13px 15px; background: var(--bg2); }
+.pg-hero.warn { border-color: var(--amber-line); background: var(--amber-bg); }
+.pg-hero.luck { border-color: var(--line-strong); }
+.pg-hero.ok { border-color: var(--green-line); background: var(--green-soft); }
+.pg-hero-main { font-size: 14.5px; line-height: 1.5; color: var(--ink); }
+.pg-hero.warn .pg-hero-main b { color: var(--amber-d); }
+.pg-hero.ok .pg-hero-main b { color: var(--green-d); }
+.pg-hero-split { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 8px; font-size: 12.5px; color: var(--ink2); font-variant-numeric: tabular-nums; }
+.pg-sep { color: var(--muted); }
+.pg-dist { display: flex; flex-wrap: wrap; gap: 7px; margin: 12px 0 4px; }
+.pg-tag { font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 999px; background: var(--bg2); color: var(--ink2); border: 1px solid var(--line); white-space: nowrap; }
+.pg-tag.ok { background: var(--green-soft); color: var(--green-d); border-color: var(--green-line); }
+.pg-tag.warn { background: var(--amber-bg); color: var(--amber-d); border-color: var(--amber-line); }
+.pg-tag.bad { background: var(--red-bg); color: var(--red-d); border-color: var(--red-line); }
+.pg-tag.luck { background: var(--sky-soft); color: var(--sky-d); border-color: var(--sky-line); }
+.pg-table { min-width: 0; font-variant-numeric: tabular-nums; }
+.pg-date { display: block; font-size: 10.5px; color: var(--muted); font-weight: 500; }
+.pg-plan { white-space: nowrap; }
+.pg-how { display: block; font-size: 10px; color: var(--muted); font-weight: 600; }
+.pg-note { margin-top: 10px; font-size: 11.5px; line-height: 1.55; color: var(--muted); }
+@media (max-width: 760px) {
+  .pg-table thead th:nth-child(6), .pg-table tbody td:nth-child(6) { display: none; } /* Plan K/Z — dar ekranda gizli */
+}

@@ -986,13 +986,31 @@ function labPaint(d) {
     const ok = smallGood != null ? smallGood : x > b;
     return ok ? "win-c" : "loss-c";
   };
+  // Bootstrap kıyası — nokta tahminine değil ARALIĞA bak; asıl karar burada verilir
+  const c = d.ci?.kiyas;
+  const ciCell = (o) => o ? `<span class="lab-ci">${o.lo >= 0 ? "+" : ""}${o.lo} … ${o.hi >= 0 ? "+" : ""}${o.hi}R</span>` : "";
+  const verdict = !c ? "" : !c.yeterli
+    ? `<div class="lab-ci-box thin"><b>Güven aralığı hesaplanamadı</b> — ${c.not}</div>`
+    : `<div class="lab-ci-box ${c.anlamli ? (c.yon === "varyant" ? "ok" : "warn") : "noise"}">
+        <div class="lab-ci-h">${c.anlamli ? "✓ Fark anlamlı" : "≈ Fark gürültü sayılır"}
+          <span class="lab-ci-n">${c.n.baseline} vs ${c.n.varyant} işlem${c.kucukOrneklem ? " · küçük örneklem" : ""}</span></div>
+        <div class="lab-ci-t">${c.verdict}</div>
+        <div class="lab-ci-bar" title="%90 güven aralığı — 0 çizgisini kesiyorsa fark kanıtlanamıyor">
+          ${(() => { const lo = c.lo, hi = c.hi, span = Math.max(Math.abs(lo), Math.abs(hi), 0.3) * 1.15;
+            const px = (v) => ((v + span) / (2 * span)) * 100;
+            return `<i class="lci-zero" style="left:50%"></i><i class="lci-range" style="left:${px(lo).toFixed(1)}%;width:${(px(hi) - px(lo)).toFixed(1)}%"></i><i class="lci-med" style="left:${px(c.farkR).toFixed(1)}%"></i>`; })()}
+        </div>
+        <div class="lab-ci-legend"><span>varyant kötü ←</span><span>0</span><span>→ varyant iyi</span></div>
+      </div>`;
   $("#labRes").innerHTML = `
     <div class="tbl-wrap lab-tbl"><table>
       <thead><tr><th class="l">Metrik</th><th>Canlı kurallar</th><th>Varyantın</th></tr></thead>
       <tbody>${rows.map(([lbl, k, fmt]) => {
         const b = num(k, d.baseline?.[k]), x = num(k, d.variant?.[k]);
-        return `<tr><td class="l">${lbl}</td><td>${fmt(d.baseline?.[k])}</td><td class="${better(k, b, x)}"><b>${fmt(d.variant?.[k])}</b></td></tr>`;
+        const ci = k === "ortR" ? { b: ciCell(d.ci?.baseline), x: ciCell(d.ci?.varyant) } : { b: "", x: "" };
+        return `<tr><td class="l">${lbl}</td><td>${fmt(d.baseline?.[k])}${ci.b}</td><td class="${better(k, b, x)}"><b>${fmt(d.variant?.[k])}</b>${ci.x}</td></tr>`;
       }).join("")}</tbody>
     </table></div>
+    ${verdict}
     <div class="bm-note">${d.start} → bugün · evren ${d.universe} hisse · ${d.not || ""}</div>`;
 }

@@ -526,7 +526,8 @@ function renderSwingDeck() {
       </div>
     </section>` : "";
 
-  el.innerHTML = hero + swRegimeLine() + chart + swAnalyticsPanel(trades) + swingStatsPanel(closed) + decisionScorecardPanel(closed) + openPanel + closedPanel;
+  el.innerHTML = hero + swRegimeLine() + chart + swAnalyticsPanel(trades) + swingStatsPanel(closed) + decisionScorecardPanel(closed) + `<section id="planGapBox"></section>` + openPanel + closedPanel;
+  renderPlanGap();
 }
 
 /* Defter analitiği: kümülatif realize eğrisi + sembol bazlı K/Z barları.
@@ -1361,3 +1362,80 @@ $("#wkndBody")?.addEventListener("change", (e) => {
   const cb = e.target.closest("[data-wsym]");
   if (cb) cb.closest(".wknd-opp")?.classList.toggle("on", cb.checked);
 });
+
+/* ====================== "Masada bıraktığın para" — plana-uyum karşı-olgusu ======================
+ * Karar Defteri "plana uydun mu?" diye SORAR; bu panel cevabı DOLARA çevirir: stop/hedefine
+ * harfiyen uysaydın K/Z ne olurdu vs. gerçekte ne oldu. Sunucu mum verisiyle hesaplar
+ * (/api/plan-gap); burada yalnız gösterim var. Suçlama değil — disipline fiyat etiketi. */
+let PGAP = { d: null, t: 0 };
+const PGAP_LBL = {
+  uyumlu: { lbl: "Plana uydun", cls: "ok" },
+  "erken-cikis": { lbl: "Erken çıktın", cls: "warn" },
+  "stop-gecikmesi": { lbl: "Stopu geciktirdin", cls: "bad" },
+  "sanslı-sapma": { lbl: "Şanslı sapma", cls: "luck" },
+};
+async function renderPlanGap(force) {
+  const el = $("#planGapBox");
+  if (!el) return;
+  try {
+    if (force || !PGAP.d || Date.now() - PGAP.t > 5 * 60_000) {
+      PGAP.d = await (await fetch("/api/plan-gap")).json();
+      PGAP.t = Date.now();
+    }
+  } catch { return; }
+  const d = PGAP.d;
+  if (!d || d.error) { el.innerHTML = ""; return; }
+  if (!d.n) {
+    el.innerHTML = `<section class="panel pg-panel"><div class="panel-head"><div><h2>💸 Masada Bıraktığın Para</h2>
+      <span class="chart-sub">Stop/hedefine harfiyen uysaydın ne olurdu — disiplinin dolar karşılığı</span></div></div>
+      <p class="dj-empty-note">Henüz ölçülebilir işlem yok. Stop <b>ve</b> hedefle açılan swing'ler kapandıkça burada birikir${d.atlanan ? ` (${d.atlanan} işlem planı/mum verisi eksik olduğu için ölçüme girmedi)` : ""}.</p></section>`;
+    return;
+  }
+  const usd = (n) => `${n < 0 ? "−" : ""}$${Math.abs(n).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+  const net = d.netFark;
+  // Ana rakam: net fark. Pozitif = plana uysan daha iyiydin (masada para bıraktın).
+  const tone = net > 20 ? "warn" : net < -20 ? "luck" : "ok";
+  const basli = net > 20
+    ? `Plana harfiyen uysaydın <b>${usd(net)}</b> daha fazla kazanmıştın.`
+    : net < -20
+    ? `Plandan sapman <b>${usd(-net)}</b> kazandırdı — ama bu <b>şans</b>, süreç değil.`
+    : `Gerçek sonucun planınla neredeyse aynı — <b>disiplin çalışıyor.</b>`;
+  const rows = (d.rows || []).filter((r) => Math.abs(r.fark) >= 1).slice(0, 8).map((r) => {
+    const m = PGAP_LBL[r.sebep] || PGAP_LBL.uyumlu;
+    return `<tr>
+      <td class="l"><b>${r.sym}</b><span class="pg-date">${fmtDate(r.openedAt)}</span></td>
+      <td class="l"><span class="pg-tag ${m.cls}">${m.lbl}</span></td>
+      <td>${fmtUSD(r.entry)}</td>
+      <td class="pg-plan">${fmtUSD(r.planCikis)}<span class="pg-how">${r.planNasil === "hedef" ? "🎯 hedef" : r.planNasil === "stop" ? "⛔ stop" : "açık"}</span></td>
+      <td>${r.gercekCikis != null ? fmtUSD(r.gercekCikis) : "—"}</td>
+      <td class="${r.planPnl >= 0 ? "pos" : "neg"}">${usd(r.planPnl)}</td>
+      <td class="${r.gercekPnl >= 0 ? "pos" : "neg"}">${usd(r.gercekPnl)}</td>
+      <td><b class="${r.fark > 0 ? "neg" : r.fark < 0 ? "pos" : ""}">${r.fark > 0 ? "+" : ""}${usd(r.fark)}</b></td>
+    </tr>`;
+  }).join("");
+  const g = d.dagilim || {};
+  el.innerHTML = `
+    <section class="panel pg-panel">
+      <div class="panel-head"><div>
+        <h2>💸 Masada Bıraktığın Para <span class="sw-chip">${d.n} işlem</span></h2>
+        <span class="chart-sub">Stop/hedefine harfiyen uysaydın ne olurdu — disiplinin dolar karşılığı</span>
+      </div></div>
+      <div class="pg-hero ${tone}">
+        <div class="pg-hero-main">${basli}</div>
+        <div class="pg-hero-split">
+          <span>Plana uysaydın <b class="${d.planToplam >= 0 ? "pos" : "neg"}">${usd(d.planToplam)}</b></span>
+          <span>Gerçekte <b class="${d.gercekToplam >= 0 ? "pos" : "neg"}">${usd(d.gercekToplam)}</b></span>
+          ${d.masada > 0 ? `<span class="pg-sep">·</span><span>erken çıkışların bedeli <b class="neg">${usd(d.masada)}</b></span>` : ""}
+        </div>
+      </div>
+      <div class="pg-dist">
+        ${[["uyumlu", g.uyumlu], ["erken-cikis", g.erkenCikis], ["stop-gecikmesi", g.stopGecikmesi], ["sanslı-sapma", g.sansliSapma]]
+          .filter(([, n]) => n > 0)
+          .map(([k, n]) => `<span class="pg-tag ${PGAP_LBL[k].cls}">${PGAP_LBL[k].lbl} <b>${n}</b></span>`).join("")}
+      </div>
+      ${rows ? `<div class="tbl-wrap"><table class="pg-table">
+        <thead><tr><th class="l">Sembol</th><th class="l">Ne oldu</th><th>Giriş</th><th>Plan çıkış</th><th>Senin çıkış</th><th>Plan K/Z</th><th>Gerçek K/Z</th><th>Fark</th></tr></thead>
+        <tbody>${rows}</tbody></table></div>` : `<p class="dj-empty-note">Kayda değer sapma yok — çıkışların planınla örtüşüyor.</p>`}
+      <div class="pg-note">${d.not}${d.atlanan ? ` <b>${d.atlanan}</b> işlem ölçüme girmedi (plan ya da mum verisi eksik).` : ""}</div>
+    </section>`;
+}

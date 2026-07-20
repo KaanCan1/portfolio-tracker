@@ -6620,6 +6620,62 @@ function labReplay(ctx, P) {
     getiriPct: +(((equity / CH_ENG.startCapital) - 1) * 100).toFixed(1),
     maksDususPct: +(maxDD * 100).toFixed(1),
     sermaye: +equity.toFixed(0), komisyon: +fees.toFixed(2),
+    _rs: rs.map((v) => +v.toFixed(4)),   // işlem-başı R — bootstrap için (ekranda gösterilmez)
+  };
+}
+
+/* ===== Bootstrap güven aralığı — "bu fark gerçek mi, şans mı?" ====================
+ * Nokta tahmini (ör. +0.88R) TEK bir tarihsel diziden gelir. 33 işlemde birkaç büyük
+ * kazanç ortalamayı taşıyorsa, işlemler biraz farklı sırayla gelseydi sonuç bambaşka
+ * olurdu. Yeniden örnekleme (with replacement) bunu ölçer: aynı işlem havuzundan 1000
+ * alternatif geçmiş üretip istatistiğin nerede salındığına bakar.
+ * Tohum SABİT → aynı parametre aynı sonucu verir (rastgelelik güveni bozmasın). */
+function mulberry32(seed) {
+  return function () {
+    seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const bMean = (a) => a.reduce((x, y) => x + y, 0) / a.length;
+function bootCI(arr, stat, iters = 1000, seed = 42) {
+  if (!arr || arr.length < 2) return null;
+  const rnd = mulberry32(seed), out = [];
+  const samp = new Array(arr.length);
+  for (let k = 0; k < iters; k++) {
+    for (let i = 0; i < arr.length; i++) samp[i] = arr[(rnd() * arr.length) | 0];
+    out.push(stat(samp));
+  }
+  out.sort((a, b) => a - b);
+  const q = (p) => out[Math.min(out.length - 1, Math.floor(p * out.length))];
+  return { lo: +q(0.05).toFixed(2), med: +q(0.5).toFixed(2), hi: +q(0.95).toFixed(2) };
+}
+/* İki stratejinin FARKININ aralığı — asıl soru bu. Aralık 0'ı içeriyorsa
+ * "varyant daha iyi" DİYEMEYİZ; elimizdeki veri ayırt etmeye yetmiyordur. */
+function labCompare(base, vari, iters = 1000) {
+  const b = base?._rs || [], v = vari?._rs || [];
+  const nMin = Math.min(b.length, v.length);
+  if (nMin < 5) return { yeterli: false, n: nMin, not: "Kıyas için her iki tarafta en az 5 kapanmış işlem gerek." };
+  const rnd = mulberry32(7), diffs = [];
+  for (let k = 0; k < iters; k++) {
+    let sb = 0, sv = 0;
+    for (let i = 0; i < b.length; i++) sb += b[(rnd() * b.length) | 0];
+    for (let i = 0; i < v.length; i++) sv += v[(rnd() * v.length) | 0];
+    diffs.push(sv / v.length - sb / b.length);
+  }
+  diffs.sort((x, y) => x - y);
+  const q = (p) => diffs[Math.min(diffs.length - 1, Math.floor(p * diffs.length))];
+  const lo = +q(0.05).toFixed(2), hi = +q(0.95).toFixed(2), med = +q(0.5).toFixed(2);
+  const anlamli = lo > 0 || hi < 0;           // güven aralığı 0'ı dışarıda bırakıyor mu
+  return {
+    yeterli: true, n: { baseline: b.length, varyant: v.length },
+    farkR: med, lo, hi, anlamli,
+    yon: med > 0 ? "varyant" : "baseline",
+    kucukOrneklem: nMin < 20,
+    verdict: anlamli
+      ? `${med > 0 ? "Varyant" : "Canlı kurallar"} gerçekten önde: fark ${med >= 0 ? "+" : ""}${med}R (aralık ${lo}…${hi}R, 0'ı içermiyor).`
+      : `Fark GÜRÜLTÜ sayılır: ${med >= 0 ? "+" : ""}${med}R ama aralık ${lo}…${hi}R — 0'ı içeriyor, yani bu veriyle "daha iyi" DİYEMEYİZ.`,
   };
 }
 app.post("/api/lab/backtest", async (req, res) => {
@@ -6630,11 +6686,91 @@ app.post("/api/lab/backtest", async (req, res) => {
     const ctx = await labCtx(P.start);
     const baseline = labReplay(ctx, labParams({ start: P.start })); // canlı kurallar, aynı pencere
     const variant = labReplay(ctx, P);
+    // Bootstrap: her stratejinin kendi ortR aralığı + asıl soru olan FARKIN aralığı
+    const ci = {
+      baseline: bootCI(baseline._rs, bMean),
+      varyant: bootCI(variant._rs, bMean),
+      kiyas: labCompare(baseline, variant),
+    };
+    delete baseline._rs; delete variant._rs;   // ham R listesi istemciye gitmesin
     LAB.last = new Date().toISOString();
-    res.json({ start: P.start, universe: ctx.watch.length, params: P, baseline, variant,
-      not: "Evren bugünün evrenidir (hafif survivorship). Sonuç geçmiştir, garanti değildir; komisyon dahil NET rakamlardır." });
+    res.json({ start: P.start, universe: ctx.watch.length, params: P, baseline, variant, ci,
+      not: "Evren bugünün evrenidir (hafif survivorship). Sonuç geçmiştir, garanti değildir; komisyon dahil NET rakamlardır. Güven aralıkları 1000 yeniden örneklemeyle (bootstrap) hesaplanır — küçük örneklemde 'daha iyi' demenin dürüst sınırıdır." });
   } catch (e) { res.status(500).json({ error: e.message }); }
   finally { LAB._running = false; }
+});
+
+/* ===== "Masada bıraktığın para" — plana-uyum karşı-olgusu =========================
+ * Karar Defteri "plana uydum mu?"yu SORAR; bu motor CEVABI DOLARA ÇEVİRİR.
+ * Her kapanmış swing için: giriş/stop/hedef planına HARFİYEN uysaydın ne olurdu?
+ * Mumlar üzerinde yürünür — önce hangisi vurulduysa o çıkıştır (aynı mumda ikisi de
+ * vurulduysa MUHAFAZAKÂR davranıp stop sayılır; gün-içi sırayı bilmiyoruz).
+ * Fark = planlı K/Z − gerçek K/Z. Pozitifse masada para bırakmışsın (erken çıkış),
+ * negatifse plandan sapman işine yaramış (şans — tekrarlanmaz, karneye öyle yazılır).
+ * Ek API maliyeti YOK: yalnız mum önbelleğinden okur; verisi olmayan işlem atlanır. */
+function planGapOne(t, candles) {
+  const entry = Number(t.entry), stop = Number(t.stop), target = Number(t.target);
+  if (!(entry > 0) || !(stop > 0) || !(target > 0)) return null;      // planı olmayan işlem ölçülemez
+  const lots = t.realizedLots || [];
+  const origQty = Number(t.qty || 0) + lots.reduce((a, l) => a + (Number(l.shares) || 0), 0);
+  if (!(origQty > 0)) return null;
+  const from = String(t.openedAt || "").slice(0, 10);
+  const seq = (candles || []).filter((c) => c.time > from);            // açılış günü hariç (giriş o gün yapıldı)
+  if (seq.length < 2) return null;                                      // mum yok → dürüstçe atla
+  let exitPx = null, exitDate = null, how = null;
+  for (const c of seq) {
+    if (c.low <= stop) { exitPx = Math.min(stop, c.open ?? stop); exitDate = c.time; how = "stop"; break; }
+    if (c.high >= target) { exitPx = Math.max(target, c.open ?? target); exitDate = c.time; how = "hedef"; break; }
+  }
+  const son = seq[seq.length - 1];
+  if (exitPx == null) { exitPx = son.close; exitDate = son.time; how = "acik"; }  // hâlâ seyrediyor olurdun
+  // Planlı senaryo tek çıkıştır → 2 komisyon (alış + satış). Gerçek tarafta lot başına komisyon zaten düşülü.
+  const planPnl = (exitPx - entry) * origQty - MIDAS_FEE * 2;
+  const gercekPnl = lots.length
+    ? lots.reduce((a, l) => a + (Number(l.pnlUSD) || 0), 0) +
+      (t.exitPrice != null && Number(t.qty) > 0 ? (Number(t.exitPrice) - entry) * Number(t.qty) - MIDAS_FEE : 0) - MIDAS_FEE
+    : (t.exitPrice != null ? (Number(t.exitPrice) - entry) * origQty - MIDAS_FEE * 2 : 0);
+  const fark = planPnl - gercekPnl;
+  // Neden sapıldı? (etiket kullanıcıya suçlama değil, ders çıkarma aracı)
+  let sebep = "uyumlu";
+  if (Math.abs(fark) >= Math.max(5, Math.abs(planPnl) * 0.08)) {
+    if (fark > 0) sebep = how === "hedef" ? "erken-cikis" : how === "acik" ? "erken-cikis" : "stop-gecikmesi";
+    else sebep = "sanslı-sapma";
+  }
+  return {
+    sym: t.symbol, openedAt: t.openedAt, closedAt: t.closedAt || null,
+    entry: +entry.toFixed(2), stop: +stop.toFixed(2), target: +target.toFixed(2), qty: +origQty.toFixed(4),
+    planCikis: +exitPx.toFixed(2), planTarih: exitDate, planNasil: how,
+    planPnl: +planPnl.toFixed(2), gercekPnl: +gercekPnl.toFixed(2), fark: +fark.toFixed(2), sebep,
+    gercekCikis: t.exitPrice != null ? +Number(t.exitPrice).toFixed(2) : null,
+  };
+}
+app.get("/api/plan-gap", async (_req, res) => {
+  try {
+    const data = await loadData();
+    const closed = (data.swingTrades || []).filter((t) => t.status === "closed" && !t.archived);
+    const rows = [];
+    let atlanan = 0;
+    for (const t of closed) {
+      const sym = String(t.symbol || "").toUpperCase();
+      const c = candleCache[sym]?.candles || null;
+      const r = c ? planGapOne(t, c) : null;
+      if (r) rows.push(r); else atlanan++;
+    }
+    rows.sort((a, b) => b.fark - a.fark);
+    const topla = (f) => +rows.reduce((a, r) => a + f(r), 0).toFixed(2);
+    const masada = topla((r) => Math.max(0, r.fark));      // erken çıkışların toplam bedeli
+    const kazanc = topla((r) => Math.min(0, r.fark));      // plandan sapıp KÂRLI çıktıkların (şans)
+    const grup = (s) => rows.filter((r) => r.sebep === s).length;
+    res.json({
+      n: rows.length, atlanan,
+      planToplam: topla((r) => r.planPnl), gercekToplam: topla((r) => r.gercekPnl),
+      netFark: topla((r) => r.fark), masada, kazanc,
+      dagilim: { uyumlu: grup("uyumlu"), erkenCikis: grup("erken-cikis"), stopGecikmesi: grup("stop-gecikmesi"), sansliSapma: grup("sanslı-sapma") },
+      rows: rows.slice(0, 12),
+      not: "Karşı-olgu: stop/hedefine harfiyen uysaydın ne olurdu. Aynı mumda ikisi de vurulduysa muhafazakâr olarak STOP sayılır. Planı (stop+hedef) olmayan ya da mum verisi bulunmayan işlemler ölçüme girmez.",
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 /* ===== Aylık Edge Raporu =========================================================

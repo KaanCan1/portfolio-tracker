@@ -886,6 +886,29 @@ const server = createServer(async (req, res) => {
   if (url === "/api/realized2026/sync-trades" && req.method === "POST") { res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify({ ok: true, added: 0 })); return; }
   if (url === "/api/edge-reports/build" && req.method === "POST") { await readBody(req).catch(() => ({})); res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify({ ok: true })); return; }
   if (url === "/api/logout" && req.method === "POST") { res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify({ ok: true })); return; }
+  // Masada Bıraktığın Para — plana-uyum karşı-olgusu fikstürü
+  if (url === "/api/plan-gap") {
+    const rows = [
+      { sym: "SMCI", openedAt: iso(Y, M, 2), closedAt: iso(Y, M, 8), entry: 42, stop: 38, target: 52, qty: 60,
+        planCikis: 52, planTarih: iso(Y, M, 12), planNasil: "hedef", planPnl: 597, gercekPnl: 267, fark: 330, sebep: "erken-cikis", gercekCikis: 46.5 },
+      { sym: "AAPL", openedAt: iso(Y, M - 1, 7), closedAt: iso(Y, M - 1, 24), entry: 188, stop: 181, target: 205, qty: 30,
+        planCikis: 205, planTarih: iso(Y, M - 1, 26), planNasil: "hedef", planPnl: 507, gercekPnl: 267, fark: 240, sebep: "erken-cikis", gercekCikis: 197 },
+      { sym: "TSLA", openedAt: iso(Y, M - 4, 6), closedAt: iso(Y, M - 4, 9), entry: 240, stop: 225, target: 270, qty: 12,
+        planCikis: 225, planTarih: iso(Y, M - 4, 9), planNasil: "stop", planPnl: -183, gercekPnl: -99, fark: -84, sebep: "sanslı-sapma", gercekCikis: 232 },
+      { sym: "PLTR", openedAt: iso(Y, M - 2, 4), closedAt: iso(Y, M - 2, 19), entry: 24.5, stop: 22, target: 31, qty: 200,
+        planCikis: 31, planTarih: iso(Y, M - 2, 21), planNasil: "hedef", planPnl: 1297, gercekPnl: 717, fark: 580, sebep: "erken-cikis", gercekCikis: 28.1 },
+      { sym: "MSFT", openedAt: iso(Y, M - 3, 1), closedAt: iso(Y, M - 3, 22), entry: 410, stop: 398, target: 440, qty: 8,
+        planCikis: 440, planTarih: iso(Y, M - 3, 24), planNasil: "hedef", planPnl: 237, gercekPnl: 205, fark: 32, sebep: "uyumlu", gercekCikis: 436 },
+    ];
+    const sum = (f) => +rows.reduce((a, r) => a + f(r), 0).toFixed(2);
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ n: rows.length, atlanan: 2,
+      planToplam: sum(r => r.planPnl), gercekToplam: sum(r => r.gercekPnl), netFark: sum(r => r.fark),
+      masada: sum(r => Math.max(0, r.fark)), kazanc: sum(r => Math.min(0, r.fark)),
+      dagilim: { uyumlu: 1, erkenCikis: 3, stopGecikmesi: 0, sansliSapma: 1 }, rows,
+      not: "Karşı-olgu: stop/hedefine harfiyen uysaydın ne olurdu. Aynı mumda ikisi de vurulduysa muhafazakâr olarak STOP sayılır. (MOCK)" }));
+    return;
+  }
   if (url === "/api/weekly") {
     const wk = { portfolio: { fromDate: iso(Y, M, 9), toDate: iso(Y, M, 16), changeTRY: -22019, pct: -10.92 },
       best: { symbol: "NVDA", pct: 4.11 }, worst: { symbol: "NBIS", pct: -7.84 },
@@ -898,6 +921,12 @@ const server = createServer(async (req, res) => {
     const rec = { start: b.start || "2025-07-01", universe: 18, params: b,
       baseline: { islem: 33, acik: 2, isabet: 52, ortR: 0.88, getiriPct: 65.9, maksDususPct: -8.6, sermaye: 2489, komisyon: 148.5 },
       variant: { islem: 26, acik: 2, isabet: 58, ortR: 0.94, getiriPct: 48.2, maksDususPct: -7.1, sermaye: 2223, komisyon: 117.0 },
+      // Bootstrap fikstürü: nokta tahmininde varyant önde (+0.06R) ama aralık 0'ı içeriyor
+      // → "gürültü" kutusu render edilir (asıl test edilmesi gereken durum bu)
+      ci: { baseline: { lo: 0.31, med: 0.88, hi: 1.44 }, varyant: { lo: 0.29, med: 0.94, hi: 1.61 },
+        kiyas: { yeterli: true, n: { baseline: 33, varyant: 26 }, farkR: 0.06, lo: -0.72, hi: 0.85,
+          anlamli: false, yon: "varyant", kucukOrneklem: false,
+          verdict: "Fark GÜRÜLTÜ sayılır: +0.06R ama aralık -0.72…0.85R — 0'ı içeriyor, yani bu veriyle \"daha iyi\" DİYEMEYİZ." } },
       not: "Evren bugünün evrenidir (hafif survivorship). Sonuç geçmiştir, garanti değildir; komisyon dahil NET rakamlardır. (MOCK)" };
     setTimeout(() => { res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify(rec)); }, 700);
     return;
