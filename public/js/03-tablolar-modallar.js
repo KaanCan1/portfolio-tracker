@@ -555,15 +555,6 @@ form.addEventListener("submit", async (e) => {
   load();
 });
 
-// Hisseyi Uzun Vade ↔ Swing taşı (horizon). Swing'e taşıyınca stop/hedef girmek için formu aç.
-async function setHorizon(id, next) {
-  try {
-    await fetch(`/api/holdings/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ horizon: next }) });
-    await load();
-    toast(next === "swing" ? "Swing'e taşındı — stop/hedef gir" : "Uzun vadeye taşındı", "ok");
-    if (next === "swing") openEdit(id);
-  } catch { toast("Taşınamadı", "warn"); }
-}
 
 async function delHolding(id) {
   const h = STATE.holdings.find((x) => x.id === id);

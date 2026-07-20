@@ -378,23 +378,6 @@ function positionSizing(entry, stop) {
   return { portUSD, usdtry, perShare, levels: [calc(0.01), calc(0.02)] };
 }
 
-function positionSizingHTML(pl) {
-  const ps = positionSizing(pl.entry, pl.stop);
-  if (!ps) return ""; // giriş yok (bekle/kaçın) → pozisyon önerme
-  if (ps.unknown)
-    return `<div class="cm-sec">💰 Pozisyon önerisi</div><div class="cm-psnote">Portföy değeri yüklenince hesaplanır — önce “Genel Bakış”ı aç.</div>`;
-  const rows = ps.levels.map((L) => {
-    const tag = L.riskPct === 0.01 ? "Temkinli %1" : "Agresif %2";
-    return `<div class="cm-psr">
-      <b>${tag}</b>
-      <span class="cm-psv"><b>%${L.posPct.toFixed(1)}</b> · ${fmtTRY0(L.posValTRY)} <span class="muted">(≈${fmtUSD0(L.posVal)} · ${fmtNum(L.shares, 2)} adet${L.capped ? " · %25 sınırı" : ""})</span></span>
-      <span class="cm-psrisk">stopta −${fmtTRY0(L.riskTRY)}</span>
-    </div>`;
-  }).join("");
-  return `<div class="cm-sec">💰 Pozisyon önerisi · portföy ≈${fmtTRY0(ps.portUSD * ps.usdtry)}</div>
-    <div class="cm-ps">${rows}</div>
-    <div class="cm-psnote">Parçalı (Midas): tutar = portföy × risk% ÷ (giriş − stop) × giriş. Stop olursa kaybın sağdaki tutar kadar. Tek pozisyon %25 ile sınırlı.</div>`;
-}
 
 /* ---- Kademeli giriş planı: tek seferde değil 2-3 dilimde ----
  * Kuruluma göre yön: breakout → piramit (güçte ekle), diğer → kademeli alım
@@ -422,18 +405,6 @@ function scaledEntryPlan(pl) {
   return { isBreakout, tranches, avgCost };
 }
 
-function scaledPlanHTML(pl) {
-  const sp = scaledEntryPlan(pl);
-  if (!sp) return "";
-  const rows = sp.tranches.map((t) =>
-    `<div class="cm-trr"><span class="cm-trp">%${t.pct}</span><span class="cm-trl">${t.label}</span><b>${fmtUSD(t.price)}</b></div>`
-  ).join("");
-  return `<div class="cm-sec">🪜 Kademeli giriş · ${sp.isBreakout ? "piramit (güçte ekle)" : "kademeli alım (zayıflıkta indir)"}</div>
-    <div class="cm-scaled">${rows}<div class="cm-tr-avg">Ağırlıklı ort. maliyet ≈ <b>${fmtUSD(sp.avgCost)}</b></div></div>
-    <div class="cm-psnote">${sp.isBreakout
-      ? "Kırılım tutarsa ekle — yanılırsan yalnızca ilk dilim risk alır, tüm pozisyon tepeden girmemiş olur."
-      : "Düştükçe ortalama maliyetin düşer. Ama her dilimde stop'a uy; “nakit bitene kadar ekleme” tuzağına düşme."}</div>`;
-}
 
 /* ---- Uzun Vade paneli: kademeli biriktirme bölgeleri + nakit oranı koruması ---- */
 function longtermPanel(lt) {

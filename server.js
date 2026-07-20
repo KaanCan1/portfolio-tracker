@@ -469,7 +469,6 @@ const chRaiBandTR = {
 };
 const chFmtDSrv = (d) => { if (!d) return "—"; const x = new Date(d); return `${x.getUTCDate()} ${["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"][x.getUTCMonth()]}`; };
 const chUSD = (n) => n == null ? "—" : `$${Number(n).toFixed(2)}`;
-const chUSD0 = (n) => n == null ? "—" : `$${Math.round(Number(n)).toLocaleString("en-US")}`;
 // Bugünkü rejim + açıklama metni (client chRegimeToday ile birebir)
 function chRegimeTodaySrv(Q, raiToday) {
   const rai = raiToday;
@@ -2214,26 +2213,6 @@ async function fetchHistory(symbol, opts = {}) {
   } catch { return { closes: [], highs: [], lows: [], w52High: null, w52Low: null }; }
 }
 
-async function fetchAnalystY(symbol) {
-  try {
-    const { cookie, crumb } = await getYahooAuth();
-    const url =
-      `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}` +
-      `?modules=financialData&crumb=${encodeURIComponent(crumb)}`;
-    const r = await fetch(url, {
-      headers: { "User-Agent": UA, Cookie: cookie || "", Accept: "application/json" },
-      signal: AbortSignal.timeout(12_000),
-    });
-    if (!r.ok) return {};
-    const j = await r.json();
-    const fd = j?.quoteSummary?.result?.[0]?.financialData || {};
-    return {
-      targetMean: fd.targetMeanPrice?.raw ?? null,
-      numAnalysts: fd.numberOfAnalystOpinions?.raw ?? null,
-      reco: fd.recommendationKey ?? null,
-    };
-  } catch { return {}; }
-}
 
 async function refreshSignals(symbols) {
   if (signalsRefreshing || !symbols.length) return;
@@ -2621,38 +2600,6 @@ function rsRating(sym, candles) {
   return Math.max(1, Math.min(99, Math.round((below / perfs.length) * 98) + 1));
 }
 
-// OpenInsider — son ~90 günde yönetici alım/satımları (Form 4)
-async function fetchInsider(symbol) {
-  try {
-    const r = await fetchRetry(
-      `http://openinsider.com/${encodeURIComponent(symbol)}`,
-      { headers: { "User-Agent": UA } }, 2
-    );
-    const html = await r.text();
-    const tbl = html.split('class="tinytable"')[1];
-    if (!tbl) return { buys: 0, sells: 0, buyValue: 0, netValue: 0, lastBuy: null };
-    const body = (tbl.split("</thead>")[1] || tbl).split("</table>")[0];
-    const rows = body.split(/<tr[ >]/).slice(1);
-    const now = Date.now(), DAYS90 = 90 * 86400_000;
-    let buys = 0, sells = 0, buyValue = 0, netValue = 0, lastBuy = null;
-    for (const row of rows.slice(0, 80)) {
-      const dates = row.match(/20\d\d-\d\d-\d\d/g);
-      const tradeDate = dates ? dates[1] || dates[0] : null;
-      if (tradeDate && now - new Date(tradeDate + "T00:00:00Z").getTime() > DAYS90) continue;
-      const type = /<td>\s*([PS])\s*-\s*(Purchase|Sale)/i.exec(row);
-      const val = /([+\-])\$([\d,]+)/.exec(row); // değer sütunu işaretli ($ + işaretli)
-      if (!type) continue;
-      const amount = val ? Number(val[2].replace(/,/g, "")) : 0;
-      if (/p/i.test(type[1])) {
-        buys++; buyValue += amount; netValue += amount;
-        if (!lastBuy && tradeDate) lastBuy = tradeDate;
-      } else {
-        sells++; netValue -= amount;
-      }
-    }
-    return { buys, sells, buyValue, netValue, lastBuy };
-  } catch { return { buys: 0, sells: 0, buyValue: 0, netValue: 0, lastBuy: null, err: true }; }
-}
 
 // Tek hisse için 4 sinyali birleştirip 0-100 skor + kademe üret.
 // ÖNEMLİ: eksik veri 0 sayılmaz — skor yalnızca verisi gelen bileşenler

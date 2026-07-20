@@ -131,16 +131,6 @@ function renderDailyBoard() {
     const ar = n > 0 ? "▲" : n < 0 ? "▼" : "▪";
     return `<span class="db-delta ${t}">${ar} ${sUSD(n)}${pct != null && !isNaN(pct) ? ` · ${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%` : ""}</span>`;
   };
-  const dbSpark = (pts) => {
-    if (!pts || pts.length < 3) return "";
-    const min = Math.min(...pts), max = Math.max(...pts), rng = max - min || 1, n = pts.length, W = 100, H = 30;
-    const xy = pts.map((v, i) => `${((i / (n - 1)) * W).toFixed(1)},${(H - 1.5 - ((v - min) / rng) * (H - 3)).toFixed(1)}`);
-    const up = pts[n - 1] >= pts[0], col = up ? "var(--up)" : "var(--down)";
-    return `<svg class="db-spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
-      <defs><linearGradient id="dbSparkG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${col}" stop-opacity=".22"/><stop offset="1" stop-color="${col}" stop-opacity="0"/></linearGradient></defs>
-      <polygon points="0,${H} ${xy.join(" ")} ${W},${H}" fill="url(#dbSparkG)"/>
-      <polyline points="${xy.join(" ")}" fill="none" stroke="${col}" stroke-width="1.6" vector-effect="non-scaling-stroke" stroke-linejoin="round"/></svg>`;
-  };
 
   /* ---------- bugün: hisse hareketi vs kur etkisi + kazanan/kaybeden ---------- */
   const hist = (S.history || []).filter((s) => s.usdtry);
