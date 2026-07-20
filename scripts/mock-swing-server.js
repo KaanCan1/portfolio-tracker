@@ -923,6 +923,15 @@ const server = createServer(async (req, res) => {
         diag: { rejimGun: { on: 168, caution: 41, off: 43 }, beZorlama: 19, engellenenGiris: 27, siyrik: 11 } },
       variant: { islem: 26, acik: 2, isabet: 58, ortR: 0.94, getiriPct: 48.2, maksDususPct: -7.1, sermaye: 2223, komisyon: 117.0,
         diag: { rejimGun: { on: 168, caution: 41, off: 43 }, beZorlama: 0, engellenenGiris: 27, siyrik: 3 } },
+      // Walk-forward fikstürü: avantaj YALNIZ ilk yarıda → "uydurma şüphesi" kutusu
+      // (Kaan'ın 5 parametreyi birden çevirdiği koşunun tipik sonucu — test edilmesi gereken durum)
+      wf: { kesim: "2026-01-05", durum: "uydurma",
+        verdict: "⚠ UYDURMA ŞÜPHESİ: avantaj yalnız ilk yarıda var (+0.71R), ikinci yarıda kayboluyor (-0.18R). Bu ayarlar büyük olasılıkla o döneme uydurulmuş — canlıya ALMA.",
+        bolum1: { donem: "2025-07-01 → 2026-01-05", islem: { baseline: 38, varyant: 44 }, ortR: { baseline: 0.22, varyant: 0.93 },
+          getiriPct: { baseline: 31.4, varyant: 112.8 }, maksDususPct: { baseline: -18.2, varyant: -12.1 }, farkR: 0.71, yeterli: true },
+        bolum2: { donem: "2026-01-05 → bugün", islem: { baseline: 36, varyant: 42 }, ortR: { baseline: 0.38, varyant: 0.2 },
+          getiriPct: { baseline: 28.6, varyant: 25.9 }, maksDususPct: { baseline: -21.4, varyant: -19.8 }, farkR: -0.18, yeterli: true } },
+      kaldirac: { canli: 3, varyant: 4, kat: 1.33 },
       // Bootstrap fikstürü: nokta tahmininde varyant önde (+0.06R) ama aralık 0'ı içeriyor
       // → "gürültü" kutusu render edilir (asıl test edilmesi gereken durum bu)
       ci: { baseline: { lo: 0.31, med: 0.88, hi: 1.44 }, varyant: { lo: 0.29, med: 0.94, hi: 1.61 },

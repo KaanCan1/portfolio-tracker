@@ -3596,3 +3596,22 @@ svg.fx-pop { animation: fxPop .7s cubic-bezier(.22,1,.36,1) both; transform-orig
 .ld-delta.up { color: var(--red-d); }    /* daha çok engelleme/tıraşlama = kötü */
 .ld-delta.down { color: var(--green-d); }
 .ld-note { padding: 9px 13px; font-size: 11.5px; line-height: 1.55; color: var(--muted); border-top: 1px solid var(--line); }
+
+/* ════════ Walk-forward hükmü + kaldıraç uyarısı ════════ */
+.wf-lev { margin-top: 11px; padding: 10px 13px; border-radius: var(--radius-sm); font-size: 12.5px; line-height: 1.55;
+  background: var(--amber-bg); border: 1px solid var(--amber-line); color: var(--amber-d); }
+.wf-lev b { color: var(--ink); }
+.wf-box { margin-top: 11px; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 11px 13px; background: var(--bg2); }
+.wf-box.tutarli { border-color: var(--green-line); background: var(--green-soft); }
+.wf-box.uydurma { border-color: var(--red-line); background: var(--red-bg); }
+.wf-box.kotu { border-color: var(--line-strong); }
+.wf-h { font-size: 13px; font-weight: 700; display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; }
+.wf-box.tutarli .wf-h { color: var(--green-d); }
+.wf-box.uydurma .wf-h { color: var(--red-d); }
+.wf-sub { font-size: 11px; font-weight: 600; color: var(--muted); }
+.wf-t { font-size: 12.5px; line-height: 1.55; color: var(--ink2); margin: 5px 0 10px; }
+.wf-table { width: 100%; min-width: 0; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; background: var(--card); border-radius: var(--radius-sm); overflow: hidden; }
+.wf-table th { background: var(--bg2); color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .5px; padding: 7px 11px; text-align: right; }
+.wf-table th.l, .wf-table td.l { text-align: left; }
+.wf-table td { padding: 9px 11px; text-align: right; border-top: 1px solid var(--line); }
+.wf-n { display: block; font-size: 10.5px; color: var(--muted); font-weight: 500; }

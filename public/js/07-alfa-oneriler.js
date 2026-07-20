@@ -1026,8 +1026,39 @@ function labPaint(d) {
       }).join("")}</tbody>
     </table></div>
     ${verdict}
+    ${labWF(d)}
     ${labDiag(d)}
     <div class="bm-note">${d.start} → bugün · evren ${d.universe} hisse · ${d.not || ""}</div>`;
+}
+
+/* Walk-forward hükmü — "bu ayarlar gerçek mi, bu pencereye mi uydurulmuş?"
+ * Parametre çevirerek getiri yükseltmek kolaydır; asıl soru avantajın pencerenin
+ * her iki yarısında da durup durmadığıdır. Bu kutu tabloya İNANMADAN ÖNCE okunur. */
+function labWF(d) {
+  const w = d.wf;
+  const kal = d.kaldirac
+    ? `<div class="wf-lev">⚖️ <b>Kaldıraç uyarısı:</b> risk %${d.kaldirac.varyant} kullandın, canlı kural %${d.kaldirac.canli} — pozisyonlar <b>${d.kaldirac.kat}×</b> büyük.
+       Risk yüzdesi işlem-başı R'yi <b>değiştirmez</b>; getiri farkının bir kısmı beceri değil <b>kaldıraçtır</b> (ve kötü seride aynı oranda acıtır). Edge'i kıyaslamak için risk %${d.kaldirac.canli}'te koştur.</div>`
+    : "";
+  if (!w) return kal;
+  const cell = (o, k, fmt) => `${fmt(o[k].baseline)} → <b>${fmt(o[k].varyant)}</b>`;
+  const pct = (v) => (v == null ? "—" : `${v >= 0 ? "+" : ""}%${v}`);
+  const r = (v) => (v == null ? "—" : `${v >= 0 ? "+" : ""}${v}R`);
+  const row = (b) => `<tr>
+      <td class="l"><b>${b.donem}</b><span class="wf-n">${b.islem.baseline} vs ${b.islem.varyant} işlem${b.yeterli ? "" : " · az"}</span></td>
+      <td>${cell(b, "ortR", r)}</td>
+      <td>${cell(b, "getiriPct", pct)}</td>
+      <td class="${b.farkR > 0 ? "pos" : b.farkR < 0 ? "neg" : ""}"><b>${r(b.farkR)}</b></td>
+    </tr>`;
+  return `${kal}
+    <div class="wf-box ${w.durum}">
+      <div class="wf-h">${w.durum === "tutarli" ? "✓ Her iki yarıda da tutuyor" : w.durum === "uydurma" ? "⚠ Uydurma şüphesi" : w.durum === "kotu" ? "✗ Varyant geride" : "· Walk-forward"}
+        <span class="wf-sub">pencere ${w.kesim} tarihinden ikiye bölündü</span></div>
+      <div class="wf-t">${w.verdict}</div>
+      <div class="tbl-wrap"><table class="wf-table">
+        <thead><tr><th class="l">Dönem</th><th>Ort. R (canlı→varyant)</th><th>Getiri</th><th>Fark</th></tr></thead>
+        <tbody>${row(w.bolum1)}${row(w.bolum2)}</tbody></table></div>
+    </div>`;
 }
 
 /* Teşhis şeridi: farkın MEKANİZMASI. Rejim kaç gün kapalıydı, kaç giriş engellendi,

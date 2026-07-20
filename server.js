@@ -6527,6 +6527,7 @@ function labParams(q = {}) {
     riskPct: labClamp(q.riskPct, 1, 6, CH_ENG.riskPct),
     commission: labClamp(q.commission, 0, 5, CH_ENG.commission),
     rsMode: ["off", "half", "gate"].includes(q.rsMode) ? q.rsMode : "half", // canlı kural: half
+    end: /^\d{4}-\d{2}-\d{2}$/.test(q.end || "") ? q.end : null,  // walk-forward dilimi (iç kullanım)
     rsMin: labClamp(q.rsMin, 1, 95, CH_ENG.rsMin),
     ep: q.ep !== false && q.ep !== "false",          // EP/haber şeridi
     // Rejim kapısı İKİYE ayrıldı — tek anahtar üç işi birden yapıyordu, hangisinin
@@ -6565,7 +6566,9 @@ function labReplay(ctx, P) {
   const { S, watch, regimeAt } = ctx;
   const ref = S[watch[0]]; if (!ref) return { error: "önbellekte mum yok" };
   const todayISO = new Date().toISOString().slice(0, 10);
-  const dates = ref.v.map((c) => c.time).filter((d) => d >= P.start && d < todayISO);
+  // P.end: walk-forward için pencereyi dilimlemeye yarar (kullanıcıya açık değil)
+  const bitis = P.end && P.end < todayISO ? P.end : todayISO;
+  const dates = ref.v.map((c) => c.time).filter((d) => d >= P.start && d < bitis);
   const size = (entry, stop) => { const frac = (entry - stop) / entry; const riskUSD = CH_ENG.startCapital * P.riskPct / 100; return Math.max(CH_ENG.minNotional, Math.min(CH_ENG.maxNotional, riskUSD / Math.max(0.001, frac))); };
   let cash = CH_ENG.startCapital, peak = CH_ENG.startCapital, maxDD = 0, fees = 0;
   const positions = [];
@@ -6669,6 +6672,51 @@ function bootCI(arr, stat, iters = 1000, seed = 42) {
   const q = (p) => out[Math.min(out.length - 1, Math.floor(p * out.length))];
   return { lo: +q(0.05).toFixed(2), med: +q(0.5).toFixed(2), hi: +q(0.95).toFixed(2) };
 }
+/* ===== Walk-forward — "bu ayarlar gerçek mi, bu pencereye mi uydurulmuş?" ==========
+ * Parametre çevirerek getiriyi yükseltmek KOLAYDIR: yeterince knob çevirirsen her
+ * veri setinde harika görünen bir kombinasyon bulunur. Gerçek soru şudur: aynı ayar
+ * pencerenin BAŞKA bir bölümünde de önde mi? Pencereyi ikiye böler, baseline ve
+ * varyantı her iki yarıda ayrı koşturur. Avantaj yalnız bir yarıda varsa uydurmadır.
+ * DÜRÜST SINIR: parametreleri tüm pencereye bakarak seçtiğin için 2. yarı GERÇEK
+ * out-of-sample değildir — ama avantajın kararsızlığını yine de ortaya çıkarır. */
+function labWalkForward(ctx, P, dates) {
+  if (!dates || dates.length < 80) return null;              // bölmeye değmeyecek kadar kısa
+  const mid = dates[Math.floor(dates.length / 2)];
+  const dilim = (start, end) => {
+    const b = labReplay(ctx, labParams({ start, end }));      // canlı kurallar, aynı dilim
+    const v = labReplay(ctx, { ...P, start, end });
+    if (b?.error || v?.error) return null;
+    return {
+      donem: `${start} → ${end || "bugün"}`,
+      islem: { baseline: b.islem, varyant: v.islem },
+      ortR: { baseline: b.ortR, varyant: v.ortR },
+      getiriPct: { baseline: b.getiriPct, varyant: v.getiriPct },
+      maksDususPct: { baseline: b.maksDususPct, varyant: v.maksDususPct },
+      farkR: b.ortR != null && v.ortR != null ? +(v.ortR - b.ortR).toFixed(2) : null,
+      yeterli: Math.min(b.islem, v.islem) >= 10,
+    };
+  };
+  const d1 = dilim(P.start, mid), d2 = dilim(mid, null);
+  if (!d1 || !d2) return null;
+  const f1 = d1.farkR, f2 = d2.farkR;
+  let durum = "belirsiz", verdict = "";
+  if (f1 == null || f2 == null || !d1.yeterli || !d2.yeterli) {
+    durum = "yetersiz";
+    verdict = "Dilimlerden birinde ölçmeye yetecek işlem yok — walk-forward hüküm veremiyor.";
+  } else if (f1 > 0 && f2 > 0) {
+    durum = "tutarli";
+    verdict = `Varyant HER İKİ yarıda da önde (${f1 >= 0 ? "+" : ""}${f1}R ve ${f2 >= 0 ? "+" : ""}${f2}R). Bu, avantajın tek bir döneme yapışmadığını gösterir — hâlâ kanıt değil ama uydurma şüphesi azalır.`;
+  } else if (f1 <= 0 && f2 <= 0) {
+    durum = "kotu";
+    verdict = `Varyant her iki yarıda da geride (${f1}R ve ${f2}R). Canlı kurallar daha iyi — bu ayarı alma.`;
+  } else {
+    durum = "uydurma";
+    const iyi = f1 > 0 ? "ilk" : "ikinci", kotu = f1 > 0 ? "ikinci" : "ilk";
+    verdict = `⚠ UYDURMA ŞÜPHESİ: avantaj yalnız ${iyi} yarıda var (${f1 >= 0 ? "+" : ""}${f1}R), ${kotu} yarıda kayboluyor (${f2 >= 0 ? "+" : ""}${f2}R). Bu ayarlar büyük olasılıkla o döneme uydurulmuş — canlıya ALMA.`;
+  }
+  return { bolum1: d1, bolum2: d2, durum, verdict, kesim: mid };
+}
+
 /* İki stratejinin FARKININ aralığı — asıl soru bu. Aralık 0'ı içeriyorsa
  * "varyant daha iyi" DİYEMEYİZ; elimizdeki veri ayırt etmeye yetmiyordur. */
 function labCompare(base, vari, iters = 1000) {
@@ -6710,9 +6758,18 @@ app.post("/api/lab/backtest", async (req, res) => {
       varyant: bootCI(variant._rs, bMean),
       kiyas: labCompare(baseline, variant),
     };
+    // Walk-forward: aynı ayar pencerenin her iki yarısında da tutuyor mu?
+    const ref = ctx.S[ctx.watch[0]];
+    const todayISO = new Date().toISOString().slice(0, 10);
+    const wfDates = ref ? ref.v.map((c) => c.time).filter((d) => d >= P.start && d < todayISO) : [];
+    const wf = labWalkForward(ctx, P, wfDates);
+    // Kaldıraç uyarısı: risk% işlem-başı R'yi DEĞİŞTİRMEZ, yalnız pozisyon büyüklüğünü
+    // ölçekler → getiri farkının bir kısmı "edge" değil kaldıraçtır. Bunu ayrıca söyle.
+    const kaldirac = P.riskPct !== CH_ENG.riskPct
+      ? { canli: CH_ENG.riskPct, varyant: P.riskPct, kat: +(P.riskPct / CH_ENG.riskPct).toFixed(2) } : null;
     delete baseline._rs; delete variant._rs;   // ham R listesi istemciye gitmesin
     LAB.last = new Date().toISOString();
-    res.json({ start: P.start, universe: ctx.watch.length, params: P, baseline, variant, ci,
+    res.json({ start: P.start, universe: ctx.watch.length, params: P, baseline, variant, ci, wf, kaldirac,
       not: "Evren bugünün evrenidir (hafif survivorship). Sonuç geçmiştir, garanti değildir; komisyon dahil NET rakamlardır. Güven aralıkları 1000 yeniden örneklemeyle (bootstrap) hesaplanır — küçük örneklemde 'daha iyi' demenin dürüst sınırıdır." });
   } catch (e) { res.status(500).json({ error: e.message }); }
   finally { LAB._running = false; }
