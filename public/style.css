@@ -3580,3 +3580,19 @@ svg.fx-pop { animation: fxPop .7s cubic-bezier(.22,1,.36,1) both; transform-orig
 @media (max-width: 760px) {
   .pg-table thead th:nth-child(6), .pg-table tbody td:nth-child(6) { display: none; } /* Plan K/Z — dar ekranda gizli */
 }
+
+/* ════════ Laboratuvar teşhis şeridi ("fark nereden geldi?") ════════ */
+.lab-diag { margin-top: 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--card); }
+.lab-diag > summary { cursor: pointer; list-style: none; padding: 9px 13px; font-size: 12.5px; font-weight: 700; color: var(--ink2); display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.lab-diag > summary::-webkit-details-marker { display: none; }
+.lab-diag > summary:hover { background: var(--bg2); border-radius: var(--radius-sm); }
+.lab-diag[open] > summary { border-bottom: 1px solid var(--line); border-radius: var(--radius-sm) var(--radius-sm) 0 0; }
+.ld-table { width: 100%; min-width: 0; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.ld-table th { background: var(--bg2); color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .5px; padding: 7px 13px; text-align: right; border-bottom: 1px solid var(--line); }
+.ld-table th.l, .ld-table td.l { text-align: left; }
+.ld-table td { padding: 8px 13px; text-align: right; border-bottom: 1px solid var(--line); }
+.ld-table tbody tr:last-child td { border-bottom: none; }
+.ld-delta { margin-left: 7px; font-size: 11px; font-weight: 700; }
+.ld-delta.up { color: var(--red-d); }    /* daha çok engelleme/tıraşlama = kötü */
+.ld-delta.down { color: var(--green-d); }
+.ld-note { padding: 9px 13px; font-size: 11.5px; line-height: 1.55; color: var(--muted); border-top: 1px solid var(--line); }

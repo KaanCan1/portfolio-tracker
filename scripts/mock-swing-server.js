@@ -919,8 +919,10 @@ const server = createServer(async (req, res) => {
   if (url === "/api/lab/backtest" && req.method === "POST") {
     const b = await readBody(req);
     const rec = { start: b.start || "2025-07-01", universe: 18, params: b,
-      baseline: { islem: 33, acik: 2, isabet: 52, ortR: 0.88, getiriPct: 65.9, maksDususPct: -8.6, sermaye: 2489, komisyon: 148.5 },
-      variant: { islem: 26, acik: 2, isabet: 58, ortR: 0.94, getiriPct: 48.2, maksDususPct: -7.1, sermaye: 2223, komisyon: 117.0 },
+      baseline: { islem: 33, acik: 2, isabet: 52, ortR: 0.88, getiriPct: 65.9, maksDususPct: -8.6, sermaye: 2489, komisyon: 148.5,
+        diag: { rejimGun: { on: 168, caution: 41, off: 43 }, beZorlama: 19, engellenenGiris: 27, siyrik: 11 } },
+      variant: { islem: 26, acik: 2, isabet: 58, ortR: 0.94, getiriPct: 48.2, maksDususPct: -7.1, sermaye: 2223, komisyon: 117.0,
+        diag: { rejimGun: { on: 168, caution: 41, off: 43 }, beZorlama: 0, engellenenGiris: 27, siyrik: 3 } },
       // Bootstrap fikstürü: nokta tahmininde varyant önde (+0.06R) ama aralık 0'ı içeriyor
       // → "gürültü" kutusu render edilir (asıl test edilmesi gereken durum bu)
       ci: { baseline: { lo: 0.31, med: 0.88, hi: 1.44 }, varyant: { lo: 0.29, med: 0.94, hi: 1.61 },

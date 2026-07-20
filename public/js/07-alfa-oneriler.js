@@ -947,7 +947,8 @@ function labInit() {
            tarayıcı formu sessizce reddediyordu. step=1: elle yazılan her tam sayı da geçerli. -->
       <label class="lab-f"><i>RS eşiği</i><input name="rsMin" type="number" value="30" min="5" max="95" step="1"></label>
       <label class="lab-f lab-chk"><input name="ep" type="checkbox" checked> EP/haber şeridi</label>
-      <label class="lab-f lab-chk"><input name="regimeGate" type="checkbox" checked> Rejim kapısı</label>
+      <label class="lab-f lab-chk" title="Rejim kapalıyken YENİ teknik giriş yapılmaz (EP girişleri yarım boyutla devam eder)"><input name="regimeGate" type="checkbox" checked> Rejim: giriş bloğu</label>
+      <label class="lab-f lab-chk" title="Rejim kapalıyken kârdaki ama TP1'e ulaşmamış pozisyonun stopu başabaşa çekilir — pozisyonları erken tıraşlayan kural budur"><input name="regimeBE" type="checkbox" checked> Rejim: başabaş zorlaması</label>
       <button type="submit" class="btn primary sm" id="labGo">Koştur</button>
     </form>
     <div id="labRes"><div class="rk-empty">Parametreleri seç, <b>Koştur</b>'a bas — canlı kurallarla yan yana ölçülür (~birkaç saniye).</div></div>`;
@@ -971,7 +972,7 @@ function labInit() {
     const body = {
       start: f.get("start"), tp1: +f.get("tp1"), tp2: +f.get("tp2"), riskPct: +f.get("riskPct"),
       commission: +f.get("commission"), rsMode: f.get("rsMode"), rsMin: +f.get("rsMin"),
-      ep: f.get("ep") === "on", regimeGate: f.get("regimeGate") === "on",
+      ep: f.get("ep") === "on", regimeGate: f.get("regimeGate") === "on", regimeBE: f.get("regimeBE") === "on",
     };
     try {
       const r = await fetch("/api/lab/backtest", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -1025,5 +1026,29 @@ function labPaint(d) {
       }).join("")}</tbody>
     </table></div>
     ${verdict}
+    ${labDiag(d)}
     <div class="bm-note">${d.start} → bugün · evren ${d.universe} hisse · ${d.not || ""}</div>`;
+}
+
+/* Teşhis şeridi: farkın MEKANİZMASI. Rejim kaç gün kapalıydı, kaç giriş engellendi,
+ * kaç kez stop başabaşa çekildi, kaç işlem "sıyrık" (|R|<0.15) ile kapandı.
+ * Sonuç tablosu NE olduğunu söyler; bu satır NEDEN olduğunu söyler. */
+function labDiag(d) {
+  const b = d.baseline?.diag, v = d.variant?.diag;
+  if (!b || !v) return "";
+  const g = b.rejimGun || {};
+  const gun = (g.on || 0) + (g.caution || 0) + (g.off || 0);
+  const row = (lbl, bv, vv, ipucu) => {
+    const fark = vv - bv;
+    return `<tr><td class="l" title="${ipucu}">${lbl}</td><td>${bv}</td><td><b>${vv}</b>${fark ? `<span class="ld-delta ${fark > 0 ? "up" : "down"}">${fark > 0 ? "+" : ""}${fark}</span>` : ""}</td></tr>`;
+  };
+  return `<details class="lab-diag"><summary>🔍 Fark nereden geldi? <span class="muted">rejim ${g.off || 0}/${gun} gün kapalıydı</span></summary>
+    <table class="ld-table"><thead><tr><th class="l">Mekanizma</th><th>Canlı</th><th>Varyant</th></tr></thead><tbody>
+      ${row("Rejim kapalıyken engellenen giriş", b.engellenenGiris, v.engellenenGiris, "Kapı yüzünden hiç açılmayan teknik pozisyon sayısı")}
+      ${row("Stop başabaşa çekildi", b.beZorlama, v.beZorlama, "Rejim kapalıyken kârdaki pozisyonun stopu girişe taşındı")}
+      ${row("“Sıyrık” kapanış (|R|<0.15)", b.siyrik, v.siyrik, "Ne kâr ne zarar — başabaş stopun tıraşladığı pozisyonların parmak izi")}
+    </tbody></table>
+    <div class="ld-note">Rejim günleri: <b>${g.on || 0}</b> açık · <b>${g.caution || 0}</b> temkinli · <b>${g.off || 0}</b> kapalı.
+      Kapalı gün sayısı düşükse bu pencerede rejim kuralı zaten az çalışmıştır — sonucu ona göre oku.</div>
+  </details>`;
 }

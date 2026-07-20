@@ -6529,7 +6529,11 @@ function labParams(q = {}) {
     rsMode: ["off", "half", "gate"].includes(q.rsMode) ? q.rsMode : "half", // canlı kural: half
     rsMin: labClamp(q.rsMin, 1, 95, CH_ENG.rsMin),
     ep: q.ep !== false && q.ep !== "false",          // EP/haber şeridi
-    regimeGate: q.regimeGate !== false && q.regimeGate !== "false", // rejim kapısı
+    // Rejim kapısı İKİYE ayrıldı — tek anahtar üç işi birden yapıyordu, hangisinin
+    // zarar verdiği ölçülemiyordu (20 Tem): (a) rejim kapalıyken YENİ GİRİŞ yok,
+    // (b) rejim kapalıyken açık kârdaki pozisyonun stopu başabaşa çekilir.
+    regimeGate: q.regimeGate !== false && q.regimeGate !== "false", // (a) giriş bloğu
+    regimeBE: q.regimeBE !== false && q.regimeBE !== "false",       // (b) başabaş zorlaması
   };
 }
 async function labCtx(start) {
@@ -6565,9 +6569,14 @@ function labReplay(ctx, P) {
   const size = (entry, stop) => { const frac = (entry - stop) / entry; const riskUSD = CH_ENG.startCapital * P.riskPct / 100; return Math.max(CH_ENG.minNotional, Math.min(CH_ENG.maxNotional, riskUSD / Math.max(0.001, frac))); };
   let cash = CH_ENG.startCapital, peak = CH_ENG.startCapital, maxDD = 0, fees = 0;
   const positions = [];
+  // Teşhis sayaçları — "fark nereden geldi?" sorusunu tahminle değil ölçümle yanıtlar
+  const diag = { rejimGun: { on: 0, caution: 0, off: 0 }, beZorlama: 0, engellenenGiris: 0 };
   for (const d of dates) {
-    const regime = P.regimeGate ? regimeAt(d) : "on";
-    const defensive = regime === "off";
+    // Rejimin KENDİSİ her zaman okunur (teşhis için); parametreler yalnız DAVRANIŞI kapatır
+    const gercekRejim = regimeAt(d);
+    diag.rejimGun[gercekRejim] = (diag.rejimGun[gercekRejim] || 0) + 1;
+    const regime = P.regimeGate ? gercekRejim : "on";
+    const defensive = P.regimeBE && gercekRejim === "off";
     for (const p of positions.filter((x) => x.open)) {
       const s = S[p.sym], i = s.idx[d]; if (i == null) continue; const c = s.v[i];
       const effStop = p.tp1hit ? p.entry : p.stop;
@@ -6575,10 +6584,16 @@ function labReplay(ctx, P) {
       if (!p.tp1hit && c.high >= p.tp1) { const pnl = 0.25 * p.shares * (p.tp1 - p.entry) - P.commission; cash += 0.25 * p.shares * p.tp1 - P.commission; fees += P.commission; p.realized += pnl; p.rem -= 0.25; p.tp1hit = true; }
       if (p.tp1hit && !p.tp2hit && c.high >= p.tp2) { const pnl = 0.25 * p.shares * (p.tp2 - p.entry) - P.commission; cash += 0.25 * p.shares * p.tp2 - P.commission; fees += P.commission; p.realized += pnl; p.rem -= 0.25; p.tp2hit = true; }
       if (p.open && p.rem > 0 && c.close < s.ema21[i]) { const fr = p.rem, pnl = fr * p.shares * (c.close - p.entry) - P.commission; cash += fr * p.shares * c.close - P.commission; fees += P.commission; p.realized += pnl; p.rem = 0; p.open = false; }
-      if (defensive && p.open && !p.tp1hit && c.close > p.entry) p.stop = Math.max(p.stop, p.entry);
+      if (defensive && p.open && !p.tp1hit && c.close > p.entry && p.stop < p.entry) { p.stop = p.entry; diag.beZorlama++; }
     }
     const held = new Set(positions.filter((x) => x.open).map((x) => x.sym));
     const free = (sym) => S[sym].idx[d] != null && !held.has(sym);
+    // Rejim kapalıyken teknik girişler bloklanır — KAÇ tanesinin engellendiğini de say
+    // (yoksa "kapı ne kadar iş yaptı" sorusu ölçülemez, yalnız tahmin edilir)
+    if (regime === "off") {
+      diag.engellenenGiris += watch.filter(free)
+        .filter((sym) => { const i = S[sym].idx[d]; return i != null && chSrvSignal(S, sym, i); }).length;
+    }
     const sigs = regime === "off" ? [] : watch.filter(free)
       .map((sym) => { const i = S[sym].idx[d]; const g = chSrvSignal(S, sym, i); return g ? { ...g, lane: "tech", rs: chRsAt(S[sym], i) } : null; })
       .filter(Boolean).sort((a, b) => b.rs - a.rs || b.volRatio - a.volRatio);
@@ -6620,6 +6635,9 @@ function labReplay(ctx, P) {
     getiriPct: +(((equity / CH_ENG.startCapital) - 1) * 100).toFixed(1),
     maksDususPct: +(maxDD * 100).toFixed(1),
     sermaye: +equity.toFixed(0), komisyon: +fees.toFixed(2),
+    // Teşhis: farkın MEKANİZMASI. "sıyrık" = |R|<0.15 ile kapanan işlem — başabaşa
+    // çekilen stopun tıraşladığı pozisyonların parmak izi.
+    diag: { ...diag, siyrik: closed.filter((p) => p.initRisk > 0 && Math.abs(p.realized / p.initRisk) < 0.15).length },
     _rs: rs.map((v) => +v.toFixed(4)),   // işlem-başı R — bootstrap için (ekranda gösterilmez)
   };
 }
