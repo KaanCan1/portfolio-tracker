@@ -943,12 +943,25 @@ function labInit() {
           <option value="gate">Sert kapı</option>
           <option value="off">Kapalı</option>
         </select></label>
-      <label class="lab-f"><i>RS eşiği</i><input name="rsMin" type="number" value="30" min="1" max="95" step="5"></label>
+      <!-- step="5" + min="1" idi → geçerli değerler 1,6,11…31 olur ve VARSAYILAN 30 geçersiz sayılırdı;
+           tarayıcı formu sessizce reddediyordu. step=1: elle yazılan her tam sayı da geçerli. -->
+      <label class="lab-f"><i>RS eşiği</i><input name="rsMin" type="number" value="30" min="5" max="95" step="1"></label>
       <label class="lab-f lab-chk"><input name="ep" type="checkbox" checked> EP/haber şeridi</label>
       <label class="lab-f lab-chk"><input name="regimeGate" type="checkbox" checked> Rejim kapısı</label>
       <button type="submit" class="btn primary sm" id="labGo">Koştur</button>
     </form>
     <div id="labRes"><div class="rk-empty">Parametreleri seç, <b>Koştur</b>'a bas — canlı kurallarla yan yana ölçülür (~birkaç saniye).</div></div>`;
+  // Güvenlik ağı: bir alan HTML5 doğrulamasına takılırsa tarayıcı formu SESSİZCE reddeder
+  // (baloncuk görünmeyebilir / alan ekran dışında olabilir). Sebebi ekrana yaz — bir daha
+  // "düğmeye basıyorum, hiçbir şey olmuyor" yaşanmasın.
+  $("#labForm").addEventListener("invalid", (e) => {
+    const el = e.target;
+    const ad = el.closest(".lab-f")?.querySelector("i")?.textContent || el.name;
+    $("#labRes").innerHTML = `<div class="rk-empty"><b>“${ad}” değeri kabul edilmedi:</b> ${el.validationMessage}
+      <span class="muted">(izin verilen aralık ${el.min}–${el.max}${el.step && el.step !== "1" ? `, ${el.step} adımlarla` : ""})</span></div>`;
+    el.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, true); // capture: invalid olayı baloncuklanmaz
+
   $("#labForm").addEventListener("submit", async (e) => {
     e.preventDefault();
     if (LAB_BUSY) return;
