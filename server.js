@@ -39,25 +39,48 @@ const app = express();
 app.use(express.json());
 
 /* ============================== Kimlik doğrulama ==============================
- * Tek şifre kapısı. Şifre düz metin saklanmaz: auth.json içinde salt+SHA-256.
+ * Tek şifre kapısı. Şifre düz metin saklanmaz: salt + **scrypt** (bellek-zor KDF).
+ * NEDEN scrypt: SHA-256 kasten HIZLIDIR — hash sızarsa saniyede milyarlarca deneme
+ * yapılabilir. scrypt her denemeyi ~100 ms + 16 MB belleğe mal eder → kaba kuvvet
+ * pratikte ölür. bcrypt/argon2 ile aynı sınıf ama Node'da YERLEŞİK (yeni bağımlılık
+ * ve Render'da native derleme yok). Eski sha256 kayıtları geriye dönük doğrulanır.
  * Oturum, sunucu sırrıyla HMAC imzalı çerez (durumsuz, restart'a dayanıklı).
  * Render gibi ortamlarda AUTH_PASSWORD / AUTH_SECRET env ile geçersiz kılınır. */
+const SCRYPT = { N: 16384, r: 8, p: 1, keylen: 32 }; // ~100 ms / ~16 MB
+const scryptHash = (pw, salt) =>
+  crypto.scryptSync(String(pw), salt, SCRYPT.keylen, { N: SCRYPT.N, r: SCRYPT.r, p: SCRYPT.p }).toString("hex");
 const AUTH = (() => {
   let cfg = {};
   try { cfg = JSON.parse(readFileSync(join(__dirname, "auth.json"), "utf8")); } catch {}
   const secret = process.env.AUTH_SECRET || cfg.secret || crypto.randomBytes(32).toString("hex");
   if (process.env.AUTH_PASSWORD) {
+    // Env'den türetme her açılışta yapılır → algoritma değişimi kilitlenmeye YOL AÇMAZ
     const salt = process.env.AUTH_SALT || "static-env-salt";
-    cfg = { salt, hash: crypto.createHash("sha256").update(salt + process.env.AUTH_PASSWORD).digest("hex"), secret };
+    cfg = { salt, algo: "scrypt", hash: scryptHash(process.env.AUTH_PASSWORD, salt), secret };
   }
   cfg.secret = secret;
+  // auth.json'dan gelen eski kayıt: algo alanı yoksa sha256'dır (geriye dönük)
+  if (cfg.hash && !cfg.algo) cfg.algo = "sha256";
   return cfg;
 })();
 const SESSION_DAYS = 30;
 
+// Kaba kuvvet freni: IP başına 10 deneme / 15 dk (tek kullanıcılı kapı — cömert ama sonsuz değil)
+const LOGIN_TRIES = new Map();
+const LOGIN_MAX = 10, LOGIN_WINDOW = 15 * 60_000;
+function loginThrottled(ip) {
+  const now = Date.now();
+  const arr = (LOGIN_TRIES.get(ip) || []).filter((t) => now - t < LOGIN_WINDOW);
+  LOGIN_TRIES.set(ip, arr);
+  if (LOGIN_TRIES.size > 500) for (const [k, v] of LOGIN_TRIES) if (!v.length) LOGIN_TRIES.delete(k);
+  return arr.length >= LOGIN_MAX;
+}
+const loginFailed = (ip) => LOGIN_TRIES.set(ip, [...(LOGIN_TRIES.get(ip) || []), Date.now()]);
+
 function checkPassword(pw) {
   if (!AUTH.hash || !AUTH.salt || typeof pw !== "string") return false;
-  const h = crypto.createHash("sha256").update(AUTH.salt + pw).digest("hex");
+  const h = AUTH.algo === "scrypt" ? scryptHash(pw, AUTH.salt)
+    : crypto.createHash("sha256").update(AUTH.salt + pw).digest("hex");
   try { return crypto.timingSafeEqual(Buffer.from(h), Buffer.from(AUTH.hash)); } catch { return false; }
 }
 function signSession() {
@@ -106,9 +129,15 @@ app.get("/healthz", (_req, res) =>
 app.get("/login", (_req, res) => res.sendFile(join(__dirname, "public", "login.html")));
 
 app.post("/api/login", (req, res) => {
+  const ip = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim() || req.ip || "yerel";
+  if (loginThrottled(ip)) {
+    return res.status(429).json({ ok: false, error: "Çok fazla deneme — 15 dakika sonra tekrar dene" });
+  }
   if (!checkPassword(req.body?.password)) {
+    loginFailed(ip);
     return res.status(401).json({ ok: false, error: "Şifre hatalı" });
   }
+  LOGIN_TRIES.delete(ip); // başarılı giriş sayacı sıfırlar
   const secure = req.headers["x-forwarded-proto"] === "https";
   res.setHeader("Set-Cookie",
     `sid=${signSession()}; HttpOnly; Path=/; Max-Age=${SESSION_DAYS * 86400}; SameSite=Lax${secure ? "; Secure" : ""}`);
