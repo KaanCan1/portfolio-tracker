@@ -339,6 +339,23 @@
           </details>
           <div id="radarBoard"></div>
         </section>
+
+        <!-- Haftalık Fırsatlar — fırsat radarının skorlu Top-10'u (19 Tem: radar birleşmesinde
+             kaybolan panel diriltildi; #opps/#oppWatchSyms/#oppRefreshBtn kancaları 02+05'te) -->
+        <section class="panel" id="oppsPanel">
+          <div class="panel-head">
+            <div>
+              <h2>🗓️ Haftalık Fırsatlar <span class="tip" data-tip="İpucu: Fırsat radarı tüm evreni tarayıp girilebilir kurulumları (yükseliş trendi + makul risk/ödül + aşırı alım değil) 0-100 skorla sıralar. Skor bir filtre, alım emri değil — planı (giriş/stop) yazılamayan fırsata girilmez. Geçmiş seçimlerin gerçek sonucu alttaki blokta dürüstçe ölçülür; garanti yok.">?</span> <span class="muted" id="oppSub"></span></h2>
+              <span class="chart-sub">Girilebilir kurulumların skorlu Top-10'u · ⭐ haftanın seçimi · geçmiş seçimlerin gerçek sonucu</span>
+            </div>
+            <button class="btn ghost sm" id="oppRefreshBtn">↻ Tara</button>
+          </div>
+          <div class="opp-watch">📡 <b>Nöbetteki 10 hisse</b> — 🟢 insider alımı · 📰 taze haber · sembole tıkla, kartına gider.
+            <div class="opp-watch-syms" id="oppWatchSyms"></div>
+          </div>
+          <div id="opps"></div>
+          <div id="oppBacktest"></div>
+        </section>
       </section>
 
       <!-- ===== Görünüm: Analiz ===== -->

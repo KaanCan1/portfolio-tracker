@@ -283,10 +283,14 @@ function showView(name) {
   if (name === "qm") { showView("challenge"); return; } // eski QM yer imleri → Alfa Avı
   if (name === "swingdefteri") loadSwingDeck();
   if (name === "buyume") renderGrowth();
-  if (name === "radar" && pendingRadarFilter) {
-    RADAR.tier = pendingRadarFilter; pendingRadarFilter = null;
-    document.querySelectorAll("#radarTiers .rt").forEach((x) => x.classList.toggle("active", x.dataset.tier === RADAR.tier));
-    renderRadarBoard();
+  if (name === "radar") {
+    // Haftalık Fırsatlar: sekmeye girince yükle (5 dk tazelik — sunucu taraması ağır, spam yok)
+    if (!OPP.data || Date.now() - (OPP._t || 0) > 5 * 60_000) { OPP._t = Date.now(); loadOpportunities(); }
+    if (pendingRadarFilter) {
+      RADAR.tier = pendingRadarFilter; pendingRadarFilter = null;
+      document.querySelectorAll("#radarTiers .rt").forEach((x) => x.classList.toggle("active", x.dataset.tier === RADAR.tier));
+      renderRadarBoard();
+    }
   }
   requestAnimationFrame(() => buildViewJump(name));
 }
