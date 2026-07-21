@@ -11,7 +11,11 @@ function freeRollOf(h) {
   const price = h.live?.priceUSD ?? null;
   const mvUSD = h.live?.marketValueUSD ?? (price != null ? qty * price : null);
   const costBasis = avg > 0 ? avg * qty : null;          // USD ana para
-  const realized = REALIZED_USD[String(h.symbol).toUpperCase()] || 0;
+  const symU = String(h.symbol).toUpperCase();
+  // Eski broker (truth) HİSSE realize'ı da sayılır — ama yalnız net KÂR ise (eski zarar,
+  // Kaan'ın 7 Tem kararıyla, geri-alım ilerlemesini geriye sarmaz). Opsiyonlar asla girmez.
+  const oldReal = Math.max(0, REALIZED_TRUTH_USD[symU] || 0);
+  const realized = (REALIZED_USD[symU] || 0) + oldReal;
   const effCost = costBasis != null ? costBasis - realized : null; // etkin (kalan) ana para
   const recovered = costBasis ? Math.max(0, Math.min(100, (realized / costBasis) * 100)) : null;
   const free = effCost != null && effCost <= 0 && qty > 0; // ana parayı tamamen geri almış
@@ -24,7 +28,7 @@ function freeRollOf(h) {
     remainShares = qty - sellShares;
     remainValue = remainShares * price;  // bedava binecek kısım (≈ kârın)
   }
-  return { qty, avg, price, mvUSD, costBasis, realized, effCost, recovered, free, unreal,
+  return { qty, avg, price, mvUSD, costBasis, realized, oldReal, effCost, recovered, free, unreal,
     sellShares, cashOut, remainShares, remainValue, profitable: price > 0 && avg > 0 && price > avg };
 }
 

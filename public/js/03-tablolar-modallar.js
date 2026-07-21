@@ -130,6 +130,12 @@ function renderGroup(title, rows, groupKey, horizon = "long") {
       : fr.recovered != null && fr.recovered >= 50
         ? `<span class="gr-hold-chip" data-view-growth="1" title="Ana paranın %${fr.recovered.toFixed(0)}'ini geri aldın — Büyüme sekmesi">🎁 %${fr.recovered.toFixed(0)}</span>`
         : "";
+    // Opsiyon realize rozeti (yalnız bilgi): bu dayanağın opsiyonlarından NET realize kâr varsa
+    // hissenin yanında belirt — sıfır maliyete ve Realize K/Z sütununa DAHİL DEĞİL.
+    const optReal = h.type === "stock" ? (REALIZED_OPT_USD[String(h.symbol).toUpperCase()] || 0) : 0;
+    const optChip = optReal > 0.005
+      ? `<span class="gr-hold-chip opt-real" title="Opsiyonlardan realize kâr ${fmtUSD(optReal)} — opsiyon olduğu için sıfır maliyet ve Realize K/Z hesabına dahil edilmez, yalnız bilgi">🧾 opsiyon realize ${fmtUSD(optReal)}</span>`
+      : "";
     const symCell = h.type === "stock"
       ? `<span class="sym sym-link" data-pos="${h.id}" title="Pozisyon detayı + grafik">${h.symbol}</span>`
       : `<span class="sym">${h.symbol}</span>`;
@@ -139,16 +145,20 @@ function renderGroup(title, rows, groupKey, horizon = "long") {
     const realCell = realUSD != null
       ? `<span class="${cls(realUSD)}">${fmtUSD(realUSD)}</span>`
       : `<span class="muted">—</span>`;
-    // Sıfır-maliyet sütunu (yalnızca hisse): geri-alım % + sıfır maliyet için kalan adet
+    // Sıfır-maliyet sütunu (yalnızca hisse): geri-alım % + sıfır maliyet için kalan adet.
+    // Alttaki 2026 Realize bölümünün HİSSE kârları da sayılır (fr.oldReal); opsiyonlar asla.
+    const zcTip = fr && fr.oldReal > 0
+      ? ` title="Geri-alım kaynağı: işlem geçmişi ${fmtUSD(fr.realized - fr.oldReal)} + eski realize kârı ${fmtUSD(fr.oldReal)} (opsiyonlar hariç)"`
+      : "";
     const frCell = !fr ? `<span class="muted">—</span>`
       : fr.free
-        ? `<div class="zc-cell"><div class="zc-bar"><div class="zc-fill done" style="width:100%"></div></div><span class="zc-tag free">🎁 bedava</span></div>`
+        ? `<div class="zc-cell"${zcTip}><div class="zc-bar"><div class="zc-fill done" style="width:100%"></div></div><span class="zc-tag free">🎁 bedava</span></div>`
         : fr.costBasis
-          ? `<div class="zc-cell"><div class="zc-bar"><div class="zc-fill" style="width:${Math.min(100, fr.recovered || 0).toFixed(0)}%"></div></div><span class="zc-tag">%${(fr.recovered || 0).toFixed(0)}${fr.sellShares != null ? ` · ${fmtNum(fr.sellShares, 1)} adet` : ""}</span></div>`
+          ? `<div class="zc-cell"${zcTip}><div class="zc-bar"><div class="zc-fill" style="width:${Math.min(100, fr.recovered || 0).toFixed(0)}%"></div></div><span class="zc-tag">%${(fr.recovered || 0).toFixed(0)}${fr.sellShares != null ? ` · ${fmtNum(fr.sellShares, 1)} adet` : ""}</span></div>`
           : `<span class="muted">—</span>`;
     return `<tr>
       <td class="l">${symCell} ${sigBadge}</td>
-      <td class="l nm">${h.name || ""} ${ptChip}${guardChip}${earnChip}${swingChip}${freeChip}</td>
+      <td class="l nm">${h.name || ""} ${ptChip}${guardChip}${earnChip}${swingChip}${freeChip}${optChip}</td>
       <td>${h.error ? `<span class="err">veri yok</span>` : priceCell}</td>
       <td class="spark-col">${h.type === "stock" ? sparklineSVG(h.spark) : `<span class="spark-na">—</span>`}</td>
       <td>${fmtNum(h.quantity, 6)}</td>

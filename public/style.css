@@ -2352,6 +2352,8 @@ button.sw-goal-target:hover { background: var(--bg2); border-color: var(--line);
 /* holding tablosu 🎁 rozeti */
 .gr-hold-chip { display: inline-flex; align-items: center; gap: 3px; font-size: 10.5px; font-weight: 700; color: #8a5d10; background: #fbf4e4; border: 1px solid #efe2c2; border-radius: 6px; padding: 1px 6px; cursor: pointer; vertical-align: middle; font-variant-numeric: tabular-nums; }
 .gr-hold-chip.free { color: var(--green-d); background: #e9f5ee; border-color: var(--green-line); }
+/* Opsiyon realize bilgi rozeti — salt bilgi (tıklanmaz), mor opsiyon tonu */
+.gr-hold-chip.opt-real { color: #5c4fa8; background: #f1effa; border-color: #ded9f2; cursor: default; }
 .gr-hold-chip:hover { filter: brightness(.97); }
 
 @media (max-width: 900px) { .gr-hero { grid-template-columns: 1fr 1fr; } }

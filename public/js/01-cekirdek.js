@@ -200,6 +200,11 @@ function costOf(h) {
 /* Sembol başına realize edilen K/Z (USD) — yalnızca satışlar. Sütun + sıralama
  * bunu kullanır. render() her çiziminde tazeler. */
 let REALIZED_USD = {};
+/* Eski broker (truth) hisse realize'ı (USD, opsiyonsuz, çift-saymasız) — YALNIZ Sıfır Maliyet
+ * motoru kullanır; Realize K/Z sütununa girmez. Opsiyon realize'ı ise hiçbir hesaba girmez,
+ * yalnız net kârdaysa satırda bilgi rozeti olur. */
+let REALIZED_TRUTH_USD = {};
+let REALIZED_OPT_USD = {};
 function computeRealizedBySym(trades = []) {
   const m = {};
   for (const t of trades) {
@@ -540,6 +545,8 @@ function render() {
   // ---- Realize edilen kâr (USD) — ana satışlar + SWING setup realize'leri (ayrı tutulmaz).
   // Server birleşik (çift-saymasız) realizedBySym verir; yoksa ana satışlardan hesapla. ----
   REALIZED_USD = STATE.realizedBySym || computeRealizedBySym(trades); // sembol başına (sütun + sıralama + Büyüme)
+  REALIZED_TRUTH_USD = STATE.realizedTruthBySym || {}; // eski broker hisse realize'ı → yalnız sıfır maliyet
+  REALIZED_OPT_USD = STATE.realizedOptBySym || {};     // opsiyon realize'ı → yalnız bilgi rozeti
   const realizedUSD = Object.values(REALIZED_USD).reduce((s, v) => s + (v || 0), 0);
   const realizedTRY = realizedUSD * (fx.usdtry || 0);
 

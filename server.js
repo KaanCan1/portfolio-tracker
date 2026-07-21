@@ -4640,6 +4640,41 @@ app.get("/api/portfolio", async (_req, res) => {
         for (const sym of Object.keys(out)) out[sym] = +out[sym].toFixed(2);
         return out;
       })(),
+      // ── Sıfır Maliyet motoru için EK realize kaynakları (Realize K/Z sütununa DOKUNMAZ) ──
+      // Eski broker (truth) HİSSE realize'ı — sembol başına net USD, opsiyon kalemleri HARİÇ.
+      // Truth 27 Haz'a kadar her şeyi kapsar; realizedBySym 8 Haz'dan itibaren sayar → 8-27 Haz
+      // penceresindeki ana satışlar truth'tan düşülür ki iki kaynak toplanınca çift sayım olmasın.
+      realizedTruthBySym: (() => {
+        const fx = usdtry || Number((data.snapshots || []).slice(-1)[0]?.usdtry) || null;
+        if (!fx) return {};
+        const out = {};
+        for (const r of REALIZED_2026_TRUTH) {
+          if (r.opt) continue; // opsiyonlar sıfır maliyete girmez (Kaan'ın kuralı)
+          out[r.symbol] = (out[r.symbol] || 0) + r.amountTRY / fx;
+        }
+        for (const tr of data.trades || []) {
+          if (tr.kind === "buy") continue;
+          const d = String(tr.date || "");
+          if (d < PORTFOLIO_START || d > REALIZE_TRUTH_CUTOFF) continue;
+          const sym = String(tr.symbol || "").toUpperCase();
+          const pl = (Number(tr.shares) || 0) * ((Number(tr.sellUSD) || 0) - (Number(tr.buyUSD) || 0));
+          if (sym in out && isFinite(pl)) out[sym] -= pl;
+        }
+        for (const sym of Object.keys(out)) out[sym] = +out[sym].toFixed(2);
+        return out;
+      })(),
+      // Opsiyon realize'ı (truth) — sembol başına net USD. Hiçbir hesaba GİRMEZ;
+      // yalnız net kârdaysa Varlıklar satırında bilgi rozeti olarak gösterilir.
+      realizedOptBySym: (() => {
+        const fx = usdtry || Number((data.snapshots || []).slice(-1)[0]?.usdtry) || null;
+        if (!fx) return {};
+        const out = {};
+        for (const r of REALIZED_2026_TRUTH) {
+          if (!r.opt) continue;
+          out[r.symbol] = +(((out[r.symbol] || 0) + r.amountTRY / fx)).toFixed(2);
+        }
+        return out;
+      })(),
       // Broker geçmiş override'ı KALDIRILDI — realize artık yalnız işlem geçmişinden (8 Haz'dan itibaren).
       // Boş bırakılır ki Realize Özeti tek kaynaktan (realizedBySym) tutarlı gösterilsin.
       realizeOverrideTRY: {},
