@@ -22,7 +22,7 @@ const SORT_COLS = [
     }
     const mv = h.live?.marketValueTRY; if (mv == null) return null; const c = costOf(h); return c ? ((mv - c) / c) * 100 : null;
   } },
-  { key: "realized", label: "Realize K/Z", cls: "", get: (h) => REALIZED_USD[String(h.symbol).toUpperCase()] ?? null },
+  { key: "realized", label: "Realize K/Z", cls: "", get: (h) => totalRealizedOf(h.symbol) },
 ];
 
 function sortRows(rows, groupKey) {
@@ -139,11 +139,17 @@ function renderGroup(title, rows, groupKey, horizon = "long") {
     const symCell = h.type === "stock"
       ? `<span class="sym sym-link" data-pos="${h.id}" title="Pozisyon detayı + grafik">${h.symbol}</span>`
       : `<span class="sym">${h.symbol}</span>`;
-    // Realize edilen K/Z (bu sembol) — yalnızca satışlar
-    const realUSD = REALIZED_USD[String(h.symbol).toUpperCase()];
+    // Realize edilen K/Z (bu sembol) — TOPLAM: işlem geçmişi + eski (truth) hisse kârı.
+    // Opsiyon realize'ı girmez; eski zarar da girmez (yalnız kâr — 7 Tem kararı).
+    const symUp = String(h.symbol).toUpperCase();
+    const realUSD = totalRealizedOf(h.symbol);
+    const realOld = Math.max(0, REALIZED_TRUTH_USD[symUp] || 0);
     sumReal += realUSD || 0;
+    const realTip = realOld > 0
+      ? ` title="İşlem geçmişi ${fmtUSD((REALIZED_USD[symUp] || 0))} + eski realize kârı ${fmtUSD(realOld)} (opsiyonlar hariç)"`
+      : "";
     const realCell = realUSD != null
-      ? `<span class="${cls(realUSD)}">${fmtUSD(realUSD)}</span>`
+      ? `<span class="${cls(realUSD)}"${realTip}>${fmtUSD(realUSD)}</span>`
       : `<span class="muted">—</span>`;
     // Sıfır-maliyet sütunu (yalnızca hisse): geri-alım % + sıfır maliyet için kalan adet.
     // Alttaki 2026 Realize bölümünün HİSSE kârları da sayılır (fr.oldReal); opsiyonlar asla.

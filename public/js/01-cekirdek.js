@@ -216,6 +216,17 @@ function computeRealizedBySym(trades = []) {
   return m;
 }
 
+/* Sembolün TOPLAM realize'ı (USD): işlem geçmişi + eski (truth) HİSSE kârı.
+ * Eski kalem yalnız net KÂRSA katılır (eski zarar toplamı aşağı çekmez — 7 Tem kararı);
+ * opsiyon realize'ı asla girmez. Varlıklar tablosunun Realize K/Z sütunu bunu gösterir. */
+function totalRealizedOf(symbol) {
+  const s = String(symbol || "").toUpperCase();
+  const base = REALIZED_USD[s];
+  const oldPos = Math.max(0, REALIZED_TRUTH_USD[s] || 0);
+  if (base == null && !oldPos) return null;
+  return (base || 0) + oldPos;
+}
+
 /* Mini sparkline (son ~30 kapanış) → kompakt SVG. Renk: dönem getirisine göre. */
 function sparklineSVG(closes) {
   if (!closes || closes.length < 3) return `<span class="spark-na">—</span>`;
