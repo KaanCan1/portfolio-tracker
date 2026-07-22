@@ -8,7 +8,9 @@
  * (8/21/50 EMA) + Qullamaggie teyidi. Geçmiş "gir-çık" listesi yok — bugünden ileri gerçek mumlarla işler. */
 const CHALLENGE = {
   startCapital: 1500, goal: 2500, startDate: "2026-07-01",
-  riskPct: 3, tp1: 6, tp2: 12, trailEma: "EMA21",
+  // TP 22 Tem 2026'da 6/12 → 5/20 (server CH_ENG ile BİREBİR): ilk kârı %5'te al, kalanı trene bindir.
+  // Eski işlemler sunucu defterinde donmuş TP'leriyle işler — burası yalnız YENİ girişleri etkiler.
+  riskPct: 3, tp1: 5, tp2: 20, trailEma: "EMA21",
   minNotional: 350, maxNotional: 850,
   commission: 1.5, // Midas emir ücreti — alış + her satış emrinde düşülür (server ile birebir; sonuçlar NET)
   // Evren dinamik: Radar + Swing defterindeki TÜM semboller + çekirdek liste (chUniverse doldurur)
@@ -921,17 +923,17 @@ function renderTopPicks() {
  * Sunucudaki kum-havuzu backtest'ini sürer (POST /api/lab/backtest). Deftere yazmaz;
  * baseline (canlı kurallar) ile varyant aynı pencerede koşulur, yan yana kıyaslanır. */
 let LAB_BUSY = false;
-/* Hazır ayarlar — her biri formu doldurur. "oneri" 21 Tem 2026 otomatik taramasından:
- * TP 8/16 her iki yarıda da küçük artı verdi (kanıt DEĞİL, tutarlı eğilim). */
+/* Hazır ayarlar — her biri formu doldurur. Canlı kural 22 Tem 2026'dan beri TP 5/20
+ * (60-hisse canlı taraması: iki yarıda artı, DD −33→−27; kanıt değil tutarlı eğilim). */
 const LAB_PRESETS = {
-  canli: { ad: "Canlı kurallar", ikon: "🟢", tip: "Alfa Avı'nın bugün kullandığı kurallar — kıyas çizgisi. Değişikliği hep buna karşı ölç.",
+  canli: { ad: "Canlı kurallar", ikon: "🟢", tip: "Alfa Avı'nın bugünkü kuralları (22 Tem'den beri TP 5/20: ilk kârı erken al, kalanı trene bindir) — kıyas çizgisi.",
+    v: { tp1: 5, tp2: 20, riskPct: 3, commission: 1.5, rsMode: "half", rsMin: 30, ep: true, regimeGate: true, regimeBE: true } },
+  eski: { ad: "Eski kurallar (6/12)", ikon: "🕰", tip: "22 Tem'e kadar canlı olan TP 6/12 — yeni kural gerçekten önde mi diye ara sıra buna karşı koştur.",
     v: { tp1: 6, tp2: 12, riskPct: 3, commission: 1.5, rsMode: "half", rsMin: 30, ep: true, regimeGate: true, regimeBE: true } },
-  oneri: { ad: "Önerilen baz", ikon: "⭐", tip: "Taramada iki yarıda da küçük artı veren tek sade değişiklik: kârı biraz daha uzun sürmek (TP 8/16). Kanıt değil, eğilim — kendi pencerende doğrula.",
-    v: { tp1: 8, tp2: 16, riskPct: 3, commission: 1.5, rsMode: "half", rsMin: 30, ep: true, regimeGate: true, regimeBE: true } },
   koruma: { ad: "Düşüş modu", ikon: "🐢", tip: "Kaybederken oynanan mod: risk küçülür (%2), zayıf hisse eşiği sıkılır. Amaç kazanmak değil, kötü dönemi ucuz atlatmak.",
     v: { tp1: 5, tp2: 12, riskPct: 2, commission: 1.5, rsMode: "half", rsMin: 50, ep: true, regimeGate: true, regimeBE: true } },
   serbest: { ad: "Filtresiz", ikon: "🔬", tip: "Tüm korumalar kapalı — filtrelerin toplam ne kadar iş yaptığını GÖRMEK için. Canlıya almak için değil.",
-    v: { tp1: 6, tp2: 12, riskPct: 3, commission: 1.5, rsMode: "off", rsMin: 30, ep: true, regimeGate: false, regimeBE: false } },
+    v: { tp1: 5, tp2: 20, riskPct: 3, commission: 1.5, rsMode: "off", rsMin: 30, ep: true, regimeGate: false, regimeBE: false } },
 };
 function labSetForm(v) {
   const f = $("#labForm"); if (!f) return;
@@ -975,9 +977,9 @@ function labInit() {
           ${yardim("Test dönemi. Bir ayarı tek dönemde değil, en az iki pencerede dene — dönemler farklı piyasalardır.")}</label>
       </div>
       <div class="lab-sec"><span class="lab-sec-t">💰 Kâr alma &amp; risk</span>
-        <label class="lab-f"><i>TP1 %</i><input name="tp1" type="number" value="6" min="2" max="20" step="1">
+        <label class="lab-f"><i>TP1 %</i><input name="tp1" type="number" value="5" min="2" max="20" step="1">
           ${yardim("İlk kâr alma: fiyat bu kadar yükselince pozisyonun ¼'ü satılır. Küçük değer = sık ama ufak kâr; kazananı erken tıraşlar.")}</label>
-        <label class="lab-f"><i>TP2 %</i><input name="tp2" type="number" value="12" min="3" max="40" step="1">
+        <label class="lab-f"><i>TP2 %</i><input name="tp2" type="number" value="20" min="3" max="40" step="1">
           ${yardim("İkinci kâr alma: ¼ daha satılır. Kalan yarı EMA21 iz süren stopla trende bırakılır.")}</label>
         <label class="lab-f"><i>Risk %</i><input name="riskPct" type="number" value="3" min="1" max="6" step="0.5">
           ${yardim("İşlem başına riske edilen sermaye. DİKKAT: edge'i değiştirmez, sadece pozisyonu ve salınımı büyütür — kaybederken artırılmaz.")}</label>
@@ -1007,13 +1009,14 @@ function labInit() {
       </div>
     </form>
     <details class="lab-tips" open>
-      <summary>🎯 Kazanan ayar arayana 5 ipucu <span class="muted">(21 Tem taraması + canlı ders)</span></summary>
+      <summary>🎯 Kazanan ayar arayana 6 ipucu <span class="muted">(21-22 Tem taramaları + canlı ders)</span></summary>
       <ol>
         <li><b>Önce dönemi kabul et.</b> Alfa Avı'nın $1500→$1389 düşüşünün ana nedeni ayar değil <b>dönem</b>: 2026 diliminde canlı kuralın kendisi eksi koşuyor. Kötü dönemde en iyi ayar bile kaybettirebilir — hedef, kötü dönemi <i>küçük</i> kaybetmek.</li>
         <li><b>Komisyon gizli vergidir.</b> Komisyonsuz teşhis koşusu ortalama R'yi belirgin yükseltti (~0.17R/işlem fark): $1.5 × 3-4 emir, $350-850'lik pozisyonda %1'e yakın ısırık. Az ve seçici işlem, çok işlemden iyidir.</li>
         <li><b>EP şeridini kapatma.</b> Taramada en net bulgu: EP girişleri kapatılınca sistem zarara döndü (fark −0.78R). Edge'in en büyük parçası haber/kazanç patlamaları.</li>
         <li><b>Risk %'si edge değildir.</b> %3→%4 yapmak kazandırmaz, salınımı büyütür; kötü seride aynı oranda acıtır. Edge kıyaslarken riski %3'te sabit tut.</li>
         <li><b>"En iyi görünen"i değil, "iki yarıda da tutan"ı al.</b> Walk-forward ✓ + fark aralığı 0'ın dışında → ancak o zaman ciddiye al. Tek pencerede parlayanların çoğu uydurmadır (taramada 4 varyant böyle elendi).</li>
+        <li><b>Canlı kural neden TP 5/20?</b> 22 Tem'de 60-hisse canlı taramasında en tutarlı satır buydu: ort R +0.28→+0.44, iki yarıda da artı (+0.27/+0.01), maks düşüş −33→−27. Ama fark aralığı 0'ı içeriyordu — yani bu bir <i>kanıt değil, tutarlı eğilim</i>. Eski işlemler defterde kendi TP'leriyle donuk; kural yalnız yeni girişlere işler. 3 ayda bir "🕰 Eski kurallar" hazır ayarıyla kıyası tazele.</li>
       </ol>
     </details>
     <div id="labRes"><div class="rk-empty">Hazır ayar seç veya değerleri elle değiştir, <b>Koştur</b>'a bas — canlı kurallarla yan yana ölçülür. <b>🔍 Otomatik tara</b> ise 15 varyantı senin yerine dener (~1-3 dk).</div></div>`;

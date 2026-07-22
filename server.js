@@ -323,7 +323,13 @@ app.post("/api/challenge/open", async (req, res) => {
  * E-posta: RESEND_API_KEY varsa Resend ile (NOTIFY_EMAIL'e); yoksa sadece log. */
 const CH_ENG = {
   core: ["NVDA", "AMD", "MU", "NBIS", "INTC", "SNDK", "TSLA", "SOFI", "NOW"],
-  startDate: "2026-07-01", startCapital: 1500, riskPct: 3, tp1: 6, tp2: 12,
+  /* TP kuralı 22 Tem 2026'da 6/12 → 5/20 (Kaan onayı): "ilk kârı erken al (%5'te ¼),
+   * kalanı trene bindir (%20 + EMA21 iz süren)". Dayanak: canlı 60-hisse evren taraması
+   * (Tem 2025 penceresi, n=76) — ortR +0.28→+0.44, fark +0.16R, walk-forward İKİ yarıda
+   * artı (+0.27/+0.01), getiri %67→%104, maks düşüş −33→−27. DÜRÜST SINIR: fark aralığı
+   * (−0.87…+1.31) 0'ı içeriyor — kanıt değil tutarlı eğilim; 3 ayda bir yeniden tara.
+   * Eski işlemler defterde DONMUŞ tp1/tp2'leriyle kalır (frozenAt) — geçmiş yeniden yazılmaz. */
+  startDate: "2026-07-01", startCapital: 1500, riskPct: 3, tp1: 5, tp2: 20,
   epStart: "2026-07-11", // EP/haber şeridi bu tarihten İLERİ işler — geçmişe hindsight girişi yazılmaz
   /* RS kuralı (14 Tem backtest, scratchpad bt-rs.mjs, 9 çekirdek 2025-01→2026-06):
    * SERT kapı her eşikte getiriyi düşürdü (%65.9 → %25-41; elenenler dipten dönen büyük
@@ -6851,10 +6857,10 @@ const LAB_SCAN = { running: false, startedAt: null, progress: { done: 0, total: 
 function labScanVariants() {
   // Her öğe: ad + açıklama (İPUCU dili: basit, tek cümle) + parametre farkı (canlı kurallardan)
   return [
+    { ad: "TP eski kural (6/12)", not: "22 Tem'e kadar canlıydı — geri dönüş kontrolü: yeni 5/20 hâlâ önde mi?", p: { tp1: 6, tp2: 12 } },
     { ad: "TP erken (4/10)", not: "Kârı erken cebe at — isabet artar, büyük kazanan kaçar.", p: { tp1: 4, tp2: 10 } },
-    { ad: "TP geniş (8/16)", not: "Kazananı daha uzun sür — isabet düşer, kazanan büyür.", p: { tp1: 8, tp2: 16 } },
+    { ad: "TP orta (8/16)", not: "İlk kârı geciktir — 13-hisse taramasında artıydı, 60 hissede 5/20 geçti.", p: { tp1: 8, tp2: 16 } },
     { ad: "TP çok geniş (10/25)", not: "Trend avcısı: az isabet, nadir ama büyük kâr.", p: { tp1: 10, tp2: 25 } },
-    { ad: "TP asimetrik (5/20)", not: "İlk kârı erken al, kalanı trene bindir.", p: { tp1: 5, tp2: 20 } },
     { ad: "RS kapalı", not: "Göreli güç kuralı tamamen devre dışı — her sinyal tam boy.", p: { rsMode: "off" } },
     { ad: "RS sert kapı (30)", not: "Zayıf hisseye hiç girme (14 Tem backtest'i bunu reddetmişti — teyit).", p: { rsMode: "gate" } },
     { ad: "RS yarım, eşik 50", not: "Filtre sıkılaşır: evrenin zayıf yarısı yarım boy.", p: { rsMin: 50 } },
@@ -6862,9 +6868,8 @@ function labScanVariants() {
     { ad: "Rejim giriş bloğu kapalı", not: "Piyasa kötüyken de yeni giriş alınır.", p: { regimeGate: false } },
     { ad: "Rejim başabaş kapalı", not: "Kötü piyasada stop girişe ÇEKİLMEZ — sıyrık azalır, risk artar.", p: { regimeBE: false } },
     { ad: "Rejim tamamen kapalı", not: "İki rejim koruması da yok — filtre etkisinin tavan ölçümü.", p: { regimeGate: false, regimeBE: false } },
-    { ad: "Kombo: TP geniş + BE kapalı", not: "Kazananı sür + erken tıraşlama.", p: { tp1: 8, tp2: 16, regimeBE: false } },
-    { ad: "Kombo: TP geniş + RS eşik 50", not: "Kazananı sür + yalnız güçlü hisse tam boy.", p: { tp1: 8, tp2: 16, rsMin: 50 } },
-    { ad: "Kombo: TP asimetrik + BE kapalı", not: "Erken emniyet + treni bırakma.", p: { tp1: 5, tp2: 20, regimeBE: false } },
+    { ad: "Kombo: TP2 %25 + BE kapalı", not: "Treni daha da uzun sür + erken tıraşlama yok.", p: { tp2: 25, regimeBE: false } },
+    { ad: "Kombo: RS eşik 50 + BE kapalı", not: "Yalnız güçlü hisse tam boy + kâr kilidi kapalı.", p: { rsMin: 50, regimeBE: false } },
     { ad: "Komisyon 0 (teşhis)", not: "GERÇEK DEĞİL — komisyonun toplam ısırığını ölçer, ayar olarak alınamaz.", p: { commission: 0 }, teshis: true },
   ];
 }
