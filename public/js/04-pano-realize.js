@@ -288,12 +288,32 @@ function renderRealized2026() {
     el.innerHTML = `<div class="r26-empty">${R26_YEAR} yılı için kayıt yok. Satışlar otomatik düşer; broker kalemlerini “+ Kayıt Ekle”, eski satışları “↻ Satışları senkronla” ile getir.</div>`;
     return;
   }
-  const net = list.reduce((s, x) => s + (Number(x.amountTRY) || 0), 0);
-  const gains = list.filter((x) => x.amountTRY > 0).reduce((s, x) => s + x.amountTRY, 0);
-  const losses = list.filter((x) => x.amountTRY < 0).reduce((s, x) => s + x.amountTRY, 0);
+  // ── Onay bekleyenler AYRI: hesaplanan tutar kur/ort. maliyetten sapabilir — Kaan aracı
+  // kurumla karşılaştırıp onaylayana (gerekirse düzeltene) dek NET/toplamlara GİRMEZ. ──
+  const bekleyen = list.filter((r) => r.pending);
+  const kesin = list.filter((r) => !r.pending);
+  const net = kesin.reduce((s, x) => s + (Number(x.amountTRY) || 0), 0);
+  const gains = kesin.filter((x) => x.amountTRY > 0).reduce((s, x) => s + x.amountTRY, 0);
+  const losses = kesin.filter((x) => x.amountTRY < 0).reduce((s, x) => s + x.amountTRY, 0);
+  const pendBox = !bekleyen.length ? "" : `
+    <div class="r26-pend">
+      <div class="r26-pend-h">⏳ Onay bekleyen <b>${bekleyen.length} kayıt</b>
+        <span>hesaba dahil değil — aracı kurumdaki gerçek tutarla karşılaştır, farklıysa düzelt, sonra onayla</span></div>
+      ${bekleyen.map((r) => `
+        <div class="r26-pend-row">
+          <div class="r26-pend-info">
+            <span class="sym">${r.symbol || "—"}</span>
+            <span class="nm">${(r.label || "").replace(/"/g, "")}</span>
+            ${r.date ? `<span class="tnote">📅 ${fmtDate(r.date)}</span>` : ""}
+          </div>
+          <label class="r26-pend-amt">₺ <input type="number" step="0.01" value="${Number(r.amountTRY) || 0}" data-r26amt="${r.id}" title="Hesaplanan tutar — aracı kurum farklı diyorsa üzerine yaz"></label>
+          <button class="btn primary sm" data-r26approve="${r.id}" title="Bu tutarı doğrula ve hesaba kat">✓ Onayla</button>
+          <button class="btn icon" data-delr26="${r.id}" title="Kaydı sil (hesaba hiç girmesin)">🗑</button>
+        </div>`).join("")}
+    </div>`;
   // ── Sembol başına grupla (MULL'un 5 işlemi tek MULL satırında toplanır) ──
   const groups = {};
-  for (const r of list) {
+  for (const r of kesin) {
     const key = String(r.symbol || r.label || "—").toUpperCase();
     const g = (groups[key] = groups[key] || { key, sym: r.symbol || r.label || "—", total: 0, recs: [] });
     g.total += Number(r.amountTRY) || 0;
@@ -301,7 +321,7 @@ function renderRealized2026() {
   }
   const grouped = Object.values(groups).sort((a, b) => b.total - a.total);
   const mf = STATE?.midasFees || null; // Midas işlem ücreti özeti (her emir $1.5)
-  if (sub) sub.textContent = `${R26_YEAR} · ${grouped.length} sembol · ${list.length} kayıt · net ${fmtTRY0(net)}`;
+  if (sub) sub.textContent = `${R26_YEAR} · ${grouped.length} sembol · ${kesin.length} kayıt · net ${fmtTRY0(net)}${bekleyen.length ? ` · ⏳ ${bekleyen.length} onayda` : ""}`;
   // Aksiyon hücresi: ✎ düzelt her satırda; truth kalemi düzeltilmişse ↺ geri al, manuel kayıtta 🗑 sil
   const actCell = (r) => {
     const edit = `<button class="rz-edit" data-r26edit="${r.id}" data-r26cur="${Math.round(Number(r.amountTRY) || 0)}" title="Tutarı düzelt">✎</button>`;
@@ -346,6 +366,7 @@ function renderRealized2026() {
       .map((r) => subRow(r, g.key)).join("");
   }).join("");
   el.innerHTML = `
+    ${pendBox}
     <div class="r26-summary">
       <div class="r26-stat"><span>Net realize</span><b class="${cls(net)}">${fmtTRY(net)}</b></div>
       <div class="r26-stat"><span>Toplam kazanç</span><b class="pos">${fmtTRY0(gains)}</b></div>
@@ -689,6 +710,20 @@ r26Form?.addEventListener("submit", async (e) => {
 // Vergi yılı değişimi
 $("#r26Year")?.addEventListener("change", (e) => { R26_YEAR = Number(e.target.value) || R26_YEAR; renderRealized2026(); });
 $("#realized2026")?.addEventListener("click", async (e) => {
+  // ✓ Onayla: bekleyen otomatik kaydı (gerekirse düzeltilmiş tutarla) hesaba kat
+  const okBtn = e.target.closest("[data-r26approve]");
+  if (okBtn) {
+    const id = okBtn.dataset.r26approve;
+    const inp = document.querySelector(`[data-r26amt="${CSS.escape(id)}"]`);
+    const amt = inp && inp.value !== "" ? Number(inp.value) : null;
+    if (inp && inp.value !== "" && !isFinite(amt)) return toast("Geçersiz tutar", "err");
+    okBtn.disabled = true;
+    const r = await fetch(`/api/realized2026/${id}/approve`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ amountTRY: amt }) });
+    if (!r.ok) { okBtn.disabled = false; return toast("Onaylanamadı", "err"); }
+    toast("Onaylandı — hesaba dahil edildi");
+    await load();
+    return;
+  }
   // ✎ tutarı düzelt (truth kalemi ya da manuel kayıt)
   const editBtn = e.target.closest("[data-r26edit]");
   if (editBtn) {
@@ -739,7 +774,7 @@ $("#realized2026")?.addEventListener("click", async (e) => {
 const taxModalBg = $("#taxModalBg");
 function openTaxModal() {
   const year = R26_YEAR || new Date().getFullYear();
-  const list = r26ForYear(year).slice().sort((a, b) =>
+  const list = r26ForYear(year).filter((r) => !r.pending).sort((a, b) => // onay bekleyen beyana girmez
     (a.date || "") < (b.date || "") ? 1 : (a.date || "") > (b.date || "") ? -1 : b.amountTRY - a.amountTRY);
   const gains = list.filter((x) => x.amountTRY > 0).reduce((s, x) => s + x.amountTRY, 0);
   const losses = list.filter((x) => x.amountTRY < 0).reduce((s, x) => s + x.amountTRY, 0);

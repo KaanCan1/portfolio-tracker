@@ -339,7 +339,7 @@ async function renderProRisk() {
   const themeRows = Object.entries(themeMap).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([k, v]) => { const pct = v / themeTot * 100; return `<div class="pr-th-row"><span class="pr-th-lbl">${k}</span><div class="pr-th-bar"><i style="width:${pct.toFixed(0)}%;${pct >= 40 ? "background:var(--red)" : ""}"></i></div><span class="pr-th-pct ${pct >= 40 ? "neg" : ""}">%${pct.toFixed(0)}</span></div>`; }).join("");
   // Opsiyon vs Hisse realize (vergi kalemlerinden: label'da Call/Put = opsiyon)
   let optReal = 0, stkReal = 0;
-  for (const r of (STATE.realized2026 || [])) { const o = /\b(call|put)\b/i.test(r.label || ""); if (o) optReal += Number(r.amountTRY) || 0; else stkReal += Number(r.amountTRY) || 0; }
+  for (const r of (STATE.realized2026 || [])) { if (r.pending) continue; /* onay bekleyen hesaba girmez */ const o = /\b(call|put)\b/i.test(r.label || ""); if (o) optReal += Number(r.amountTRY) || 0; else stkReal += Number(r.amountTRY) || 0; }
   const ovsH = `<div class="pr-ovh">
       <div class="pr-ovh-c ${cls(stkReal)}"><div class="pr-ovh-l">Hisse realize</div><div class="pr-ovh-v">${fmtTRY0(stkReal)}</div></div>
       <div class="pr-ovh-c ${cls(optReal)}"><div class="pr-ovh-l">Opsiyon realize</div><div class="pr-ovh-v">${fmtTRY0(optReal)}</div></div>

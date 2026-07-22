@@ -1802,6 +1802,16 @@ tbody tr:hover .row-actions .btn.icon { color: var(--ink2); }
 /* ===================== 2026 Realize Kazançları ===================== */
 .r26-empty { color: var(--muted); font-size: 13px; padding: 14px; background: var(--bg3); border: 1px dashed var(--line-strong); border-radius: 12px; line-height: 1.5; }
 .r26-summary { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+/* ⏳ Onay bekleyen otomatik realize kayıtları — hesaba girmeden önce Kaan doğrular */
+.r26-pend { margin-bottom: 14px; border: 1px solid var(--amber-line); border-radius: var(--radius-sm); background: var(--amber-bg); }
+.r26-pend-h { padding: 10px 13px; font-size: 12.5px; font-weight: 700; color: var(--amber-d); display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; border-bottom: 1px solid var(--amber-line); }
+.r26-pend-h span { font-size: 11.5px; font-weight: 500; color: var(--ink2); }
+.r26-pend-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 9px 13px; border-bottom: 1px solid var(--amber-line); background: var(--card); }
+.r26-pend-row:last-child { border-bottom: none; border-radius: 0 0 var(--radius-sm) var(--radius-sm); }
+.r26-pend-info { display: flex; align-items: baseline; gap: 8px; flex: 1 1 220px; min-width: 0; flex-wrap: wrap; }
+.r26-pend-info .nm { font-size: 12px; color: var(--ink2); }
+.r26-pend-amt { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; font-weight: 700; color: var(--ink2); }
+.r26-pend-amt input { width: 120px; padding: 6px 8px; border: 1px solid var(--line-strong); border-radius: 9px; background: var(--card); font: inherit; font-size: 12.5px; font-variant-numeric: tabular-nums; text-align: right; }
 .r26-stat { flex: 1 1 150px; background: var(--bg2); border: 1px solid var(--line); border-radius: 12px; padding: 11px 14px; display: flex; flex-direction: column; gap: 2px; }
 .r26-stat > span { font-size: 11.5px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .4px; }
 .r26-stat > b { font-size: 19px; font-weight: 800; font-variant-numeric: tabular-nums; }
@@ -3598,6 +3608,49 @@ svg.fx-pop { animation: fxPop .7s cubic-bezier(.22,1,.36,1) both; transform-orig
 .ld-delta.up { color: var(--red-d); }    /* daha çok engelleme/tıraşlama = kötü */
 .ld-delta.down { color: var(--green-d); }
 .ld-note { padding: 9px 13px; font-size: 11.5px; line-height: 1.55; color: var(--muted); border-top: 1px solid var(--line); }
+
+/* ════════ Laboratuvar v2: giriş + hazır ayarlar + bölümlü form + ipuçları + tarama ════════ */
+.lab-intro { margin-bottom: 12px; font-size: 12.5px; line-height: 1.6; color: var(--ink2); }
+.lab-intro p { margin: 0 0 6px; }
+.lab-nasil { border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--bg2); }
+.lab-nasil > summary { cursor: pointer; list-style: none; padding: 8px 12px; font-size: 12px; font-weight: 700; color: var(--ink2); }
+.lab-nasil > summary::-webkit-details-marker { display: none; }
+.lab-nasil ol { margin: 2px 0 10px; padding: 0 14px 0 30px; font-size: 12px; line-height: 1.6; color: var(--ink2); }
+.lab-nasil li { margin-bottom: 4px; }
+.lab-presets { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin-bottom: 8px; }
+.lab-preset-lbl { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); }
+.lab-preset { border: 1px solid var(--line-strong); background: var(--card); border-radius: 999px; padding: 5px 12px; font: inherit; font-size: 12px; font-weight: 700; color: var(--ink2); cursor: pointer; }
+.lab-preset:hover { background: var(--bg2); }
+.lab-preset.on { border-color: var(--green-d); background: var(--green-soft); color: var(--green-d); }
+.lab-preset-tip { margin-bottom: 10px; padding: 8px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--bg2); font-size: 12px; line-height: 1.55; color: var(--ink2); }
+.lab-form2 { display: flex; flex-direction: column; gap: 12px; align-items: stretch; }
+.lab-sec { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: flex-start; padding: 11px 13px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--card); }
+.lab-sec-t { flex-basis: 100%; font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); }
+.lab-form2 .lab-f { max-width: 240px; }
+.lab-form2 .lab-f.lab-chk { flex-direction: column; align-items: flex-start; gap: 3px; padding-bottom: 0; }
+.lab-form2 .lab-f.lab-chk input { margin-right: 5px; }
+.lab-help { font-style: normal; font-size: 10.5px; line-height: 1.45; color: var(--muted); font-weight: 500; }
+.lab-actions { display: flex; gap: 8px; align-items: center; }
+.lab-tips { margin-top: 12px; border: 1px solid var(--amber-line); border-radius: var(--radius-sm); background: var(--amber-bg); }
+.lab-tips > summary { cursor: pointer; list-style: none; padding: 9px 13px; font-size: 12.5px; font-weight: 700; color: var(--amber-d); }
+.lab-tips > summary::-webkit-details-marker { display: none; }
+.lab-tips ol { margin: 0; padding: 0 14px 11px 30px; font-size: 12px; line-height: 1.65; color: var(--ink2); }
+.lab-tips li { margin-bottom: 6px; }
+.lab-scan-bar { height: 10px; margin: 10px auto 6px; max-width: 420px; border-radius: 6px; background: var(--card); border: 1px solid var(--line); overflow: hidden; }
+.lab-scan-bar i { display: block; height: 100%; background: var(--green-d); border-radius: 6px; transition: width .6s ease; }
+.ls-head { font-size: 12.5px; color: var(--ink2); margin: 12px 0 8px; display: flex; gap: 10px; flex-wrap: wrap; align-items: baseline; }
+.ls-base { font-size: 11.5px; color: var(--muted); font-weight: 600; }
+.ls-table { font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.ls-table td { white-space: nowrap; }
+.ls-row { cursor: pointer; }
+.ls-row:hover td { background: var(--bg2); }
+.ls-row.ls-teshis { cursor: default; opacity: .75; }
+.ls-not { display: block; font-size: 10.5px; color: var(--muted); font-weight: 500; white-space: normal; max-width: 260px; }
+.ls-hukum { display: inline-block; font-size: 10.5px; font-weight: 800; border-radius: 999px; padding: 2px 9px; border: 1px solid var(--line-strong); color: var(--ink2); background: var(--card); white-space: nowrap; }
+.ls-hukum.h-saglam { color: var(--green-d); border-color: var(--green-line); background: var(--green-soft); }
+.ls-hukum.h-umutlu { color: var(--green-d); border-color: var(--green-line); }
+.ls-hukum.h-uydurma { color: var(--amber-d); border-color: var(--amber-line); background: var(--amber-bg); }
+.ls-hukum.h-kotu { color: var(--red-d); border-color: var(--red-line); background: var(--red-bg); }
 
 /* ════════ Walk-forward hükmü + kaldıraç uyarısı ════════ */
 .wf-lev { margin-top: 11px; padding: 10px 13px; border-radius: var(--radius-sm); font-size: 12.5px; line-height: 1.55;

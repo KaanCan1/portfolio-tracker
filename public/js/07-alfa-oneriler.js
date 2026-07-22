@@ -921,37 +921,112 @@ function renderTopPicks() {
  * Sunucudaki kum-havuzu backtest'ini sürer (POST /api/lab/backtest). Deftere yazmaz;
  * baseline (canlı kurallar) ile varyant aynı pencerede koşulur, yan yana kıyaslanır. */
 let LAB_BUSY = false;
+/* Hazır ayarlar — her biri formu doldurur. "oneri" 21 Tem 2026 otomatik taramasından:
+ * TP 8/16 her iki yarıda da küçük artı verdi (kanıt DEĞİL, tutarlı eğilim). */
+const LAB_PRESETS = {
+  canli: { ad: "Canlı kurallar", ikon: "🟢", tip: "Alfa Avı'nın bugün kullandığı kurallar — kıyas çizgisi. Değişikliği hep buna karşı ölç.",
+    v: { tp1: 6, tp2: 12, riskPct: 3, commission: 1.5, rsMode: "half", rsMin: 30, ep: true, regimeGate: true, regimeBE: true } },
+  oneri: { ad: "Önerilen baz", ikon: "⭐", tip: "Taramada iki yarıda da küçük artı veren tek sade değişiklik: kârı biraz daha uzun sürmek (TP 8/16). Kanıt değil, eğilim — kendi pencerende doğrula.",
+    v: { tp1: 8, tp2: 16, riskPct: 3, commission: 1.5, rsMode: "half", rsMin: 30, ep: true, regimeGate: true, regimeBE: true } },
+  koruma: { ad: "Düşüş modu", ikon: "🐢", tip: "Kaybederken oynanan mod: risk küçülür (%2), zayıf hisse eşiği sıkılır. Amaç kazanmak değil, kötü dönemi ucuz atlatmak.",
+    v: { tp1: 5, tp2: 12, riskPct: 2, commission: 1.5, rsMode: "half", rsMin: 50, ep: true, regimeGate: true, regimeBE: true } },
+  serbest: { ad: "Filtresiz", ikon: "🔬", tip: "Tüm korumalar kapalı — filtrelerin toplam ne kadar iş yaptığını GÖRMEK için. Canlıya almak için değil.",
+    v: { tp1: 6, tp2: 12, riskPct: 3, commission: 1.5, rsMode: "off", rsMin: 30, ep: true, regimeGate: false, regimeBE: false } },
+};
+function labSetForm(v) {
+  const f = $("#labForm"); if (!f) return;
+  for (const [k, val] of Object.entries(v)) {
+    const el = f.elements[k]; if (!el) continue;
+    if (el.type === "checkbox") el.checked = !!val; else el.value = val;
+  }
+}
 function labInit() {
   const box = $("#labBox");
   if (!box || box.dataset.ready) return;
   box.dataset.ready = "1";
+  const yardim = (t) => `<em class="lab-help">${t}</em>`;
   box.innerHTML = `
-    <form class="lab-form" id="labForm">
-      <label class="lab-f"><i>Başlangıç</i>
-        <select name="start">
-          <option value="2025-07-01">Tem 2025 (12 ay)</option>
-          <option value="2025-01-01">Oca 2025 (18 ay)</option>
-          <option value="2026-01-01">Oca 2026 (6 ay)</option>
-        </select></label>
-      <label class="lab-f"><i>TP1 %</i><input name="tp1" type="number" value="6" min="2" max="20" step="1"></label>
-      <label class="lab-f"><i>TP2 %</i><input name="tp2" type="number" value="12" min="3" max="40" step="1"></label>
-      <label class="lab-f"><i>Risk %</i><input name="riskPct" type="number" value="3" min="1" max="6" step="0.5"></label>
-      <label class="lab-f"><i>Komisyon $</i><input name="commission" type="number" value="1.5" min="0" max="5" step="0.5"></label>
-      <label class="lab-f"><i>RS kuralı</i>
-        <select name="rsMode">
-          <option value="half">Yarım boyut (canlı)</option>
-          <option value="gate">Sert kapı</option>
-          <option value="off">Kapalı</option>
-        </select></label>
-      <!-- step="5" + min="1" idi → geçerli değerler 1,6,11…31 olur ve VARSAYILAN 30 geçersiz sayılırdı;
-           tarayıcı formu sessizce reddediyordu. step=1: elle yazılan her tam sayı da geçerli. -->
-      <label class="lab-f"><i>RS eşiği</i><input name="rsMin" type="number" value="30" min="5" max="95" step="1"></label>
-      <label class="lab-f lab-chk"><input name="ep" type="checkbox" checked> EP/haber şeridi</label>
-      <label class="lab-f lab-chk" title="Rejim kapalıyken YENİ teknik giriş yapılmaz (EP girişleri yarım boyutla devam eder)"><input name="regimeGate" type="checkbox" checked> Rejim: giriş bloğu</label>
-      <label class="lab-f lab-chk" title="Rejim kapalıyken kârdaki ama TP1'e ulaşmamış pozisyonun stopu başabaşa çekilir — pozisyonları erken tıraşlayan kural budur"><input name="regimeBE" type="checkbox" checked> Rejim: başabaş zorlaması</label>
-      <button type="submit" class="btn primary sm" id="labGo">Koştur</button>
+    <div class="lab-intro">
+      <p><b>Burası kum havuzu:</b> "kural şöyle olsaydı ne olurdu?" sorusunu geçmiş üzerinde dener.
+      Deftere yazmaz, canlıyı değiştirmez. Her koşu <b>canlı kurallarla yan yana</b> ölçülür.</p>
+      <details class="lab-nasil"><summary>Nasıl okurum? (30 saniye)</summary>
+        <ol>
+          <li><b>Ortalama R</b> tek önemli sayıdır: işlem başına, riske ettiğinin kaç katı kazanıldı. +0.3R = her işlemde ortalama riskin %30'u kazanılıyor.</li>
+          <li>Getiri yüzdesine tek başına inanma — <b>risk %'si büyükse getiri kaldıraçtan da şişer</b>, beceriden değil.</li>
+          <li>Alttaki <b>fark aralığı 0'ı içeriyorsa</b> "daha iyi" diyemeyiz; veri yetmiyordur.</li>
+          <li><b>Walk-forward</b>: ayar pencerenin iki yarısında da önde mi? Tek yarıda öndeyse büyük olasılıkla o döneme uydurulmuştur.</li>
+        </ol>
+      </details>
+    </div>
+    <div class="lab-presets" id="labPresets">
+      <span class="lab-preset-lbl">Hazır ayar:</span>
+      ${Object.entries(LAB_PRESETS).map(([k, p]) =>
+        `<button type="button" class="lab-preset" data-preset="${k}" title="${p.tip}">${p.ikon} ${p.ad}</button>`).join("")}
+    </div>
+    <div class="lab-preset-tip" id="labPresetTip" hidden></div>
+    <form class="lab-form lab-form2" id="labForm">
+      <div class="lab-sec"><span class="lab-sec-t">📅 Pencere</span>
+        <label class="lab-f"><i>Başlangıç</i>
+          <select name="start">
+            <option value="2025-07-01">Tem 2025 (12 ay)</option>
+            <option value="2025-01-01">Oca 2025 (18 ay)</option>
+            <option value="2026-01-01">Oca 2026 (6 ay)</option>
+          </select>
+          ${yardim("Test dönemi. Bir ayarı tek dönemde değil, en az iki pencerede dene — dönemler farklı piyasalardır.")}</label>
+      </div>
+      <div class="lab-sec"><span class="lab-sec-t">💰 Kâr alma &amp; risk</span>
+        <label class="lab-f"><i>TP1 %</i><input name="tp1" type="number" value="6" min="2" max="20" step="1">
+          ${yardim("İlk kâr alma: fiyat bu kadar yükselince pozisyonun ¼'ü satılır. Küçük değer = sık ama ufak kâr; kazananı erken tıraşlar.")}</label>
+        <label class="lab-f"><i>TP2 %</i><input name="tp2" type="number" value="12" min="3" max="40" step="1">
+          ${yardim("İkinci kâr alma: ¼ daha satılır. Kalan yarı EMA21 iz süren stopla trende bırakılır.")}</label>
+        <label class="lab-f"><i>Risk %</i><input name="riskPct" type="number" value="3" min="1" max="6" step="0.5">
+          ${yardim("İşlem başına riske edilen sermaye. DİKKAT: edge'i değiştirmez, sadece pozisyonu ve salınımı büyütür — kaybederken artırılmaz.")}</label>
+        <label class="lab-f"><i>Komisyon $</i><input name="commission" type="number" value="1.5" min="0" max="5" step="0.5">
+          ${yardim("Emir başına ücret (Midas $1.5). Alış + her TP + final ayrı emirdir: bir işlem 3-4 emir tutabilir.")}</label>
+      </div>
+      <div class="lab-sec"><span class="lab-sec-t">🚦 Filtreler</span>
+        <label class="lab-f"><i>RS kuralı</i>
+          <select name="rsMode">
+            <option value="half">Yarım boyut (canlı)</option>
+            <option value="gate">Sert kapı</option>
+            <option value="off">Kapalı</option>
+          </select>
+          ${yardim("Göreli güç: piyasaya göre zayıf hisseye ne yapılır? Yarım boyut = girilir ama küçük; sert kapı = hiç girilmez; kapalı = fark etmez.")}</label>
+        <label class="lab-f"><i>RS eşiği</i><input name="rsMin" type="number" value="30" min="5" max="95" step="1">
+          ${yardim("Yüzdelik sıra: bunun altındaki hisseler 'zayıf' sayılır. 30 = evrenin en zayıf %30'u.")}</label>
+        <label class="lab-f lab-chk"><input name="ep" type="checkbox" checked> EP/haber şeridi
+          ${yardim("Kazanç/haber patlaması girişleri. Tarama: edge'in en büyük parçası burası — kapatınca sistem zarara döndü. Kapatma.")}</label>
+        <label class="lab-f lab-chk"><input name="regimeGate" type="checkbox" checked> Rejim: giriş bloğu
+          ${yardim("Piyasa rejimi 'kapalı'yken yeni teknik giriş alınmaz (EP yarım boyutla devam eder).")}</label>
+        <label class="lab-f lab-chk"><input name="regimeBE" type="checkbox" checked> Rejim: başabaş zorlaması
+          ${yardim("Kötü piyasada kârdaki pozisyonun stopu girişe çekilir — koruma sağlar ama pozisyonları 'sıyrıkla' tıraşlayabilir.")}</label>
+      </div>
+      <div class="lab-actions">
+        <button type="submit" class="btn primary sm" id="labGo">Koştur</button>
+        <button type="button" class="btn sm" id="labScanGo" title="15 hazır varyantı otomatik dener, dürüstlük sırasına dizer — elle tek tek çevirmekten hızlı">🔍 Otomatik tara</button>
+      </div>
     </form>
-    <div id="labRes"><div class="rk-empty">Parametreleri seç, <b>Koştur</b>'a bas — canlı kurallarla yan yana ölçülür (~birkaç saniye).</div></div>`;
+    <details class="lab-tips" open>
+      <summary>🎯 Kazanan ayar arayana 5 ipucu <span class="muted">(21 Tem taraması + canlı ders)</span></summary>
+      <ol>
+        <li><b>Önce dönemi kabul et.</b> Alfa Avı'nın $1500→$1389 düşüşünün ana nedeni ayar değil <b>dönem</b>: 2026 diliminde canlı kuralın kendisi eksi koşuyor. Kötü dönemde en iyi ayar bile kaybettirebilir — hedef, kötü dönemi <i>küçük</i> kaybetmek.</li>
+        <li><b>Komisyon gizli vergidir.</b> Komisyonsuz teşhis koşusu ortalama R'yi belirgin yükseltti (~0.17R/işlem fark): $1.5 × 3-4 emir, $350-850'lik pozisyonda %1'e yakın ısırık. Az ve seçici işlem, çok işlemden iyidir.</li>
+        <li><b>EP şeridini kapatma.</b> Taramada en net bulgu: EP girişleri kapatılınca sistem zarara döndü (fark −0.78R). Edge'in en büyük parçası haber/kazanç patlamaları.</li>
+        <li><b>Risk %'si edge değildir.</b> %3→%4 yapmak kazandırmaz, salınımı büyütür; kötü seride aynı oranda acıtır. Edge kıyaslarken riski %3'te sabit tut.</li>
+        <li><b>"En iyi görünen"i değil, "iki yarıda da tutan"ı al.</b> Walk-forward ✓ + fark aralığı 0'ın dışında → ancak o zaman ciddiye al. Tek pencerede parlayanların çoğu uydurmadır (taramada 4 varyant böyle elendi).</li>
+      </ol>
+    </details>
+    <div id="labRes"><div class="rk-empty">Hazır ayar seç veya değerleri elle değiştir, <b>Koştur</b>'a bas — canlı kurallarla yan yana ölçülür. <b>🔍 Otomatik tara</b> ise 15 varyantı senin yerine dener (~1-3 dk).</div></div>`;
+  // Hazır ayar pill'leri: formu doldur + açıklamayı göster
+  $("#labPresets").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-preset]"); if (!b) return;
+    const p = LAB_PRESETS[b.dataset.preset]; if (!p) return;
+    labSetForm(p.v);
+    document.querySelectorAll(".lab-preset").forEach((x) => x.classList.toggle("on", x === b));
+    const tip = $("#labPresetTip"); tip.hidden = false;
+    tip.innerHTML = `${p.ikon} <b>${p.ad}:</b> ${p.tip}`;
+  });
+  $("#labScanGo").addEventListener("click", labScanStart);
   // Güvenlik ağı: bir alan HTML5 doğrulamasına takılırsa tarayıcı formu SESSİZCE reddeder
   // (baloncuk görünmeyebilir / alan ekran dışında olabilir). Sebebi ekrana yaz — bir daha
   // "düğmeye basıyorum, hiçbir şey olmuyor" yaşanmasın.
@@ -1082,4 +1157,84 @@ function labDiag(d) {
     <div class="ld-note">Rejim günleri: <b>${g.on || 0}</b> açık · <b>${g.caution || 0}</b> temkinli · <b>${g.off || 0}</b> kapalı.
       Kapalı gün sayısı düşükse bu pencerede rejim kuralı zaten az çalışmıştır — sonucu ona göre oku.</div>
   </details>`;
+}
+
+/* ====================== Otomatik tarama (istemci) ======================
+ * POST /api/lab/scan işi başlatır, GET ile ~3 sn'de bir ilerleme çekilir.
+ * Sonuç dürüstlük sırasıyla listelenir; satıra tıklayınca ayarlar forma
+ * dolar — oradan tam koşu (bootstrap + walk-forward + teşhis) yapılır. */
+let LAB_SCAN_TIMER = null;
+async function labScanStart() {
+  if (LAB_BUSY) return;
+  const start = $("#labForm")?.elements.start?.value || "2025-07-01";
+  const btn = $("#labScanGo");
+  try {
+    const r = await fetch("/api/lab/scan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ start }) });
+    const d = await r.json();
+    if (!r.ok || d.error) throw new Error(d.error || "tarama başlatılamadı");
+    btn.disabled = true;
+    $("#labRes").innerHTML = `<div class="rk-empty" id="labScanWait">🔍 Tarama koşuyor… <b id="labScanPct">hazırlanıyor</b><div class="lab-scan-bar"><i id="labScanFill" style="width:2%"></i></div><span class="muted">15 varyant × 3 koşu — ilk yarım dakika veri hazırlığıdır, çubuk sonra akar.</span></div>`;
+    LAB_SCAN_TIMER = setInterval(labScanPoll, 3000);
+  } catch (e) { $("#labRes").innerHTML = `<div class="rk-empty">Tarama başlatılamadı: ${e.message}</div>`; }
+}
+async function labScanPoll() {
+  try {
+    const d = await (await fetch("/api/lab/scan")).json();
+    if (d.running) {
+      const p = d.progress || {};
+      if (p.total) {
+        const pct = Math.max(2, Math.round((p.done / p.total) * 100));
+        const el = $("#labScanPct"); if (el) el.textContent = `${p.done}/${p.total} koşu`;
+        const f = $("#labScanFill"); if (f) f.style.width = pct + "%";
+      }
+      return;
+    }
+    clearInterval(LAB_SCAN_TIMER); LAB_SCAN_TIMER = null;
+    const btn = $("#labScanGo"); if (btn) btn.disabled = false;
+    if (d.error) { $("#labRes").innerHTML = `<div class="rk-empty">Tarama hata verdi: ${d.error}</div>`; return; }
+    if (d.results) labScanPaint(d.results);
+  } catch { /* geçici ağ hatası — sıradaki poll dener */ }
+}
+const LAB_HUKUM = {
+  saglam:  { et: "✓ sağlam",        tip: "İki yarıda da önde VE fark aralığı 0'ın dışında — bulunabilecek en güçlü sinyal (yine de garanti değil)." },
+  umutlu:  { et: "~ iki yarıda artı", tip: "İki yarıda da önde ama fark istatistiksel olarak kanıtlanamıyor (aralık 0'ı içeriyor). Eğilim, kanıt değil." },
+  gurultu: { et: "≈ gürültü",       tip: "Fark var gibi görünse de ne walk-forward ne aralık destekliyor — şans olabilir." },
+  "veri-az": { et: "· veri az",     tip: "Kıyas için yeterli kapanmış işlem yok." },
+  uydurma: { et: "⚠ uydurma",       tip: "Avantaj yalnız tek yarıda — o döneme uydurulmuş görünüyor. Canlıya alma." },
+  kotu:    { et: "✗ kötü",          tip: "Canlı kurallardan geride — bu ayarı alma." },
+  teshis:  { et: "🧪 teşhis",       tip: "Gerçek bir seçenek değil; bir maliyetin/filtrenin toplam etkisini ölçmek için koşulur." },
+};
+function labScanPaint(r) {
+  const fR = (v) => (v == null ? "—" : `${v >= 0 ? "+" : ""}${v}R`);
+  const rows = r.varyantlar.map((v, i) => {
+    const h = LAB_HUKUM[v.hukum] || { et: v.hukum, tip: "" };
+    const wf = v.wf ? `${fR(v.wf.f1)} / ${fR(v.wf.f2)}` : "—";
+    return `<tr class="ls-row${v.teshis ? " ls-teshis" : ""}" data-lsvar="${i}" title="${v.not} — tıkla: ayarları forma doldur">
+      <td class="l"><span class="ls-hukum h-${v.hukum}" title="${h.tip}">${h.et}</span></td>
+      <td class="l"><b>${v.ad}</b><span class="ls-not">${v.not}</span></td>
+      <td>${v.islem}</td>
+      <td class="${v.ortR > (r.baseline.ortR ?? 0) ? "pos" : ""}">${fR(v.ortR)}</td>
+      <td>${v.farkR == null ? "—" : `<b class="${v.farkR > 0 ? "pos" : v.farkR < 0 ? "neg" : ""}">${fR(v.farkR)}</b> <span class="lab-ci">${fR(v.ciLo)}…${fR(v.ciHi)}</span>`}</td>
+      <td title="pencerenin 1. / 2. yarısında canlıya karşı fark">${wf}</td>
+      <td class="${v.getiriPct >= 0 ? "pos" : "neg"}">%${v.getiriPct}</td>
+      <td>%${v.maksDususPct}</td>
+    </tr>`;
+  }).join("");
+  $("#labRes").innerHTML = `
+    <div class="ls-head"><b>🔍 Tarama sonucu</b> — ${r.start} → bugün · evren ${r.universe} hisse · ${r.sureSn} sn
+      <span class="ls-base">Canlı kurallar: ${r.baseline.islem} işlem · ort ${fR(r.baseline.ortR)} · getiri %${r.baseline.getiriPct} · maks düşüş %${r.baseline.maksDususPct}</span></div>
+    <div class="tbl-wrap"><table class="ls-table">
+      <thead><tr><th class="l">Hüküm</th><th class="l">Varyant</th><th>İşlem</th><th>Ort R</th><th>Fark (aralık)</th><th>WF ½/½</th><th>Getiri</th><th>Düşüş</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+    <div class="bm-note">${r.not} Satıra tıkla → ayarlar forma dolar; oradan <b>Koştur</b> ile tam rapor (güven aralığı + walk-forward + teşhis) alırsın.</div>`;
+  // Satır tıklama: varyant parametrelerini forma doldur (canlı taban + fark)
+  document.querySelectorAll("[data-lsvar]").forEach((tr) => tr.addEventListener("click", () => {
+    const v = r.varyantlar[+tr.dataset.lsvar]; if (!v || v.teshis) return;
+    labSetForm({ ...LAB_PRESETS.canli.v, ...v.params });
+    document.querySelectorAll(".lab-preset").forEach((x) => x.classList.remove("on"));
+    const tip = $("#labPresetTip"); tip.hidden = false;
+    tip.innerHTML = `🔍 <b>${v.ad}</b> forma dolduruldu — <b>Koştur</b> ile tam raporu al.`;
+    $("#labForm").scrollIntoView({ block: "start", behavior: "smooth" });
+  }));
 }

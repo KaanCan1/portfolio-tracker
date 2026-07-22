@@ -5616,6 +5616,25 @@ app.post("/api/realized2026", async (req, res) => {
     res.json(d.realized2026);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
+/* Onay: pending (onay bekleyen) otomatik kaydı hesaba dahil et. Kaan aracı kurum
+ * ekranıyla karşılaştırır; tutar farklıysa düzeltilmiş amountTRY gönderilir →
+ * edited işaretlenir (swing senkronu bir daha üzerine yazamaz). Truth kalemi
+ * zaten onaylı sayılır — bu uç yalnız data.realized2026 kayıtları içindir. */
+app.post("/api/realized2026/:id/approve", async (req, res) => {
+  try {
+    const d = await loadData();
+    const rec = (d.realized2026 || []).find((x) => x.id === req.params.id);
+    if (!rec) return res.status(404).json({ error: "kayıt bulunamadı" });
+    const amt = req.body?.amountTRY;
+    if (amt != null && amt !== "" && isFinite(Number(amt)) && Number(amt) !== rec.amountTRY) {
+      rec.amountTRY = +Number(amt).toFixed(2);
+      rec.edited = true;                      // düzeltilmiş broker gerçeği — oto senkron ezemez
+    }
+    delete rec.pending;
+    await saveData(d);
+    res.json(rec);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
 // Realize kaydı tutarını düzelt (broker yanlış hesaplarsa). Truth kalemi → realized2026Edits; manuel kayıt → kaydı güncelle.
 app.put("/api/realized2026/:id", async (req, res) => {
   try {
@@ -5706,8 +5725,15 @@ function syncSwingToR26(data, t) {
     swingId: t.id,
   };
   const existing = data.realized2026.find((r) => r.swingId === t.id);
-  if (existing) Object.assign(existing, fields);
-  else data.realized2026.push({ id: "r26-sw-" + t.id, ...fields });
+  if (existing) {
+    // Kaan tutarı elle düzeltip onayladıysa (edited) broker değeri DOĞRUDUR — yeniden hesaplayıp ezme.
+    if (existing.edited) { existing.label = fields.label; existing.date = fields.date; existing.year = fields.year; }
+    else {
+      const degisti = existing.amountTRY !== fields.amountTRY;
+      Object.assign(existing, fields);
+      if (degisti) existing.pending = true;   // tutar değişti → yeniden onaya düşer
+    }
+  } else data.realized2026.push({ id: "r26-sw-" + t.id, ...fields, pending: true });
 }
 
 app.get("/api/swing-trades", async (_req, res) => {
@@ -6398,7 +6424,9 @@ function applyTrade(data, t, usdtry) {
   if (kind === "sell" && trade.sellUSD > 0 && trade.buyUSD > 0 && soldShares > 0 && usdtry) {
     const amountTRY = +(((trade.sellUSD - trade.buyUSD) * soldShares - MIDAS_FEE) * usdtry).toFixed(2);
     data.realized2026 = data.realized2026 || [];
-    realizedRec = { id: "r26-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), symbol: sym, label: t.r26Label || `${soldShares} adet satış`, date: trade.date, amountTRY, year: yearOf(trade.date), auto: true, tradeId: trade.id, feeUSD: MIDAS_FEE };
+    // pending: hesaplanan tutar KURDAN/ort. maliyetten sapabilir — aracı kurumla karşılaştırılıp
+    // ONAYLANANA dek toplamlara girmez (Kaan 22 Tem: "önce ben doğrulayayım, sonra hesaba gir").
+    realizedRec = { id: "r26-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), symbol: sym, label: t.r26Label || `${soldShares} adet satış`, date: trade.date, amountTRY, year: yearOf(trade.date), auto: true, pending: true, tradeId: trade.id, feeUSD: MIDAS_FEE };
     data.realized2026.push(realizedRec);
   }
   return { trade, realizedRec, sync, soldShares };
@@ -6473,7 +6501,7 @@ app.post("/api/realized2026/sync-trades", async (_req, res) => {
         symbol: t.symbol,
         label: `${+t.shares.toFixed(4)} adet satış`,
         date: t.date,
-        amountTRY, year: yearOf(t.date), auto: true, tradeId: t.id,
+        amountTRY, year: yearOf(t.date), auto: true, pending: true, tradeId: t.id,
       });
       added++;
     }
@@ -6808,6 +6836,110 @@ app.post("/api/lab/backtest", async (req, res) => {
       not: "Evren bugünün evrenidir (hafif survivorship). Sonuç geçmiştir, garanti değildir; komisyon dahil NET rakamlardır. Güven aralıkları 1000 yeniden örneklemeyle (bootstrap) hesaplanır — küçük örneklemde 'daha iyi' demenin dürüst sınırıdır." });
   } catch (e) { res.status(500).json({ error: e.message }); }
   finally { LAB._running = false; }
+});
+
+/* ===== Laboratuvar: OTOMATİK TARAMA ===============================================
+ * "Hangi ayar daha iyi?" sorusunu tek tek elle denemek yerine: sabit, KÜRE edilmiş
+ * bir varyant listesi (TP ızgarası + filtre aç/kapa + birkaç kombo) tek kum-havuzu
+ * bağlamında koşulur. Her varyant için 3 replay (tam pencere + walk-forward 2 yarı),
+ * baseline'ın 3 replay'i bir kez hesaplanıp paylaşılır.
+ * SIRALAMA dürüstlük öncelikli: önce walk-forward tutarlılığı + bootstrap anlamlılık,
+ * sonra ortalama R. "Geçmişe en iyi uyan" değil "iki yarıda da tutan" öne çıkar.
+ * Asenkron iş: POST başlatır, GET ilerleme/sonuç döner (CPU'yu bloklamasın diye
+ * replay'ler arasında event-loop'a nefes verilir). Deftere ASLA yazmaz. */
+const LAB_SCAN = { running: false, startedAt: null, progress: { done: 0, total: 0 }, results: null, error: null, params: null };
+function labScanVariants() {
+  // Her öğe: ad + açıklama (İPUCU dili: basit, tek cümle) + parametre farkı (canlı kurallardan)
+  return [
+    { ad: "TP erken (4/10)", not: "Kârı erken cebe at — isabet artar, büyük kazanan kaçar.", p: { tp1: 4, tp2: 10 } },
+    { ad: "TP geniş (8/16)", not: "Kazananı daha uzun sür — isabet düşer, kazanan büyür.", p: { tp1: 8, tp2: 16 } },
+    { ad: "TP çok geniş (10/25)", not: "Trend avcısı: az isabet, nadir ama büyük kâr.", p: { tp1: 10, tp2: 25 } },
+    { ad: "TP asimetrik (5/20)", not: "İlk kârı erken al, kalanı trene bindir.", p: { tp1: 5, tp2: 20 } },
+    { ad: "RS kapalı", not: "Göreli güç kuralı tamamen devre dışı — her sinyal tam boy.", p: { rsMode: "off" } },
+    { ad: "RS sert kapı (30)", not: "Zayıf hisseye hiç girme (14 Tem backtest'i bunu reddetmişti — teyit).", p: { rsMode: "gate" } },
+    { ad: "RS yarım, eşik 50", not: "Filtre sıkılaşır: evrenin zayıf yarısı yarım boy.", p: { rsMin: 50 } },
+    { ad: "EP kapalı", not: "Haber/gap girişleri yok — yalnız teknik sinyal.", p: { ep: false } },
+    { ad: "Rejim giriş bloğu kapalı", not: "Piyasa kötüyken de yeni giriş alınır.", p: { regimeGate: false } },
+    { ad: "Rejim başabaş kapalı", not: "Kötü piyasada stop girişe ÇEKİLMEZ — sıyrık azalır, risk artar.", p: { regimeBE: false } },
+    { ad: "Rejim tamamen kapalı", not: "İki rejim koruması da yok — filtre etkisinin tavan ölçümü.", p: { regimeGate: false, regimeBE: false } },
+    { ad: "Kombo: TP geniş + BE kapalı", not: "Kazananı sür + erken tıraşlama.", p: { tp1: 8, tp2: 16, regimeBE: false } },
+    { ad: "Kombo: TP geniş + RS eşik 50", not: "Kazananı sür + yalnız güçlü hisse tam boy.", p: { tp1: 8, tp2: 16, rsMin: 50 } },
+    { ad: "Kombo: TP asimetrik + BE kapalı", not: "Erken emniyet + treni bırakma.", p: { tp1: 5, tp2: 20, regimeBE: false } },
+    { ad: "Komisyon 0 (teşhis)", not: "GERÇEK DEĞİL — komisyonun toplam ısırığını ölçer, ayar olarak alınamaz.", p: { commission: 0 }, teshis: true },
+  ];
+}
+async function labScanRun(startISO) {
+  const t0 = Date.now();
+  const ctx = await labCtx(startISO);
+  const ref = ctx.S[ctx.watch[0]];
+  if (!ref) throw new Error("önbellekte mum yok");
+  const todayISO = new Date().toISOString().slice(0, 10);
+  const dates = ref.v.map((c) => c.time).filter((d) => d >= startISO && d < todayISO);
+  const mid = dates.length >= 80 ? dates[Math.floor(dates.length / 2)] : null;
+  const nefes = () => new Promise((r) => setImmediate(r));            // event-loop'u bloklama
+  const vars = labScanVariants();
+  LAB_SCAN.progress = { done: 0, total: (vars.length + 1) * (mid ? 3 : 1) };
+  const kos = async (P) => { const r = labReplay(ctx, P); LAB_SCAN.progress.done++; await nefes(); return r; };
+  // Baseline (canlı kurallar): tam + iki yarı — bir kez, herkes paylaşır
+  const bp = labParams({ start: startISO });
+  const B = { tam: await kos(bp) };
+  if (mid) { B.h1 = await kos({ ...bp, end: mid }); B.h2 = await kos({ ...bp, start: mid }); }
+  const out = [];
+  for (const v of vars) {
+    const P = labParams({ start: startISO, ...v.p });
+    const tam = await kos(P);
+    let wf = null;
+    if (mid) {
+      const h1 = await kos({ ...P, end: mid });
+      const h2 = await kos({ ...P, start: mid });
+      const f1 = h1.ortR != null && B.h1.ortR != null ? +(h1.ortR - B.h1.ortR).toFixed(2) : null;
+      const f2 = h2.ortR != null && B.h2.ortR != null ? +(h2.ortR - B.h2.ortR).toFixed(2) : null;
+      const yeterli = Math.min(h1.islem, B.h1.islem) >= 10 && Math.min(h2.islem, B.h2.islem) >= 10;
+      wf = { f1, f2, durum: (f1 == null || f2 == null || !yeterli) ? "yetersiz" : f1 > 0 && f2 > 0 ? "tutarli" : f1 <= 0 && f2 <= 0 ? "kotu" : "uydurma" };
+    }
+    const kiyas = labCompare(B.tam, tam);
+    out.push({
+      ad: v.ad, not: v.not, teshis: !!v.teshis, params: v.p,
+      islem: tam.islem, isabet: tam.isabet, ortR: tam.ortR, getiriPct: tam.getiriPct,
+      maksDususPct: tam.maksDususPct, sermaye: tam.sermaye, komisyon: tam.komisyon,
+      farkR: kiyas?.yeterli ? kiyas.farkR : null, ciLo: kiyas?.yeterli ? kiyas.lo : null, ciHi: kiyas?.yeterli ? kiyas.hi : null,
+      anlamli: !!kiyas?.anlamli, wf,
+      // Dürüstlük etiketi: sıralamanın ve ekrandaki rozetin tek kaynağı
+      hukum: (() => {
+        if (v.teshis) return "teshis";
+        if (!kiyas?.yeterli) return "veri-az";
+        const w = wf?.durum;
+        if (w === "kotu" || (kiyas.farkR != null && kiyas.farkR < 0 && w !== "tutarli")) return "kotu";
+        if (w === "uydurma") return "uydurma";
+        if (w === "tutarli" && kiyas.anlamli) return "saglam";
+        if (w === "tutarli") return "umutlu";
+        return "gurultu";
+      })(),
+    });
+  }
+  const sira = { saglam: 0, umutlu: 1, gurultu: 2, "veri-az": 3, uydurma: 4, kotu: 5, teshis: 6 };
+  out.sort((a, b) => (sira[a.hukum] - sira[b.hukum]) || ((b.farkR ?? -99) - (a.farkR ?? -99)));
+  delete B.tam._rs;
+  return {
+    start: startISO, universe: ctx.watch.length, sureSn: +((Date.now() - t0) / 1000).toFixed(1),
+    baseline: { islem: B.tam.islem, isabet: B.tam.isabet, ortR: B.tam.ortR, getiriPct: B.tam.getiriPct, maksDususPct: B.tam.maksDususPct, sermaye: B.tam.sermaye, komisyon: B.tam.komisyon },
+    kesim: mid, varyantlar: out,
+    not: "Tüm koşular risk %" + CH_ENG.riskPct + " ve canlı komisyonla (teşhis satırı hariç) — kaldıraç değil edge kıyaslanır. Sıralama: walk-forward tutarlılığı + bootstrap anlamlılık önce, ortalama R sonra. 'Sağlam' bile GARANTİ değildir; geçmiş tekrar etmez.",
+  };
+}
+app.post("/api/lab/scan", async (req, res) => {
+  if (LAB_SCAN.running) return res.status(429).json({ error: "tarama zaten koşuyor", progress: LAB_SCAN.progress });
+  const start = /^\d{4}-\d{2}-\d{2}$/.test(req.body?.start || "") && req.body.start >= "2025-01-01" ? req.body.start : "2025-07-01";
+  LAB_SCAN.running = true; LAB_SCAN.error = null; LAB_SCAN.results = null;
+  LAB_SCAN.startedAt = new Date().toISOString(); LAB_SCAN.params = { start };
+  res.json({ ok: true, started: true });                              // hemen dön; istemci GET ile izler
+  try { LAB_SCAN.results = await labScanRun(start); }
+  catch (e) { LAB_SCAN.error = e.message; }
+  finally { LAB_SCAN.running = false; }
+});
+app.get("/api/lab/scan", (_req, res) => {
+  res.json({ running: LAB_SCAN.running, startedAt: LAB_SCAN.startedAt, progress: LAB_SCAN.progress,
+    error: LAB_SCAN.error, results: LAB_SCAN.results, params: LAB_SCAN.params });
 });
 
 /* ===== "Masada bıraktığın para" — plana-uyum karşı-olgusu =========================
