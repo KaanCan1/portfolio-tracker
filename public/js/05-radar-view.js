@@ -34,7 +34,7 @@ function fmtMcap(v) {
 const sgnPct = (v, d = 0) => (v == null || !isFinite(v) ? "—" : `<span class="${cls(v)}">${v >= 0 ? "+" : ""}${v.toFixed(d)}%</span>`);
 
 const TREND_META = {
-  hot:  { label: "🔥 SICAK", cls: "tr-hot",  title: "Kısa + orta vade güçlü ralli, trend üstünde" },
+  hot:  { label: "↑↑ SICAK", cls: "tr-hot",  title: "Kısa + orta vade güçlü ralli, trend üstünde" },
   up:   { label: "↑ YÜKSELİŞ", cls: "tr-up", title: "Yükseliş trendinde, ılımlı momentum" },
   down: { label: "↓ DÜŞÜŞ", cls: "tr-down", title: "Kısa + orta vade negatif momentum" },
 };
@@ -66,14 +66,14 @@ function radarDetail(s) {
   return `<tr class="rb-detail" data-for="${s.symbol}" hidden><td colspan="8">
     ${swBlock}
     ${s.story ? `<div class="rd-story">💡 <b>Hikâye:</b> ${s.story}</div>` : ""}
-    ${s.summaryText ? `<div class="rd-story rd-why">🧮 <b>Skor nereden geliyor?</b> ${s.summaryText}</div>` : ""}
+    ${s.summaryText ? `<div class="rd-story rd-why"><b>Skor nereden geliyor?</b> ${s.summaryText}</div>` : ""}
     <div class="rd-grid">
       ${cell("1A", sgnPct(s.ret1M))}${cell("3A", sgnPct(s.ret3M))}${cell("6A", sgnPct(s.ret6M))}${cell("1Y", sgnPct(s.ret1Y))}${cell("YTD", sgnPct(s.retYTD))}
       ${cell("52h zirveye", sgnPct(s.fromHighPct))}
       ${cell("Piyasa değeri", fmtMcap(s.marketCap))}${cell("F/K", s.pe != null ? s.pe.toFixed(1) : "—")}${cell("PEG", s.pegYr != null ? s.pegYr.toFixed(2) : "—")}${cell("Beta", s.beta != null ? s.beta.toFixed(2) : "—")}
       ${cell("Gelir büyüme", sgnPct(s.revenueGrowth))}${cell("Kâr büyüme", sgnPct(s.earningsGrowth))}${cell("Brüt marj", s.grossMargin != null ? s.grossMargin.toFixed(0) + "%" : "—")}${cell("Net marj", s.profitMargin != null ? s.profitMargin.toFixed(0) + "%" : "—")}${cell("ROE", s.roe != null ? s.roe.toFixed(0) + "%" : "—")}
     </div>
-    <div class="rd-row"><span class="rd-k">🎯 Model hedef (12A)</span><span class="rd-v">${tgtLine}</span></div>
+    <div class="rd-row"><span class="rd-k">Model hedef (12A)</span><span class="rd-v">${tgtLine}</span></div>
     <div class="rd-row"><span class="rd-k">Analist</span><span class="rd-v">${recoLine}</span></div>
     <div class="rd-row"><span class="rd-k">Insider (90g)</span><span class="rd-v">${insLine}</span></div>
   </td></tr>`;
@@ -166,7 +166,7 @@ function renderRadarBoard() {
   // Aksiyon şeridi: yüksek skor (≥50) + taze swing tetiği → "şimdi girilebilir" ilk 5
   const action = all.filter((u) => (u.score ?? 0) >= 50 && raActionable(u)).sort((a, b) => raCombo(b) - raCombo(a)).slice(0, 5);
   const strip = action.length ? `<div class="ra-strip">
-    <div class="ra-strip-h">🎯 Şimdi girilebilir <span>yüksek skor + taze swing tetiği — hem temel hem teknik hazır</span></div>
+    <div class="ra-strip-h">Şimdi girilebilir <span>yüksek skor + taze swing tetiği — hem temel hem teknik hazır</span></div>
     <div class="ra-strip-row">${action.map((u) => `<button class="ra-pill" data-rapill="${u.symbol}">
       <span class="ra-pill-sym">${u.symbol}</span><span class="ra-pill-score">skor ${u.score}</span>
       <span class="ra-pill-lv">gir ${fmtUSD(u.swing.entry)} · stop <span class="neg">${fmtUSD(u.swing.stop)}</span></span>

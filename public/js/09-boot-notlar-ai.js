@@ -1007,8 +1007,8 @@ function pushB64(k) { // VAPID public key (base64url) → Uint8Array
 function pushPaint() {
   const b = $("#pushBtn"); if (!b) return;
   b.hidden = false;
-  if (b.dataset.guide) { b.textContent = "🔔 Bildirim için ana ekrana ekle"; return; }
-  b.textContent = PUSHC.sub ? "🔔 Bildirimler açık" : "🔕 Bildirimleri aç";
+  if (b.dataset.guide) { b.textContent = "Bildirim için ana ekrana ekle"; return; }
+  b.textContent = PUSHC.sub ? "Bildirimler açık" : "Bildirimleri aç";
   b.classList.toggle("on", !!PUSHC.sub);
   b.title = PUSHC.sub ? "Kapatmak için dokun" : "Stop/TP/Alfa olayları telefona anlık düşsün";
 }
@@ -1046,7 +1046,7 @@ $("#pushBtn")?.addEventListener("click", async () => {
     if (!key) { toast("Sunucuda push yapılandırması yok (mock/dev ortamı olabilir)", "err"); return; }
     PUSHC.sub = await PUSHC.reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: pushB64(key) });
     await fetch("/api/push/subscribe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sub: PUSHC.sub.toJSON() }) });
-    toast("🔔 Bildirimler açık — test bildirimi gönderiliyor");
+    toast("Bildirimler açık — test bildirimi gönderiliyor");
     fetch("/api/push/test", { method: "POST" }).catch(() => {});
     pushPaint();
   } catch (e) { toast("Bildirim kurulumu başarısız: " + (e?.message || e), "err"); }

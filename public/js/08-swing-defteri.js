@@ -162,7 +162,7 @@ function swingStatsPanel(closed) {
     `<div class="sx-stat"><span class="sx-lbl">${lbl}</span><b class="${tone}">${val}</b>${sub ? `<span class="sx-sub">${sub}</span>` : ""}</div>`;
   return `
     <section class="panel sx-panel">
-      <div class="panel-head"><div><h2>📊 Swing Karnesi <span class="sw-chip">${s.n} işlem</span></h2>
+      <div class="panel-head"><div><h2>Swing Karnesi <span class="sw-chip">${s.n} işlem</span></h2>
         <span class="chart-sub">Qullamaggie'yi ne kadar iyi uyguluyorsun — profit factor, payoff, beklenti, R-dağılımı</span></div></div>
       <div class="sx-grid">
         ${stat("İsabet", s.winRate.toFixed(0) + "%", s.winRate >= 50 ? "pos" : "", `${s.winCount}K / ${s.lossCount}Z`)}
@@ -181,7 +181,7 @@ function swingStatsPanel(closed) {
       ${s.disciplinePct != null ? `<div class="sx-disc ${s.disciplinePct >= 80 ? "ok" : "warn"}">
         ${s.disciplinePct >= 80
           ? `✓ Stop disiplinin güçlü — kayıplarının ${Math.round(s.disciplinePct)}%'i planlı 1R riski içinde kaldı. "En az zararla çık" tezini uyguluyorsun.`
-          : `⚠️ Kayıplarının yalnız ${Math.round(s.disciplinePct)}%'i 1R içinde${s.stopViol ? ` · ${s.stopViol} işlemde stop &gt;1.5R aşıldı` : ""}. Stop'a zamanında uy — büyük kayıp birikimi sistemi bozar (Kural 1).`}</div>` : ""}
+          : `Kayıplarının yalnız ${Math.round(s.disciplinePct)}%'i 1R içinde${s.stopViol ? ` · ${s.stopViol} işlemde stop &gt;1.5R aşıldı` : ""}. Stop'a zamanında uy — büyük kayıp birikimi sistemi bozar (Kural 1).`}</div>` : ""}
       ${s.rN ? `<div class="sx-histo-wrap"><div class="sx-histo-h">R-katsayısı dağılımı <span class="sw-muted">${s.rN} stop'lu işlem · küçük zararlar, büyük kazançlar mı?</span></div>
         <div class="sx-histo">${histo}</div></div>` : `<div class="sw-muted" style="font-size:12px;margin-top:6px">R-dağılımı için stop girilmiş kapanmış işlem gerek.</div>`}
     </section>`;
@@ -240,13 +240,15 @@ function decisionScorecardPanel(closed) {
     </div>` : "";
   let insight = "";
   if (pf.length) {
-    if (q.lucky > q.skill && q.lucky > 0) insight = `⚠️ Kazançlarının çoğu (<b>${q.lucky}</b>) plana <b>uymadan</b> geldi — bu şans, tekrarlanmaz. Süreç kazançlarını (${q.skill}) büyüt.`;
+    if (q.lucky > q.skill && q.lucky > 0) insight = `Kazançlarının çoğu (<b>${q.lucky}</b>) plana <b>uymadan</b> geldi — bu şans, tekrarlanmaz. Süreç kazançlarını (${q.skill}) büyüt.`;
     else if (q.skill + q.right > 0) insight = `✓ İşlemlerinin çoğu <b>süreç odaklı</b>: ${q.skill} beceri kazancı + ${q.right} disiplinli kayıp (doğru karar, kötü sonuç — hata değil). Bunu koru.`;
   }
   const confA = byConf.find((x) => x.k === "A"), confC = byConf.find((x) => x.k === "C");
-  let calNote = "";
-  if (confA && confC && confA.avgR != null && confC.avgR != null && confA.avgR < confC.avgR - 0.15)
-    calNote = `⚠️ Güven kalibrasyonun <b>ters</b>: A'da (${confA.avgR.toFixed(2)}R) C'den (${confC.avgR.toFixed(2)}R) kötüsün — en emin olduğunda yanılıyorsun. "Güçlü" hissini sorgula.`;
+  let calNote = "", calWarn = false;
+  if (confA && confC && confA.avgR != null && confC.avgR != null && confA.avgR < confC.avgR - 0.15) {
+    calNote = `Güven kalibrasyonun <b>ters</b>: A'da (${confA.avgR.toFixed(2)}R) C'den (${confC.avgR.toFixed(2)}R) kötüsün — en emin olduğunda yanılıyorsun. "Güçlü" hissini sorgula.`;
+    calWarn = true;
+  }
   else if (confA && confA.avgR != null && confA.avgR >= 0.3) calNote = `✓ A-güven işlemlerin gerçekten iyi (${confA.avgR >= 0 ? "+" : ""}${confA.avgR.toFixed(2)}R) — güvenin kalibre. Büyük pozisyonu A'lara ayır.`;
   const bestSetup = bySetup.filter((x) => x.avgR != null).sort((a, b) => b.avgR - a.avgR)[0];
 
@@ -257,7 +259,7 @@ function decisionScorecardPanel(closed) {
 
   const small = journaled.length < 5;
   return `<section class="panel dj-panel">
-    <div class="panel-head"><div><h2>🧭 Karar Kalitesi <span class="sw-chip">${journaled.length} kayıt</span></h2>
+    <div class="panel-head"><div><h2>Karar Kalitesi <span class="sw-chip">${journaled.length} kayıt</span></h2>
       <span class="chart-sub">Şans mı beceri mi — tezine, güvenine ve plana uyumuna göre kendi kararların</span></div></div>
     ${small ? `<div class="dj-small">İlk sinyaller — sağlıklı okuma için ~5+ etiketli kapanış gerek. Yine de biriktikçe netleşir.</div>` : ""}
     ${matrix ? `<div class="dj-block"><div class="dj-block-h">Şans / Beceri matrisi <span class="sw-muted">${pf.length} tam kapanış</span></div>
@@ -277,8 +279,8 @@ function decisionScorecardPanel(closed) {
       ${byConf.length ? rtable({ axis: "Güven", data: byConf }, "Güven kalibrasyonu") : ""}
       ${bySetup.length ? rtable({ axis: "Setup", data: bySetup }, "Setup kırılımı") : ""}
     </div>` : ""}
-    ${calNote ? `<div class="dj-note ${calNote.startsWith("⚠") ? "warn" : "ok"}">${calNote}</div>` : ""}
-    ${bestSetup && bySetup.length > 1 ? `<div class="dj-note ok">🎯 En iyi setup'ın <b>${bestSetup.lbl}</b> (${bestSetup.avgR >= 0 ? "+" : ""}${bestSetup.avgR.toFixed(2)}R) — sermayeni buraya yoğunlaştır, zayıf setup'ları ele.</div>` : ""}
+    ${calNote ? `<div class="dj-note ${calWarn ? "warn" : "ok"}">${calNote}</div>` : ""}
+    ${bestSetup && bySetup.length > 1 ? `<div class="dj-note ok">En iyi setup'ın <b>${bestSetup.lbl}</b> (${bestSetup.avgR >= 0 ? "+" : ""}${bestSetup.avgR.toFixed(2)}R) — sermayeni buraya yoğunlaştır, zayıf setup'ları ele.</div>` : ""}
   </section>`;
 }
 
@@ -598,7 +600,7 @@ function swRegimeLine() {
   const r = chRegimeToday();
   const advice = r.state === "off" ? " — <b>şu an yeni swing girişi için iyi bir zaman değil; mevcutları kurallarınla yönet.</b>"
     : r.state === "caution" ? " — yeni girişte temkinli ol, boyutu küçült." : " — yeni girişler için ortam uygun.";
-  return `<div class="sw-regime ${r.state}">${r.state === "off" ? "⛔" : r.state === "caution" ? "🟡" : "🟢"} <b>Rejim (QQQ + risk iştahı):</b> ${r.txt}${advice}</div>`;
+  return `<div class="sw-regime ${r.state}"><span><b>Rejim (QQQ + risk iştahı):</b> ${r.txt}${advice}</span></div>`;
 }
 
 /* ===== Günlük İşlem Analizi — o günün HER işlemi kendi verisiyle değerlendirilir =====
@@ -895,7 +897,7 @@ function openSwingFromPlan(p) {
 function swFromBtn(p) {
   if (p.entry == null) return "";
   const enc = encodeURIComponent(JSON.stringify({ symbol: p.symbol, entry: p.entry, stop: p.stop ?? null, target: p.target ?? null, note: p.note || "" }));
-  return `<button type="button" class="btn ghost sm sw-from" data-swfrom="${enc}" title="Bu kurulumu Swing Defteri'ne aktar">📈 Swing aç</button>`;
+  return `<button type="button" class="btn ghost sm sw-from" data-swfrom="${enc}" title="Bu kurulumu Swing Defteri'ne aktar">Swing aç</button>`;
 }
 // Capture-fazı: kart/satırın kendi tıklama (grafik) handler'ından önce yakala
 document.addEventListener("click", (e) => {
@@ -1192,12 +1194,12 @@ function renderWeeklyPlanBox() {
   const p = d.plan;
   const rb = (typeof RBUD !== "undefined" && RBUD.d && RBUD.d.budget > 0) ? RBUD.d : null;
   const rbChip = rb && (rb.level === "full" || rb.level === "warn")
-    ? `<span class="wkp-rb ${rb.level}">${rb.level === "full" ? "🧯 risk bütçesi dolu" : `⚠ bütçe %${Math.round(rb.ratio)}`}</span>` : "";
+    ? `<span class="wkp-rb ${rb.level}">${rb.level === "full" ? "risk bütçesi dolu" : `bütçe %${Math.round(rb.ratio)}`}</span>` : "";
   if (!p || !((p.candidates || []).length || (p.watch || []).length)) {
     el.innerHTML = `<section class="panel wkp-panel">
-      <div class="panel-head"><div><h2>🧭 Haftalık Plan <span class="sw-chip">${d.yw}</span> ${rbChip}</h2>
+      <div class="panel-head"><div><h2>Haftalık Plan <span class="sw-chip">${d.yw}</span> ${rbChip}</h2>
         <span class="chart-sub">Hafta sonu rutini: rejim → adaylar → seviyeler · plan yazılır, hafta planla oynanır</span></div>
-        <button class="btn primary sm" id="wkndStartBtn">🧭 Rutini Başlat</button></div>
+        <button class="btn primary sm" id="wkndStartBtn">Rutini Başlat</button></div>
       <p class="wkp-none">Bu hafta için plan yok. Pazar akşamı 10 dakika yeter — plan dışı işlem Karar Defteri'nde itiraf ister.</p>
     </section>`;
   } else {
@@ -1206,7 +1208,7 @@ function renderWeeklyPlanBox() {
       <td>${c.entry != null ? fmtUSD(c.entry) : "—"}</td><td>${c.stop != null ? fmtUSD(c.stop) : "—"}</td>
       <td>${c.qty != null ? fmtNum(c.qty, 2) : "—"}</td><td class="l wkp-cnote">${c.note || ""}</td></tr>`).join("");
     el.innerHTML = `<section class="panel wkp-panel">
-      <div class="panel-head"><div><h2>🧭 Haftalık Plan <span class="sw-chip">${d.yw}</span> ${rbChip}</h2>
+      <div class="panel-head"><div><h2>Haftalık Plan <span class="sw-chip">${d.yw}</span> ${rbChip}</h2>
         <span class="chart-sub">${p.regime?.band ? `Rejim: <b>${p.regime.band}</b>${p.regime.vix != null ? ` · VIX ${fmtNum(p.regime.vix, 1)}` : ""} · ` : ""}${(p.candidates || []).length} aday${(p.watch || []).length ? ` · izleme: ${p.watch.join(", ")}` : ""}</span></div>
         <button class="btn ghost sm" id="wkndStartBtn">Düzenle</button></div>
       ${rows ? `<div class="tbl-wrap wkp-tblwrap"><table class="wkp-table"><thead><tr><th class="l">Sembol</th><th class="l">Setup</th><th>Giriş</th><th>Stop</th><th>Adet</th><th class="l">Not</th></tr></thead><tbody>${rows}</tbody></table></div>` : ""}

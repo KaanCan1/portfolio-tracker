@@ -283,37 +283,34 @@ function buildCompare(history, current, dayOpenTotal) {
    ============================================================ */
 
 // Aç Gözlülük endeksinin 5 bölgesi (CNN ölçeği, 0–100)
+// Sıcak kağıda oturan sakin tonlar — trafik lambası doygunluğu yerine yıkanmış aile
 const FNG_ZONES = [
-  { from: 0,  to: 25,  color: "#d8442f", label: "Aşırı Korku" },
-  { from: 25, to: 45,  color: "#ef8e3a", label: "Korku" },
-  { from: 45, to: 55,  color: "#e8c042", label: "Nötr" },
-  { from: 55, to: 75,  color: "#86c060", label: "Açgözlülük" },
-  { from: 75, to: 100, color: "#22a05a", label: "Aşırı Açgözlülük" },
+  { from: 0,  to: 25,  color: "#c25c4a", label: "Aşırı Korku" },
+  { from: 25, to: 45,  color: "#cf8f55", label: "Korku" },
+  { from: 45, to: 55,  color: "#c9b264", label: "Nötr" },
+  { from: 55, to: 75,  color: "#8cab68", label: "Açgözlülük" },
+  { from: 75, to: 100, color: "#3f9464", label: "Aşırı Açgözlülük" },
 ];
 const fngColor = (s) => (FNG_ZONES.find((z) => s >= z.from && s <= z.to) || FNG_ZONES[2]).color;
 
 // Yarım daire gösterge: skor 0 → sol (180°), 100 → sağ (0°)
 function fngGaugeSVG(score) {
-  const cx = 110, cy = 104, r = 84, w = 17;
+  const cx = 110, cy = 104, r = 84, w = 12;
   const a = (s) => Math.PI - (s / 100) * Math.PI; // skor → radyan
   const pt = (s, rad) => [cx + rad * Math.cos(a(s)), cy - rad * Math.sin(a(s))];
-  const arc = (s1, s2, color) => {
+  const arc = (s1, s2, color, op = 1) => {
     const [x1, y1] = pt(s1, r), [x2, y2] = pt(s2, r);
     return `<path d="M ${x1.toFixed(1)} ${y1.toFixed(1)} A ${r} ${r} 0 0 1 ${x2.toFixed(1)} ${y2.toFixed(1)}"
-      fill="none" stroke="${color}" stroke-width="${w}" stroke-linecap="butt"/>`;
+      fill="none" stroke="${color}" stroke-width="${w}" stroke-linecap="round" opacity="${op}"/>`;
   };
   const s = Math.max(0, Math.min(100, score));
-  // İğne (needle): merkezden skora doğru ince üçgen
-  const [nx, ny] = pt(s, r - 4);
-  const [lx, ly] = pt(s + 8, 9);
-  const [rx, ry] = pt(s - 8, 9);
-  const col = fngColor(s);
+  // İğne yerine yay üstünde nokta işaretçi — rakamla çakışmaz, sakin okunur
+  const [mx, my] = pt(s, r);
+  // Skorun bulunduğu bölge tam tonda, kalan bölgeler yıkanmış — göz tek yere gider
   return `<svg class="fng-gauge" viewBox="0 0 220 132" role="img" aria-label="Aç Gözlülük ${score}/100">
-    ${FNG_ZONES.map((z) => arc(z.from + (z.from ? 0.6 : 0), z.to - (z.to < 100 ? 0.6 : 0), z.color)).join("")}
-    <polygon points="${lx.toFixed(1)},${ly.toFixed(1)} ${rx.toFixed(1)},${ry.toFixed(1)} ${nx.toFixed(1)},${ny.toFixed(1)}" fill="#1b2520"/>
-    <circle cx="${cx}" cy="${cy}" r="11" fill="#1b2520"/>
-    <circle cx="${cx}" cy="${cy}" r="4.5" fill="#fff"/>
-    <text x="${cx}" y="${cy - 26}" text-anchor="middle" class="fng-gauge-num" fill="${col}">${score}</text>
+    ${FNG_ZONES.map((z) => arc(z.from + 1.4, z.to - 1.4, z.color, s >= z.from && s <= z.to ? 1 : 0.3)).join("")}
+    <circle cx="${mx.toFixed(1)}" cy="${my.toFixed(1)}" r="8" fill="#fff" stroke="${fngColor(s)}" stroke-width="3.5"/>
+    <text x="${cx}" y="${cy - 18}" text-anchor="middle" class="fng-gauge-num" style="fill:var(--ink)">${score}</text>
   </svg>`;
 }
 
@@ -622,7 +619,7 @@ function render() {
     ? [
         meta.missingPrices?.length ? `⚠️ Fiyat alınamadı: ${meta.missingPrices.join(", ")} — toplamlar bu kalemler olmadan/eski değerle.` : "",
         meta.stalePrices?.length ? `🕒 Son bilinen fiyat: ${meta.stalePrices.join(", ")} — canlı çekilemedi, yenisi gelince güncellenecek.` : "",
-        meta.metalsStale ? `🕒 Döviz/altın son bilinen değerle gösteriliyor (kaynak geçici erişilemedi).` : "",
+        meta.metalsStale ? `Döviz/altın son bilinen değerle gösteriliyor (kaynak geçici erişilemedi).` : "",
         meta.staleSignals?.length ? `⏳ Teknik veri bayat: ${meta.staleSignals.join(", ")} (yeni tarama bekleniyor).` : "",
         meta.noSignalYet?.length ? `↻ İlk tarama bekleyen: ${meta.noSignalYet.join(", ")}.` : "",
       ].filter(Boolean)

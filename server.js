@@ -4441,16 +4441,16 @@ app.get("/api/portfolio", async (_req, res) => {
       if (dayPct != null && isFinite(dayPct)) {
         s.push(`Portföy bugün ${dayPct >= 0 ? "+" : ""}%${dayPct.toFixed(2)} ${dayPct >= 0.05 ? "yukarıda" : dayPct <= -0.05 ? "aşağıda" : "yatay"} (gün açılışına göre, döviz dahil)`);
       }
-      if (guardBad.length) s.push(`🛑 ${guardBad.join(", ")} iz süren stopun altında — çıkış planını uygula`);
-      if (rule1 && rule1.score < 85) s.push(`🛡️ Kural 1 skoru ${rule1.score}/100 — ${rule1.violations.filter((x) => x.level !== "info").length} sermaye koruma uyarısı var, panele bak`);
-      if (trimN) s.push(`✂️ ${trimN} pozisyonda kâr-al önerisi var`);
-      if (buyN) s.push(`🟢 ${buyN} hisse alım bölgesinde`);
-      if (sellN) s.push(`🔴 ${sellN} hisse aşırı alımda`);
-      if (setupN) s.push(`📈 ${setupN} hissede aktif swing kurulumu`);
+      if (guardBad.length) s.push(`${guardBad.join(", ")} iz süren stopun altında — çıkış planını uygula`);
+      if (rule1 && rule1.score < 85) s.push(`Kural 1 skoru ${rule1.score}/100 — ${rule1.violations.filter((x) => x.level !== "info").length} sermaye koruma uyarısı var, panele bak`);
+      if (trimN) s.push(`${trimN} pozisyonda kâr-al önerisi var`);
+      if (buyN) s.push(`${buyN} hisse alım bölgesinde`);
+      if (sellN) s.push(`${sellN} hisse aşırı alımda`);
+      if (setupN) s.push(`${setupN} hissede aktif swing kurulumu`);
       if (!s.length) s.push("Belirgin sinyal yok — pozisyonlar nötr bölgede, izlemede kal");
       if (regime?.advice) s.push(`VIX ${regime.vix.toFixed(0)} (${regime.band}): ${regime.advice}`);
-      if (missingPrices.length) s.push(`⚠️ ${missingPrices.join(", ")} için fiyat alınamadı — toplamlar bu kalemler hariç/eski değerle`);
-      else if (staleSignals.length) s.push(`⚠️ ${staleSignals.join(", ")} teknik verisi bayat (yeni tarama bekleniyor)`);
+      if (missingPrices.length) s.push(`${missingPrices.join(", ")} için fiyat alınamadı — toplamlar bu kalemler hariç/eski değerle`);
+      else if (staleSignals.length) s.push(`${staleSignals.join(", ")} teknik verisi bayat (yeni tarama bekleniyor)`);
       // Parçalar kendi noktasıyla gelebilir (ör. rejim tavsiyesi) → çift nokta olmasın
       meta.summaryText = s.map((x) => x.replace(/\.+\s*$/, "")).join(". ") + ".";
     }

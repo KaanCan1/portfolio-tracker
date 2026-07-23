@@ -678,7 +678,7 @@ function renderHuntStrip() {
   el.hidden = false;
   const raiP = reg.rai ? ` · Rİ ${reg.rai.score}` : "";
   const regPill = reg.state === "off"
-    ? `<span class="hunt-pill reg-off">⛔ Rejim kapalı — yeni giriş yok${raiP}</span>`
+    ? `<span class="hunt-pill reg-off">Rejim kapalı — yeni giriş yok${raiP}</span>`
     : reg.state === "caution" ? `<span class="hunt-pill reg-warn">🟡 Temkin — yarım boyut${raiP}</span>`
     : reg.rai && chRaiBand(reg.rai.score) === "riskon" ? `<span class="hunt-pill">Rİ ${reg.rai.score} risk-on</span>` : "";
   el.innerHTML = `<div class="hunt-strip">
