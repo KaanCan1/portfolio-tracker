@@ -1123,7 +1123,8 @@ tfoot td.l { text-align: left; }
 .bm-head { font-size: 12.5px; font-weight: 800; margin-bottom: 9px; }
 .bm-rows { display: flex; flex-direction: column; gap: 6px; }
 .bm-row { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 12px; font-size: 13px; padding: 7px 11px; background: var(--card); border: 1px solid var(--line); border-radius: 8px; }
-.bm-row.bm-port { background: var(--green-soft); border-color: var(--green-line); }
+/* Senin satırın: tam yeşil wash yerine nötr yüzey + ince sol-kenar yeşil şerit (kıyas satırından ayrışsın) */
+.bm-row.bm-port { background: var(--card); border-color: var(--line-strong); box-shadow: inset 3px 0 0 var(--green); }
 .bm-lbl { font-weight: 600; color: var(--ink2); }
 .bm-row > b { font-variant-numeric: tabular-nums; text-align: right; }
 .bm-row > b.pos { color: var(--green-d); } .bm-row > b.neg { color: var(--red-d); }
@@ -2516,7 +2517,8 @@ button.sw-goal-target:hover { background: var(--bg2); border-color: var(--line);
 .pr-ovh-v { font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums; }
 .pr-ovh-c.pos .pr-ovh-v { color: var(--green-d); }
 .pr-ovh-c.neg .pr-ovh-v { color: var(--red); }
-.pr-flag { margin-top: 10px; font-size: 12px; background: #fdf6e7; border: 1px solid #f0dcb0; border-radius: 9px; padding: 9px 12px; color: #8a6d1a; }
+/* Uyarı bayrağı: tek-sefer hex'ler → amber token ailesi (semantik uyarı, sakin) */
+.pr-flag { margin-top: 10px; font-size: 12px; background: var(--amber-bg); border: 1px solid var(--amber-line); border-radius: 9px; padding: 9px 12px; color: var(--amber-d); }
 @media (max-width: 720px) { .pr-kpis { grid-template-columns: repeat(2, 1fr); } .pr-fac-grid { grid-template-columns: 1fr; } .pr-alloc-row { grid-template-columns: 120px 1fr 70px; } .pr-alloc-row .pr-alloc-act { display: none; } }
 
 /* ════════ Kullanışlılık: yapışkan bölüm-atlama çubuğu ════════ */
@@ -2764,7 +2766,8 @@ ul.sw-qm-list li b { font-weight: 700; color: var(--ink); }
 .rk-health-score span { font-size: 15px; color: var(--muted); font-weight: 600; }
 .rk-health-score.pos { color: var(--green-d); } .rk-health-score.warn { color: var(--amber-d); } .rk-health-score.neg { color: var(--red-d); }
 .rk-health-lbl { font-size: 12.5px; color: var(--ink2); margin-top: 4px; }
-.rk-hbar { position: relative; height: 8px; border-radius: 5px; margin: 10px 0 7px; background: linear-gradient(90deg, var(--down) 0%, var(--amber) 50%, var(--up) 100%); }
+/* Sağlık göstergesi: kırmızı→amber→yeşil rainbow yerine nötr track (tier zaten skor+etikette renkli) */
+.rk-hbar { position: relative; height: 8px; border-radius: 5px; margin: 10px 0 7px; background: var(--bg2); border: 1px solid var(--line); }
 .rk-hmark { position: absolute; top: -3px; width: 4px; height: 14px; border-radius: 2px; background: var(--ink); transform: translateX(-50%); box-shadow: 0 0 0 2px var(--card); }
 .rk-health-sub { font-size: 11.5px; color: var(--muted); }
 .rk-heads { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }

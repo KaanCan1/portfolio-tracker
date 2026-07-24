@@ -104,9 +104,9 @@ function renderSector() {
   const top = rows[0];
   const PALETTE = ["#2f8f57", "#3fa7b8", "#d9a92b", "#8b7fd6", "#cf7a3d", "#5b8def", "#9aa394"];
   const warn = top && top.pct >= 40
-    ? `<div class="sector-warn">⚠️ Yoğunlaşma: portföy hisselerinin <b>%${top.pct.toFixed(0)}</b>'i tek temada (<b>${top.title}</b>). Riski dağıtmayı düşün.</div>`
+    ? `<div class="sector-warn">Yoğunlaşma: portföy hisselerinin <b>%${top.pct.toFixed(0)}</b>'i tek temada (<b>${top.title}</b>). Riski dağıtmayı düşün.</div>`
     : top && top.pct >= 30
-      ? `<div class="sector-warn soft">ℹ️ En büyük tema <b>${top.title}</b> · %${top.pct.toFixed(0)}. Dengeli görünüyor.</div>` : "";
+      ? `<div class="sector-warn soft">En büyük tema <b>${top.title}</b> · %${top.pct.toFixed(0)}. Dengeli görünüyor.</div>` : "";
   el.innerHTML = warn + rows.map((r, i) => `
     <div class="sector-row">
       <div class="sector-top">
@@ -131,8 +131,8 @@ async function renderWeekly() {
     </div>` : "";
   const b = d.best, w = d.worst;
   const bw = (b && w) ? `<div class="wk-bw">
-      <div>🏆 En iyi <b>${b.symbol}</b> <span class="${cls(b.pct)}">${fmtPct(b.pct)}</span></div>
-      <div>🔻 En kötü <b>${w.symbol}</b> <span class="${cls(w.pct)}">${fmtPct(w.pct)}</span></div>
+      <div>En iyi <b>${b.symbol}</b> <span class="${cls(b.pct)}">${fmtPct(b.pct)}</span></div>
+      <div>En kötü <b>${w.symbol}</b> <span class="${cls(w.pct)}">${fmtPct(w.pct)}</span></div>
     </div>` : "";
   const maxAbs = Math.max(1, ...d.stocks.map((s) => Math.abs(s.pct)));
   const rows = d.stocks.map((s) => {
@@ -228,7 +228,7 @@ function proTargets() {
 async function renderProRisk() {
   const el = $("#proRiskBox"); if (!el) return;
   if (PRORISK == null) {
-    el.innerHTML = `<div class="radar-empty">📊 Risk motoru çalışıyor — getiri serileri hesaplanıyor…</div>`;
+    el.innerHTML = `<div class="radar-empty">Risk motoru çalışıyor — getiri serileri hesaplanıyor…</div>`;
     try { PRORISK = await (await fetch("/api/risk")).json(); } catch { PRORISK = { error: true }; }
   }
   const R = PRORISK;
@@ -271,7 +271,7 @@ async function renderProRisk() {
     </div>`;
   }).join("");
   const panel1 = `<div class="pr-block">
-    <div class="pr-h2">🛡️ Risk & Korelasyon</div>
+    <div class="pr-h2">Risk & Korelasyon</div>
     ${kpis}${corrTable}
     <div class="pr-sub">Risk katkısı <span class="pr-hint">her pozisyonun TOPLAM portföy riskine payı — ağırlığından büyükse (kırmızı) o pozisyon gizli risk taşıyor</span></div>
     <div class="pr-rc">${rcRows}</div>
@@ -304,7 +304,7 @@ async function renderProRisk() {
     </div>`;
   }).join("");
   const panel2 = `<div class="pr-block">
-    <div class="pr-h2">⚖️ Tahsis & Rebalancing <button class="pr-edit-tg" data-pr-edit-targets title="Hedef ağırlıkları düzenle">✎ hedef</button></div>
+    <div class="pr-h2">Tahsis & Rebalancing <button class="pr-edit-tg" data-pr-edit-targets title="Hedef ağırlıkları düzenle">✎ hedef</button></div>
     <div class="pr-hint">Core-Satellite modeli: çekirdek uzun-vade pozisyonlar + uydu swing'ler + nakit yastığı. Çubuk = gerçek ağırlık, çizgi = hedef. Sapma %4'ü geçince öneri çıkar.</div>
     <div class="pr-alloc">${allocRows}</div>
   </div>`;
@@ -323,7 +323,7 @@ async function renderProRisk() {
     </tr>`;
   }).join("");
   const panel3 = `<div class="pr-block">
-    <div class="pr-h2">🎯 Risk-Bazlı Pozisyon Boyutlama</div>
+    <div class="pr-h2">Risk-Bazlı Pozisyon Boyutlama</div>
     <div class="pr-hint">Qullamaggie kuralı tüm portföye: 1×ADR stopta portföyün %1'i risk. "Önerilen" = bu kurala göre ideal ağırlık. Gerçek bundan büyükse pozisyon fazla iri (tek hata canını yakar).</div>
     <div class="tbl-wrap"><table class="pr-size"><thead><tr><th class="l">Sembol</th><th>Gerçek</th><th>Önerilen</th><th>ADR</th><th>Vol</th><th></th></tr></thead><tbody>${szRows}</tbody></table></div>
   </div>`;
@@ -343,9 +343,9 @@ async function renderProRisk() {
   const ovsH = `<div class="pr-ovh">
       <div class="pr-ovh-c ${cls(stkReal)}"><div class="pr-ovh-l">Hisse realize</div><div class="pr-ovh-v">${fmtTRY0(stkReal)}</div></div>
       <div class="pr-ovh-c ${cls(optReal)}"><div class="pr-ovh-l">Opsiyon realize</div><div class="pr-ovh-v">${fmtTRY0(optReal)}</div></div>
-    </div>${optReal < 0 && stkReal > 0 ? `<div class="pr-flag">⚠️ Opsiyonlar net zarar, hisseler net kâr. Tezine sadık kal: opsiyon kovalamak yerine hisse tut.</div>` : ""}`;
+    </div>${optReal < 0 && stkReal > 0 ? `<div class="pr-flag">Opsiyonlar net zarar, hisseler net kâr. Tezine sadık kal: opsiyon kovalamak yerine hisse tut.</div>` : ""}`;
   const panel4 = `<div class="pr-block">
-    <div class="pr-h2">🧬 Faktör & Maruziyet</div>
+    <div class="pr-h2">Faktör & Maruziyet</div>
     <div class="pr-fac-grid">
       <div><div class="pr-sub">Momentum (güç sırası)</div><div class="pr-mo">${momoRows || "<div class='pr-hint'>veri yok</div>"}</div></div>
       <div><div class="pr-sub">Tema yoğunlaşması</div><div class="pr-th">${themeRows || "<div class='pr-hint'>veri yok</div>"}</div>
@@ -356,7 +356,7 @@ async function renderProRisk() {
   // ---- Panel 5: What-if simülatörü — "şunu yapsam risk nasıl değişir?" ----
   const wiSyms = pos.map((p) => p.symbol);
   const panel5 = `<div class="pr-block">
-    <div class="pr-h2">⚖️ What-if Simülatörü <span class="tip" data-tip="Kademeli satış / ekleme planını uygulamadan ÖNCE portföy riskine etkisini gör. Hesap mevcut risk verisinden (volatilite + korelasyon) yaklaşık türetilir; boşalan para nakit sayılır. Tahmindir, garanti değil.">?</span></div>
+    <div class="pr-h2">What-if Simülatörü <span class="tip" data-tip="Kademeli satış / ekleme planını uygulamadan ÖNCE portföy riskine etkisini gör. Hesap mevcut risk verisinden (volatilite + korelasyon) yaklaşık türetilir; boşalan para nakit sayılır. Tahmindir, garanti değil.">?</span></div>
     <form class="lab-form" id="wiForm">
       <label class="lab-f"><i>Pozisyon</i><select name="sym">${wiSyms.map((s) => `<option>${s}</option>`).join("")}</select></label>
       <label class="lab-f"><i>Eylem</i><select name="act">
@@ -564,9 +564,9 @@ function renderRisk() {
     <span class="rk-src-v ${cls(val)}">${val >= 0 ? "+" : ""}${fmtUSD0(val)}</span></div>`;
   const srcBlock = `<div class="rk-src">
     <div class="rk-src-head"><b>Getiri nereden geliyor?</b> <span class="rk-src-tot ${cls(srcTot)}">toplam kâr ${srcTot >= 0 ? "+" : ""}${fmtUSD0(srcTot)}</span></div>
-    ${srcRow("💵 Kilitli realize", realizedTot, "satılan · cebe girdi, kaybedilemez")}
-    ${srcRow("📈 Açık kâğıt kâr", unrealTot, "hâlâ piyasada · riskli")}
-    ${optTot !== 0 ? srcRow("⚙️ Opsiyon", optTot, "açık opsiyon K/Z") : ""}
+    ${srcRow("Kilitli realize", realizedTot, "satılan · cebe girdi, kaybedilemez")}
+    ${srcRow("Açık kâğıt kâr", unrealTot, "hâlâ piyasada · riskli")}
+    ${optTot !== 0 ? srcRow("Opsiyon", optTot, "açık opsiyon K/Z") : ""}
     <div class="rk-src-note">Kilitli kısım büyükse tezin işliyor — kârı cebe koyup ana parayı büyütüyorsun. Kâğıt kâr geri verilebilir; kademeli realize ile kilitle (Kural 1).</div>
   </div>`;
 
@@ -677,7 +677,7 @@ function benchmarkBlock(series, totRet, days, pf) {
       <span class="bm-alpha ${cls(alpha)}">${alpha >= 0 ? "▲" : "▼"} ${pf(alpha)}</span></div>`;
   };
   return `<div class="rk-bench">
-    <div class="bm-head">📊 Benchmark <span class="sw-muted">aynı ${Math.round(days)} günde · piyasayı yendin mi?</span></div>
+    <div class="bm-head">Benchmark <span class="sw-muted">aynı ${Math.round(days)} günde · piyasayı yendin mi?</span></div>
     <div class="bm-rows">
       <div class="bm-row bm-port"><span class="bm-lbl">Portföyün</span><b class="${cls(totRet)}">${pf(totRet)}</b><span class="bm-alpha">—</span></div>
       ${row("S&P 500 · SPY", spy)}
@@ -755,6 +755,6 @@ function renderPosTech() {
     </table></div>
     <div class="pt-note">${anySig
       ? "RSI &gt; 70 ısınmış · &lt; 30 aşırı satım. Trend = fiyatın SMA50/200'e göre yeri. 52h Zirve = 52 hafta zirvesinden uzaklık. Analist Hedef = ortalama hedefe potansiyel. Açık R = açık kârın stopuna göre kaç risk birimi (Kural 1)."
-      : "📡 Teknik veriler henüz taranıyor (RSI/SMA/52h analist). Birkaç dakika sonra tazele — ek API maliyeti olmadan günlük taramadan gelir."}</div>`;
+      : "Teknik veriler henüz taranıyor (RSI/SMA/52h analist). Birkaç dakika sonra tazele — ek API maliyeti olmadan günlük taramadan gelir."}</div>`;
 }
 
