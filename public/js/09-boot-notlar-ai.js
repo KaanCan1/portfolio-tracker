@@ -522,7 +522,7 @@ function renderNotes() {
     if (n.symbol && n.priceAtUSD) {
       const now = liveOf(n.symbol);
       const d = now ? ((now / n.priceAtUSD - 1) * 100) : null;
-      priceChip = `<span class="note-price" title="Not yazıldığındaki fiyat → güncel">✍️ $${(+n.priceAtUSD).toFixed(2)}${d != null ? ` → <b class="${d >= 0 ? "win-c" : "loss-c"}">${d >= 0 ? "+" : ""}${d.toFixed(1)}%</b>` : ""}</span>`;
+      priceChip = `<span class="note-price" title="Not yazıldığındaki fiyat → güncel">$${(+n.priceAtUSD).toFixed(2)}${d != null ? ` → <b class="${d >= 0 ? "win-c" : "loss-c"}">${d >= 0 ? "+" : ""}${d.toFixed(1)}%</b>` : ""}</span>`;
     }
     const conv = n.conviction ? `<span class="note-conv" title="Güven ${n.conviction}/5">${"●".repeat(n.conviction)}${"○".repeat(5 - n.conviction)}</span>` : "";
     const levels = (n.targetUSD || n.stopUSD)
@@ -534,7 +534,7 @@ function renderNotes() {
         ${conv}${priceChip}
         <span class="note-date">${noteDateLabel(n.createdAt)}${edited ? " · düzenlendi" : ""}</span>
         <span class="note-actions">
-          <button type="button" class="note-act${n.pinned ? " pin-on" : ""}" data-note-pin title="${n.pinned ? "Sabitlemeyi kaldır" : "Üste sabitle"}">${n.pinned ? "📌" : "📍"}</button>
+          <button type="button" class="note-act note-pin${n.pinned ? " pin-on" : ""}" data-note-pin title="${n.pinned ? "Sabitlemeyi kaldır" : "Üste sabitle"}">${svgIcon("pin", "ic-xs")}</button>
           <button type="button" class="note-act" data-note-edit>Düzenle</button>
           <button type="button" class="note-act danger" data-note-del>Sil</button>
         </span>
@@ -721,7 +721,7 @@ async function aiGenThesis(force) {
     renderThesisCard(j);
   } catch (e) {
     const o = $("#aiThesisOut");
-    if (o && o.dataset.sym === sym) o.innerHTML = `<div class="ai-err">⚠️ ${noteEsc(e.message)}</div>`;
+    if (o && o.dataset.sym === sym) o.innerHTML = `<div class="ai-err">${noteEsc(e.message)}</div>`;
   } finally { btns.forEach((b) => b && (b.disabled = false)); }
 }
 function renderThesisCard(rec) {
@@ -742,13 +742,13 @@ function renderThesisCard(rec) {
     </div>
     <p class="ai-ozet">${noteEsc(r.ozet || "")}</p>
     <div class="ai-cols">
-      <div class="ai-col ai-bull"><h4>🐂 Boğa tezi</h4><ul>${li(r.boga_tezi)}</ul></div>
-      <div class="ai-col ai-bear"><h4>🐻 Ayı tezi</h4><ul>${li(r.ayi_tezi)}</ul></div>
+      <div class="ai-col ai-bull"><h4>Boğa tezi</h4><ul>${li(r.boga_tezi)}</ul></div>
+      <div class="ai-col ai-bear"><h4>Ayı tezi</h4><ul>${li(r.ayi_tezi)}</ul></div>
     </div>
     ${(r.riskler || []).length ? `<div class="ai-sec"><h4>Riskler</h4><ul>${li(r.riskler)}</ul></div>` : ""}
-    ${(r.kirmizi_cizgiler || []).length ? `<div class="ai-sec ai-redline"><h4>⛔ Kırmızı çizgiler — biri gerçekleşirse tez çöker</h4><ul>${li(r.kirmizi_cizgiler)}</ul></div>` : ""}
+    ${(r.kirmizi_cizgiler || []).length ? `<div class="ai-sec ai-redline"><h4>Kırmızı çizgiler — biri gerçekleşirse tez çöker</h4><ul>${li(r.kirmizi_cizgiler)}</ul></div>` : ""}
     ${r.seviyeler ? `<div class="ai-levels">${r.seviyeler.stop != null ? `<span class="ai-lv">stop <b>$${(+r.seviyeler.stop).toFixed(2)}</b></span>` : ""}${r.seviyeler.hedef != null ? `<span class="ai-lv">hedef <b>$${(+r.seviyeler.hedef).toFixed(2)}</b></span>` : ""}<span class="ai-lv-note">${noteEsc(r.seviyeler.aciklama || "")}</span></div>` : ""}
-    ${(r.kontrol_listesi || []).length ? `<div class="ai-sec"><h4>📋 İzleme listesi</h4><ul>${li(r.kontrol_listesi)}</ul></div>` : ""}
+    ${(r.kontrol_listesi || []).length ? `<div class="ai-sec"><h4>İzleme listesi</h4><ul>${li(r.kontrol_listesi)}</ul></div>` : ""}
     <div class="ai-disclaimer">Claude'un panondaki veriyle ürettiği görüştür — garanti yok, yatırım tavsiyesi değildir. Karar senin.</div>
   </div>`;
 }
@@ -785,7 +785,7 @@ async function daRunAi(force) {
     renderDayAiCard(j);
   } catch (e) {
     const b = $("#daAi");
-    if (b && b.dataset.date === date) b.innerHTML = `<div class="ai-err">⚠️ ${noteEsc(e.message)} <button class="btn ghost sm" data-da-ai>tekrar dene</button></div>`;
+    if (b && b.dataset.date === date) b.innerHTML = `<div class="ai-err">${noteEsc(e.message)} <button class="btn ghost sm" data-da-ai>tekrar dene</button></div>`;
   }
 }
 function renderDayAiCard(rec) {
@@ -804,9 +804,9 @@ function renderDayAiCard(rec) {
     <p class="ai-ozet">${noteEsc(r.genel || "")}</p>
     <div class="ai-day-trades">${(r.islemler || []).map((t) => {
       const [c, l] = kmap[t.karar] || ["neu", noteEsc(t.karar || "?")];
-      return `<div class="ai-dt"><div class="ai-dt-top"><b>${noteEsc(t.symbol)}</b><span class="ch-pill ${c}">${l}</span></div><div class="ai-dt-why">${noteEsc(t.gerekce || "")}</div><div class="ai-dt-lesson">📌 ${noteEsc(t.ders || "")}</div></div>`;
+      return `<div class="ai-dt"><div class="ai-dt-top"><b>${noteEsc(t.symbol)}</b><span class="ch-pill ${c}">${l}</span></div><div class="ai-dt-why">${noteEsc(t.gerekce || "")}</div><div class="ai-dt-lesson">${noteEsc(t.ders || "")}</div></div>`;
     }).join("")}</div>
-    ${r.yarin_kurali ? `<div class="ai-tomorrow">🗓 Yarının kuralı: <b>${noteEsc(r.yarin_kurali)}</b></div>` : ""}
+    ${r.yarin_kurali ? `<div class="ai-tomorrow">Yarının kuralı: <b>${noteEsc(r.yarin_kurali)}</b></div>` : ""}
     <div class="ai-disclaimer">Süreç denetimi (motor bulguları + Claude) — kalıcı denetim izi. Yatırım tavsiyesi değildir.</div>
   </div>`;
 }

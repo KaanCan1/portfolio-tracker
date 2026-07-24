@@ -143,6 +143,9 @@ async function load() {
 }
 
 /* ---------------- Günlük raporlar ---------------- */
+// Eski (server.js emoji temizliğinden ÖNCE üretilmiş) rapor notlarındaki emojiyi
+// gösterimde ayıklar — yeni raporlar zaten emojisiz üretilir.
+const stripEmoji = (t) => String(t || "").replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}]/gu, "").replace(/\s{2,}/g, " ").replace(/\s+([.,])/g, "$1").trim();
 async function renderReports() {
   const el = $("#reports");
   if (!el) return;
@@ -152,7 +155,7 @@ async function renderReports() {
     el.innerHTML = `<div class="radar-empty">Henüz rapor yok. İlk rapor, fiyatlar eksiksiz geldiğinde bugün için otomatik oluşturulur.</div>`;
     return;
   }
-  const sigChip = (s) => s?.signal ? `<span class="chip sig-${s.signal.tone}">${s.signal.emoji} ${s.signal.label}</span>` : "";
+  const sigChip = (s) => s?.signal ? `<span class="chip sig-${s.signal.tone}">${s.signal.label}</span>` : "";
   const card = (rep, open) => {
     const buy = rep.stocks.filter((s) => s.signal?.tone === "buy");
     const trim = rep.stocks.filter((s) => s.profitTake);
@@ -164,7 +167,7 @@ async function renderReports() {
         <td class="${s.dayChangePct != null ? cls(s.dayChangePct) : ""}">${s.dayChangePct != null ? fmtPct(s.dayChangePct) : "—"}</td>
         <td>${s.rsi != null ? s.rsi.toFixed(0) : "—"}</td>
         <td class="l">${sigChip(s)}</td>
-        <td class="l">${s.profitTake ? `<span class="pt-chip pt-${s.profitTake.level}">✂️ ${s.profitTake.trim}</span>` : ""}</td>
+        <td class="l">${s.profitTake ? `<span class="pt-chip pt-${s.profitTake.level}">${s.profitTake.trim}</span>` : ""}</td>
       </tr>`).join("");
     const list = (label, arr, fn) => arr.length ? `<div class="rep-line"><b>${label}:</b> ${arr.map(fn).join(" · ")}</div>` : "";
     return `<details class="rep" ${open ? "open" : ""}>
@@ -173,14 +176,14 @@ async function renderReports() {
         <span class="rep-total">₺${(rep.totalTRY || 0).toLocaleString("tr-TR")}</span>
         ${dc != null ? `<span class="chip ${cls(dc)}">${fmtPct(dc)}</span>` : ""}
         ${rep.regime ? `<span class="chip">VIX ${fmtNum(rep.regime.vix, 1)} · ${rep.regime.band}</span>` : ""}
-        <span class="rep-mini">🟢${rep.stocks.filter((s) => s.signal?.tone === "buy").length} ✂️${rep.stocks.filter((s) => s.profitTake).length} 📈${rep.stocks.filter((s) => s.swing).length}</span>
+        <span class="rep-mini">AL ${rep.stocks.filter((s) => s.signal?.tone === "buy").length} · KÂR-AL ${rep.stocks.filter((s) => s.profitTake).length} · SW ${rep.stocks.filter((s) => s.swing).length}</span>
       </summary>
       <div class="rep-body">
-        ${rep.note ? `<div class="rep-line rep-note">📋 ${rep.note}</div>` : ""}
-        ${rep.regime ? `<div class="rep-line rep-regime">📊 ${rep.regime.advice}</div>` : ""}
-        ${list("🟢 Alım", buy, (s) => `${s.symbol}${s.upsidePct != null ? ` (+%${s.upsidePct.toFixed(0)})` : ""}`)}
-        ${list("✂️ Kâr-al", trim, (s) => `${s.symbol} ${s.profitTake.trim}`)}
-        ${list("📈 Swing", swing, (s) => `${s.symbol} ${s.swing.label}${s.swing.grade ? ` (not ${s.swing.grade})` : ""}`)}
+        ${rep.note ? `<div class="rep-line rep-note">${stripEmoji(rep.note)}</div>` : ""}
+        ${rep.regime ? `<div class="rep-line rep-regime">${stripEmoji(rep.regime.advice)}</div>` : ""}
+        ${list("Alım", buy, (s) => `${s.symbol}${s.upsidePct != null ? ` (+%${s.upsidePct.toFixed(0)})` : ""}`)}
+        ${list("Kâr-al", trim, (s) => `${s.symbol} ${s.profitTake.trim}`)}
+        ${list("Swing", swing, (s) => `${s.symbol} ${s.swing.label}${s.swing.grade ? ` (not ${s.swing.grade})` : ""}`)}
         <div class="tbl-wrap"><table>
           <thead><tr><th class="l">Sembol</th><th>Fiyat</th><th>Gün</th><th>RSI</th><th class="l">Sinyal</th><th class="l">Kâr-al</th></tr></thead>
           <tbody>${rows}</tbody>
@@ -617,7 +620,7 @@ function render() {
   const meta = STATE.meta || null;
   const healthIssues = meta
     ? [
-        meta.missingPrices?.length ? `⚠️ Fiyat alınamadı: ${meta.missingPrices.join(", ")} — toplamlar bu kalemler olmadan/eski değerle.` : "",
+        meta.missingPrices?.length ? `Fiyat alınamadı: ${meta.missingPrices.join(", ")} — toplamlar bu kalemler olmadan/eski değerle.` : "",
         meta.stalePrices?.length ? `🕒 Son bilinen fiyat: ${meta.stalePrices.join(", ")} — canlı çekilemedi, yenisi gelince güncellenecek.` : "",
         meta.metalsStale ? `Döviz/altın son bilinen değerle gösteriliyor (kaynak geçici erişilemedi).` : "",
         meta.staleSignals?.length ? `⏳ Teknik veri bayat: ${meta.staleSignals.join(", ")} (yeni tarama bekleniyor).` : "",
@@ -737,7 +740,7 @@ function render() {
   let html = "";
   // Hisseler (ABD) — portföy holding'leri (normal tablo)
   const stockRows = holdings.filter((h) => h.type === "stock");
-  if (stockRows.length) html += renderGroup("📈 ABD Hisseleri", stockRows, "stock", "long");
+  if (stockRows.length) html += renderGroup("ABD Hisseleri", stockRows, "stock", "long");
   // Swing pozisyonları (Swing Defteri) — ayrı tablo, holding'lerden bağımsız
   html += renderSwingGroup(STATE.swingPositions || []);
   // Opsiyonlar — ABD hisselerinin hemen altında
@@ -996,6 +999,7 @@ const ICONS = {
   coins: '<circle cx="8" cy="8" r="6"/><path d="M18.09 10.37A6 6 0 1 1 10.34 18"/><path d="M7 6h1v4"/><path d="m16.71 13.88.7.71-2.82 2.82"/>',
   refresh: '<path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/>',
   link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+  pin: '<path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/>',
 };
 function svgIcon(name, cls) {
   const p = ICONS[name]; if (!p) return "";
@@ -1040,8 +1044,8 @@ function drawChart() {
     $("#chartSub").textContent = intraday ? "Gün içi veri birikiyor…" : "Henüz veri yok";
     box.innerHTML = `<div class="chart-empty">${
       intraday
-        ? "Bugünün seyri uygulama açık kaldıkça (her ~1 dk) dolar 📈"
-        : "Bugün milat 📈 · Portföy değeri verileri bugünden itibaren birikmeye başlayacak."
+        ? "Bugünün seyri uygulama açık kaldıkça (her ~1 dk) dolar"
+        : "Bugün milat · Portföy değeri verileri bugünden itibaren birikmeye başlayacak."
     }</div>`;
     return;
   }
