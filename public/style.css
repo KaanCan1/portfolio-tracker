@@ -2971,19 +2971,27 @@ ul.sw-qm-list li b { font-weight: 700; color: var(--ink); }
 /* Meydan Okuma — izleme listesi + boş durum */
 .ch-empty-box { background: var(--bg3); border: 1px dashed var(--line-strong); border-radius: 12px; padding: 16px 18px; font-size: 13px; color: var(--ink2); line-height: 1.55; }
 .ch-empty-box b { color: var(--ink); }
-.wl-table tbody tr.wl-ready { background: var(--green-soft); }
-.wl-table tbody tr.wl-ready:hover { background: #dcefe4; }
-.wl-table tbody tr.wl-forming { background: var(--amber-bg); }
+/* Satır dolgusu kaldırıldı: durum zaten DURUM sütunundaki pill'de (Tetik/Oluşuyor) renkli —
+ * her satır yeşil "duvar" yerine sakin tablo, tek ipucu sol-kenarda ince renk şeridi */
+.wl-table tbody tr.wl-ready td:first-child { box-shadow: inset 3px 0 0 var(--green); }
+.wl-table tbody tr.wl-forming td:first-child { box-shadow: inset 3px 0 0 var(--amber); }
+.wl-table tbody tr.wl-ready:hover, .wl-table tbody tr.wl-forming:hover { background: var(--bg2); }
 .wl-table tbody tr.wl-off { opacity: .55; }
 .wl-table td .sw-muted { font-size: 11px; }
 .wl-off-line { margin-top: 8px; font-size: 11.5px; color: var(--muted); line-height: 1.6; }
 .ch-frozen { font-size: 10.5px; color: var(--muted); font-weight: 700; margin-left: 6px; white-space: nowrap; }
 
 /* Endeks (QQQ) rejim rozetleri */
-.ch-regime { font-size: 12.5px; border-radius: 12px; padding: 10px 14px; margin-bottom: 13px; line-height: 1.5; border: 1px solid var(--line); }
-.ch-regime.on { background: var(--green-soft); border-color: var(--green-line); color: var(--green-d); }
-.ch-regime.warn { background: var(--amber-bg); border-color: var(--amber-line); color: var(--amber-d); }
+/* Rejim şeridi: emoji yerine durum noktası; off (yeni giriş kapalı) semantik uyarı → tint korunur,
+ * on/warn nötr yüzeye çekilir (dekoratif yeşil/amber wash kısılır) — sw-regime ile aynı dil */
+.ch-regime { display: flex; gap: 9px; font-size: 12.5px; border-radius: 12px; padding: 10px 14px; margin-bottom: 13px; line-height: 1.5; border: 1px solid var(--line); background: var(--card); color: var(--ink2); }
+.ch-regime::before { content: ""; width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; flex-shrink: 0; background: var(--muted); }
+.ch-regime.on::before { background: var(--green); }
+.ch-regime.warn::before { background: var(--amber); }
 .ch-regime.off { background: var(--red-bg); border-color: var(--red-line); color: var(--red-d); }
+.ch-regime.off::before { background: var(--red); }
+.ch-regime b { color: var(--ink); }
+.ch-regime.off b { color: var(--red-d); }
 /* Rejim şeridi: emoji yerine durum noktası; "off" (riskli) semantik uyarı olduğu için
  * tinti korunur, "on/caution" nötr yüzeye çekilir (dekoratif yeşil/amber wash kısılır) */
 .sw-regime { display: flex; gap: 9px; font-size: 12.5px; border-radius: 12px; padding: 10px 14px; margin: 0 0 14px; line-height: 1.5; border: 1px solid var(--line); background: var(--card); color: var(--ink2); }
@@ -3005,8 +3013,10 @@ ul.sw-qm-list li b { font-weight: 700; color: var(--ink); }
 
 /* Risk İştahı Endeksi (RAI) paneli — Alfa Avı */
 .rai-panel { display: flex; gap: 16px; align-items: flex-start; border: 1px solid var(--line-strong); border-radius: 14px; padding: 14px 16px; margin-bottom: 13px; background: var(--bg3); box-shadow: var(--sh1, 0 1px 2px rgba(23, 32, 41, .05)); }
+/* Rejim iştahı paneli: warn/on nötr yüzey (skor + band etiketi durumu taşır),
+ * off (risk-off) semantik uyarı → kırmızı tint korunur — sw/ch-regime ile aynı dil */
 .rai-panel.on { border-color: var(--green-line); }
-.rai-panel.warn { border-color: var(--amber-line); background: var(--amber-bg); }
+.rai-panel.warn { border-color: var(--amber-line); }
 .rai-panel.off { border-color: var(--red-line); background: var(--red-bg); }
 .rai-left { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 76px; }
 .rai-score { font-size: 34px; font-weight: 800; line-height: 1; color: var(--hero); font-variant-numeric: tabular-nums; }
@@ -3650,8 +3660,9 @@ svg.fx-pop { animation: fxPop .7s cubic-bezier(.22,1,.36,1) both; transform-orig
 .lab-form2 .lab-f.lab-chk input { margin-right: 5px; }
 .lab-help { font-style: normal; font-size: 10.5px; line-height: 1.45; color: var(--muted); font-weight: 500; }
 .lab-actions { display: flex; gap: 8px; align-items: center; }
-.lab-tips { margin-top: 12px; border: 1px solid var(--amber-line); border-radius: var(--radius-sm); background: var(--amber-bg); }
-.lab-tips > summary { cursor: pointer; list-style: none; padding: 9px 13px; font-size: 12.5px; font-weight: 700; color: var(--amber-d); }
+/* Hep-açık öğüt kutusu: tam sarı wash → nötr yüzey (dekoratif tint kısıldı) */
+.lab-tips { margin-top: 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--bg2); }
+.lab-tips > summary { cursor: pointer; list-style: none; padding: 9px 13px; font-size: 12.5px; font-weight: 700; color: var(--ink2); }
 .lab-tips > summary::-webkit-details-marker { display: none; }
 .lab-tips ol { margin: 0; padding: 0 14px 11px 30px; font-size: 12px; line-height: 1.65; color: var(--ink2); }
 .lab-tips li { margin-bottom: 6px; }

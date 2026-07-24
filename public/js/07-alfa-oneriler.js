@@ -363,14 +363,14 @@ function chWatch(openSyms) {
     if (!held.has(sym) && status !== "off") {
       const eDate = (P._earn || {})[sym];
       if (eDate && chEarnBlockedC(sym, new Date().toISOString().slice(0, 10)))
-        why = `📊 bilanço karartması: bilanço ${fmtD(eDate)} (≤3 gün) — bilanço gecesine pozisyon taşınmaz` + (why ? ` · ${why}` : "");
+        why = `bilanço karartması: bilanço ${fmtD(eDate)} (≤3 gün) — bilanço gecesine pozisyon taşınmaz` + (why ? ` · ${why}` : "");
       else {
         const sct = (P._sect || {})[sym];
         const clash = sct && [...held].find((h) => (P._sect || {})[h] === sct);
         if (clash) why = `sektör tavanı: ${clash} aynı sektörde açık (${sct}) — sektör başına 1 pozisyon` + (why ? ` · ${why}` : "");
       }
     }
-    if (reg.state === "off" && !held.has(sym) && status !== "off") why = `⛔ REJİM KAPALI: ${reg.txt}` + (why ? ` · ayrıca: ${why}` : "");
+    if (reg.state === "off" && !held.has(sym) && status !== "off") why = `REJİM KAPALI: ${reg.txt}` + (why ? ` · ayrıca: ${why}` : "");
     out.push({ sym, status, close: c.close, trig, distPct, adr, nearHigh, up, entry, stop, tp2: entry * (1 + P.tp2 / 100), notional, riskUSD: (notional * (entry - stop) / entry), why });
   }
   const rank = { ready: 0, forming: 1, watch: 2, off: 3 };
@@ -379,7 +379,7 @@ function chWatch(openSyms) {
 
 function chEntryWhy(p) {
   const riskPct = ((p.entry - p.stop) / p.entry) * 100;
-  const plan = `→ Giriş $${p.entry.toFixed(2)}, stop $${p.stop.toFixed(2)} (−%${riskPct.toFixed(1)}, risk ${fmtUSD0(p.initRisk || (p.shares * (p.entry - p.stop)))}), TP1 +%${CHALLENGE.tp1}, TP2 +%${CHALLENGE.tp2}, kalan ${CHALLENGE.trailEma} iz süren stop. Pozisyon ~${fmtUSD0(p.notional)}.${p.rsPct != null ? ` Göreli güç <b>RS %${p.rsPct}</b>${p.weakRs ? " (lider bandı altı → yarım boyut)" : ""}.` : ""}${p.rai != null ? ` Girişte risk iştahı <b>${p.rai}/100</b>.` : ""}${p.frozen ? ` <span class="ch-frozen" title="Sunucu defterine yazıldı — evren değişse de bu karar değişmez">🔒 defterde</span>` : ""}`;
+  const plan = `→ Giriş $${p.entry.toFixed(2)}, stop $${p.stop.toFixed(2)} (−%${riskPct.toFixed(1)}, risk ${fmtUSD0(p.initRisk || (p.shares * (p.entry - p.stop)))}), TP1 +%${CHALLENGE.tp1}, TP2 +%${CHALLENGE.tp2}, kalan ${CHALLENGE.trailEma} iz süren stop. Pozisyon ~${fmtUSD0(p.notional)}.${p.rsPct != null ? ` Göreli güç <b>RS %${p.rsPct}</b>${p.weakRs ? " (lider bandı altı → yarım boyut)" : ""}.` : ""}${p.rai != null ? ` Girişte risk iştahı <b>${p.rai}/100</b>.` : ""}${p.frozen ? ` <span class="ch-frozen" title="Sunucu defterine yazıldı — evren değişse de bu karar değişmez">defterde</span>` : ""}`;
   if (p.lane === "ep") // EP / haber trade'i — katalizör günü girişi (QM episodic pivot)
     return `<b>Giriş — neden?</b> <b>KATALİZÖR günü</b> (EP/haber şeridi): fiyat ${p.gapPct != null ? `<b>+%${p.gapPct}</b> boşluk/hamle yaptı` : "büyük boşluk/hamle yaptı"}, hacim 20g ortalamanın <b>${p.epVolR ?? "—"}×</b>'i — gün güçlü kapandı (gün içi satılmadı). QM episodic pivot kuralı: giriş kapanıştan, <b>stop günün dibinden</b>.${p.news ? `<br><b>Katalizör:</b> “${p.news}”` : ""} ${plan}`;
   if (p.ema50 == null || p.ema8 == null) // donmuş kayıt (analitik yeniden üretilemedi) — plan yine de kesin
@@ -392,7 +392,7 @@ function chExitWhy(p) {
     if (e.k === "tp1") return li(`<span class="win-c">TP1 (+%${CHALLENGE.tp1})</span> ${chFmtD(e.d)}: %25 kâr alındı (+${fmtUSD0(e.pnl)}); stop <b>başa-baş</b>a çekildi.`);
     if (e.k === "tp2") return li(`<span class="win-c">TP2 (+%${CHALLENGE.tp2})</span> ${chFmtD(e.d)}: %25 daha kâr alındı (+${fmtUSD0(e.pnl)}).`);
     if (e.k === "trail") return li(`İz süren stop ${chFmtD(e.d)}: kalan %${(e.fr * 100).toFixed(0)}, ${CHALLENGE.trailEma} altında $${e.px.toFixed(2)}'de çıktı (${e.pnl >= 0 ? "+" : ""}${fmtUSD0(e.pnl)}).`);
-    if (e.k === "def") return li(`<span class="neu-c">🛡 Savunma stopu</span> ${chFmtD(e.d)}: piyasa risk-off'a geçince stop başa-başa çekilmişti, $${e.px.toFixed(2)}'de risksiz kapandı (kâr kilidi korudu, ${e.pnl >= 0 ? "+" : ""}${fmtUSD0(e.pnl)}).`);
+    if (e.k === "def") return li(`<span class="neu-c">Savunma stopu</span> ${chFmtD(e.d)}: piyasa risk-off'a geçince stop başa-başa çekilmişti, $${e.px.toFixed(2)}'de risksiz kapandı (kâr kilidi korudu, ${e.pnl >= 0 ? "+" : ""}${fmtUSD0(e.pnl)}).`);
     if (e.k === "be") return li(`<span class="neu-c">Başa-baş stop</span> ${chFmtD(e.d)}: kalan %${(e.fr * 100).toFixed(0)} risksiz kapandı (${e.pnl != null && Math.abs(e.pnl) > 0.01 ? `${e.pnl >= 0 ? "+" : ""}${fmtUSD0(e.pnl)} — komisyon` : "±$0"}).`);
     if (e.k === "gap") return li(`<span class="loss-c">Gap ile stop</span> ${chFmtD(e.d)}: fiyat açılışta stopun <b>altında boşluk (gap)</b> yaptı — gerçek çıkış stop fiyatından DEĞİL, açılış $${e.px.toFixed(2)}'den (dürüst ölçüm, ${fmtUSD0(e.pnl)}).`);
     return li(`<span class="loss-c">Stop</span> ${chFmtD(e.d)}: stop $${e.px.toFixed(2)} deldi, kapatıldı (${fmtUSD0(e.pnl)}).`);
@@ -424,10 +424,10 @@ function chLadder(p) {
       <span class="chl-now ${up ? "up" : "dn"}" style="left:${mA}%"><b>$${p.mark.toFixed(2)}</b></span>
     </div>
     <div class="chl-lg">
-      <span class="chl-l stop"><i>🛑 STOP</i><b>${fmtUSD(p.stop)}</b></span>
+      <span class="chl-l stop"><i>STOP</i><b>${fmtUSD(p.stop)}</b></span>
       <span class="chl-l entry"><i>◆ GİRİŞ</i><b>${fmtUSD(p.entry)}</b></span>
-      <span class="chl-l tp"><i>🎯 TP1${done1 ? " ✓" : ` +%${CHALLENGE.tp1}`}</i><b>${fmtUSD(p.tp1)}</b></span>
-      <span class="chl-l tp"><i>🎯 TP2${done2 ? " ✓" : ` +%${CHALLENGE.tp2}`}</i><b>${fmtUSD(p.tp2)}</b></span>
+      <span class="chl-l tp"><i>TP1${done1 ? " ✓" : ` +%${CHALLENGE.tp1}`}</i><b>${fmtUSD(p.tp1)}</b></span>
+      <span class="chl-l tp"><i>TP2${done2 ? " ✓" : ` +%${CHALLENGE.tp2}`}</i><b>${fmtUSD(p.tp2)}</b></span>
     </div>
   </div>`;
 }
@@ -455,10 +455,10 @@ function chLadderMini(p) {
       ${evX}
     </div>
     <div class="chl-lg">
-      <span class="chl-l stop"><i>🛑 STOP</i><b>${fmtUSD(p.stop)}</b></span>
+      <span class="chl-l stop"><i>STOP</i><b>${fmtUSD(p.stop)}</b></span>
       <span class="chl-l entry"><i>◆ GİRİŞ</i><b>${fmtUSD(p.entry)}</b></span>
-      <span class="chl-l tp"><i>🎯 TP1${p.tp1hit ? " ✓" : ""}</i><b>${fmtUSD(p.tp1)}</b></span>
-      <span class="chl-l tp"><i>🎯 TP2${p.tp2hit ? " ✓" : ""}</i><b>${fmtUSD(p.tp2)}</b></span>
+      <span class="chl-l tp"><i>TP1${p.tp1hit ? " ✓" : ""}</i><b>${fmtUSD(p.tp1)}</b></span>
+      <span class="chl-l tp"><i>TP2${p.tp2hit ? " ✓" : ""}</i><b>${fmtUSD(p.tp2)}</b></span>
     </div>
   </div>`;
 }
@@ -557,8 +557,8 @@ async function renderChallenge() {
       ${chLadder(p)}
       <div class="ch-dist">
         <span class="cd now ${pct >= 0 ? "up" : "dn"}">${pct >= 0 ? "▲" : "▼"} Şimdi <b>${fmtUSD(p.mark)}</b> · ${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%</span>
-        <span class="cd tp">🎯 ${nextLbl} <s>+${Math.max(0, toTgt).toFixed(1)}% uzak</s></span>
-        <span class="cd stop">🛑 stop <s>${toStop.toFixed(1)}% uzak</s></span>
+        <span class="cd tp">${nextLbl} <s>+${Math.max(0, toTgt).toFixed(1)}% uzak</s></span>
+        <span class="cd stop">stop <s>${toStop.toFixed(1)}% uzak</s></span>
       </div>
       ${(() => { // detaylı canlı durum: değer · anlık K/Z · canlı R · gün · stop/TP2 senaryoları
         const fee = D.commission ?? CHALLENGE.commission ?? 0; // son satış emrinin komisyonu senaryoya dahil
@@ -601,10 +601,10 @@ async function renderChallenge() {
 
   const regNow = D.regime;
   const regBadge = regNow.state === "off"
-    ? `<div class="ch-regime off">⛔ <b>Rejim filtresi: YENİ GİRİŞ KAPALI.</b> ${regNow.txt}. <b>İstisna:</b> güçlü katalizör günü (EP/haber şeridi) yarım boyutla girebilir — zayıf piyasada göreli güç en net orada görünür.${open.length ? ` <b>🛡 Savunma modu:</b> açık ${open.length} pozisyonda kârdakilerin stopu başa-başa kilitlendi (hedeften önce zorla çıkış yok, ama piyasa dönerse kâr korunuyor).` : ""} Koşullar düzelince girişler otomatik açılır.</div>`
+    ? `<div class="ch-regime off"><span><b>Rejim filtresi: YENİ GİRİŞ KAPALI.</b> ${regNow.txt}. <b>İstisna:</b> güçlü katalizör günü (EP/haber şeridi) yarım boyutla girebilir — zayıf piyasada göreli güç en net orada görünür.${open.length ? ` <b>Savunma modu:</b> açık ${open.length} pozisyonda kârdakilerin stopu başa-başa kilitlendi (hedeften önce zorla çıkış yok, ama piyasa dönerse kâr korunuyor).` : ""} Koşullar düzelince girişler otomatik açılır.</span></div>`
     : regNow.state === "caution"
-      ? `<div class="ch-regime warn">🟡 <b>Rejim uyarısı:</b> ${regNow.txt}. Yeni girişler yarım boyutla açılır.</div>`
-      : `<div class="ch-regime on">🟢 <b>Rejim sağlıklı:</b> ${regNow.txt}.</div>`;
+      ? `<div class="ch-regime warn"><span><b>Rejim uyarısı:</b> ${regNow.txt}. Yeni girişler yarım boyutla açılır.</span></div>`
+      : `<div class="ch-regime on"><span><b>Rejim sağlıklı:</b> ${regNow.txt}.</span></div>`;
   // ── Risk İştahı Endeksi paneli — 5 bileşen, günlük; kural: <30 giriş yok · 30-44 yarım boyut ──
   const rai = regNow.rai;
   const raiPanel = rai ? (() => {
@@ -679,7 +679,7 @@ function renderHuntStrip() {
   const raiP = reg.rai ? ` · Rİ ${reg.rai.score}` : "";
   const regPill = reg.state === "off"
     ? `<span class="hunt-pill reg-off">Rejim kapalı — yeni giriş yok${raiP}</span>`
-    : reg.state === "caution" ? `<span class="hunt-pill reg-warn">🟡 Temkin — yarım boyut${raiP}</span>`
+    : reg.state === "caution" ? `<span class="hunt-pill reg-warn">Temkin — yarım boyut${raiP}</span>`
     : reg.rai && chRaiBand(reg.rai.score) === "riskon" ? `<span class="hunt-pill">Rİ ${reg.rai.score} risk-on</span>` : "";
   el.innerHTML = `<div class="hunt-strip">
     <span class="hunt-ic">${svgIcon("target")}</span>
@@ -804,9 +804,9 @@ async function renderRiskBudget(force) {
   const pctFill = Math.max(0, Math.min(100, r.ratio));
   const tone = r.level === "full" ? "full" : r.level === "warn" ? "warn" : r.level === "watch" ? "watch" : "ok";
   const msg = r.level === "full"
-    ? `<div class="rbud-brake">🧯 Bütçe doldu — bu ay <b>yeni swing girişi önerilmez</b>. Mevcutları planına göre yönet, stopları koru (Kural 1).</div>`
+    ? `<div class="rbud-brake">Bütçe doldu — bu ay <b>yeni swing girişi önerilmez</b>. Mevcutları planına göre yönet, stopları koru (Kural 1).</div>`
     : r.level === "warn"
-    ? `<div class="rbud-brake soft">⚠ Bütçenin %${Math.round(r.ratio)}'i dolu — yeni girişte pozisyonu küçült ya da bekle.</div>`
+    ? `<div class="rbud-brake soft">Bütçenin %${Math.round(r.ratio)}'i dolu — yeni girişte pozisyonu küçült ya da bekle.</div>`
     : "";
   const rows = (r.rows || []).slice(0, 5).map((x) =>
     `<span class="rbud-row"><b>${x.sym}</b> ${fmtUSD0(x.risk)}<i>${x.kind === "swing" ? "swing" : "uzun vade"}</i></span>`).join("");
@@ -963,11 +963,11 @@ function labInit() {
     <div class="lab-presets" id="labPresets">
       <span class="lab-preset-lbl">Hazır ayar:</span>
       ${Object.entries(LAB_PRESETS).map(([k, p]) =>
-        `<button type="button" class="lab-preset" data-preset="${k}" title="${p.tip}">${p.ikon} ${p.ad}</button>`).join("")}
+        `<button type="button" class="lab-preset" data-preset="${k}" title="${p.tip}">${p.ad}</button>`).join("")}
     </div>
     <div class="lab-preset-tip" id="labPresetTip" hidden></div>
     <form class="lab-form lab-form2" id="labForm">
-      <div class="lab-sec"><span class="lab-sec-t">📅 Pencere</span>
+      <div class="lab-sec"><span class="lab-sec-t">Pencere</span>
         <label class="lab-f"><i>Başlangıç</i>
           <select name="start">
             <option value="2025-07-01">Tem 2025 (12 ay)</option>
@@ -976,7 +976,7 @@ function labInit() {
           </select>
           ${yardim("Test dönemi. Bir ayarı tek dönemde değil, en az iki pencerede dene — dönemler farklı piyasalardır.")}</label>
       </div>
-      <div class="lab-sec"><span class="lab-sec-t">💰 Kâr alma &amp; risk</span>
+      <div class="lab-sec"><span class="lab-sec-t">Kâr alma &amp; risk</span>
         <label class="lab-f"><i>TP1 %</i><input name="tp1" type="number" value="5" min="2" max="20" step="1">
           ${yardim("İlk kâr alma: fiyat bu kadar yükselince pozisyonun ¼'ü satılır. Küçük değer = sık ama ufak kâr; kazananı erken tıraşlar.")}</label>
         <label class="lab-f"><i>TP2 %</i><input name="tp2" type="number" value="20" min="3" max="40" step="1">
@@ -986,7 +986,7 @@ function labInit() {
         <label class="lab-f"><i>Komisyon $</i><input name="commission" type="number" value="1.5" min="0" max="5" step="0.5">
           ${yardim("Emir başına ücret (Midas $1.5). Alış + her TP + final ayrı emirdir: bir işlem 3-4 emir tutabilir.")}</label>
       </div>
-      <div class="lab-sec"><span class="lab-sec-t">🚦 Filtreler</span>
+      <div class="lab-sec"><span class="lab-sec-t">Filtreler</span>
         <label class="lab-f"><i>RS kuralı</i>
           <select name="rsMode">
             <option value="half">Yarım boyut (canlı)</option>
@@ -1005,21 +1005,21 @@ function labInit() {
       </div>
       <div class="lab-actions">
         <button type="submit" class="btn primary sm" id="labGo">Koştur</button>
-        <button type="button" class="btn sm" id="labScanGo" title="15 hazır varyantı otomatik dener, dürüstlük sırasına dizer — elle tek tek çevirmekten hızlı">🔍 Otomatik tara</button>
+        <button type="button" class="btn sm" id="labScanGo" title="15 hazır varyantı otomatik dener, dürüstlük sırasına dizer — elle tek tek çevirmekten hızlı">Otomatik tara</button>
       </div>
     </form>
     <details class="lab-tips" open>
-      <summary>🎯 Kazanan ayar arayana 6 ipucu <span class="muted">(21-22 Tem taramaları + canlı ders)</span></summary>
+      <summary>Kazanan ayar arayana 6 ipucu <span class="muted">(21-22 Tem taramaları + canlı ders)</span></summary>
       <ol>
         <li><b>Önce dönemi kabul et.</b> Alfa Avı'nın $1500→$1389 düşüşünün ana nedeni ayar değil <b>dönem</b>: 2026 diliminde canlı kuralın kendisi eksi koşuyor. Kötü dönemde en iyi ayar bile kaybettirebilir — hedef, kötü dönemi <i>küçük</i> kaybetmek.</li>
         <li><b>Komisyon gizli vergidir.</b> Komisyonsuz teşhis koşusu ortalama R'yi belirgin yükseltti (~0.17R/işlem fark): $1.5 × 3-4 emir, $350-850'lik pozisyonda %1'e yakın ısırık. Az ve seçici işlem, çok işlemden iyidir.</li>
         <li><b>EP şeridini kapatma.</b> Taramada en net bulgu: EP girişleri kapatılınca sistem zarara döndü (fark −0.78R). Edge'in en büyük parçası haber/kazanç patlamaları.</li>
         <li><b>Risk %'si edge değildir.</b> %3→%4 yapmak kazandırmaz, salınımı büyütür; kötü seride aynı oranda acıtır. Edge kıyaslarken riski %3'te sabit tut.</li>
         <li><b>"En iyi görünen"i değil, "iki yarıda da tutan"ı al.</b> Walk-forward ✓ + fark aralığı 0'ın dışında → ancak o zaman ciddiye al. Tek pencerede parlayanların çoğu uydurmadır (taramada 4 varyant böyle elendi).</li>
-        <li><b>Canlı kural neden TP 5/20?</b> 22 Tem'de 60-hisse canlı taramasında en tutarlı satır buydu: ort R +0.28→+0.44, iki yarıda da artı (+0.27/+0.01), maks düşüş −33→−27. Ama fark aralığı 0'ı içeriyordu — yani bu bir <i>kanıt değil, tutarlı eğilim</i>. Eski işlemler defterde kendi TP'leriyle donuk; kural yalnız yeni girişlere işler. 3 ayda bir "🕰 Eski kurallar" hazır ayarıyla kıyası tazele.</li>
+        <li><b>Canlı kural neden TP 5/20?</b> 22 Tem'de 60-hisse canlı taramasında en tutarlı satır buydu: ort R +0.28→+0.44, iki yarıda da artı (+0.27/+0.01), maks düşüş −33→−27. Ama fark aralığı 0'ı içeriyordu — yani bu bir <i>kanıt değil, tutarlı eğilim</i>. Eski işlemler defterde kendi TP'leriyle donuk; kural yalnız yeni girişlere işler. 3 ayda bir "Eski kurallar" hazır ayarıyla kıyası tazele.</li>
       </ol>
     </details>
-    <div id="labRes"><div class="rk-empty">Hazır ayar seç veya değerleri elle değiştir, <b>Koştur</b>'a bas — canlı kurallarla yan yana ölçülür. <b>🔍 Otomatik tara</b> ise 15 varyantı senin yerine dener (~1-3 dk).</div></div>`;
+    <div id="labRes"><div class="rk-empty">Hazır ayar seç veya değerleri elle değiştir, <b>Koştur</b>'a bas — canlı kurallarla yan yana ölçülür. <b>Otomatik tara</b> ise 15 varyantı senin yerine dener (~1-3 dk).</div></div>`;
   // Hazır ayar pill'leri: formu doldur + açıklamayı göster
   $("#labPresets").addEventListener("click", (e) => {
     const b = e.target.closest("[data-preset]"); if (!b) return;
@@ -1027,7 +1027,7 @@ function labInit() {
     labSetForm(p.v);
     document.querySelectorAll(".lab-preset").forEach((x) => x.classList.toggle("on", x === b));
     const tip = $("#labPresetTip"); tip.hidden = false;
-    tip.innerHTML = `${p.ikon} <b>${p.ad}:</b> ${p.tip}`;
+    tip.innerHTML = `<b>${p.ad}:</b> ${p.tip}`;
   });
   $("#labScanGo").addEventListener("click", labScanStart);
   // Güvenlik ağı: bir alan HTML5 doğrulamasına takılırsa tarayıcı formu SESSİZCE reddeder
@@ -1115,7 +1115,7 @@ function labPaint(d) {
 function labWF(d) {
   const w = d.wf;
   const kal = d.kaldirac
-    ? `<div class="wf-lev">⚖️ <b>Kaldıraç uyarısı:</b> risk %${d.kaldirac.varyant} kullandın, canlı kural %${d.kaldirac.canli} — pozisyonlar <b>${d.kaldirac.kat}×</b> büyük.
+    ? `<div class="wf-lev"><b>Kaldıraç uyarısı:</b> risk %${d.kaldirac.varyant} kullandın, canlı kural %${d.kaldirac.canli} — pozisyonlar <b>${d.kaldirac.kat}×</b> büyük.
        Risk yüzdesi işlem-başı R'yi <b>değiştirmez</b>; getiri farkının bir kısmı beceri değil <b>kaldıraçtır</b> (ve kötü seride aynı oranda acıtır). Edge'i kıyaslamak için risk %${d.kaldirac.canli}'te koştur.</div>`
     : "";
   if (!w) return kal;
@@ -1151,7 +1151,7 @@ function labDiag(d) {
     const fark = vv - bv;
     return `<tr><td class="l" title="${ipucu}">${lbl}</td><td>${bv}</td><td><b>${vv}</b>${fark ? `<span class="ld-delta ${fark > 0 ? "up" : "down"}">${fark > 0 ? "+" : ""}${fark}</span>` : ""}</td></tr>`;
   };
-  return `<details class="lab-diag"><summary>🔍 Fark nereden geldi? <span class="muted">rejim ${g.off || 0}/${gun} gün kapalıydı</span></summary>
+  return `<details class="lab-diag"><summary>Fark nereden geldi? <span class="muted">rejim ${g.off || 0}/${gun} gün kapalıydı</span></summary>
     <table class="ld-table"><thead><tr><th class="l">Mekanizma</th><th>Canlı</th><th>Varyant</th></tr></thead><tbody>
       ${row("Rejim kapalıyken engellenen giriş", b.engellenenGiris, v.engellenenGiris, "Kapı yüzünden hiç açılmayan teknik pozisyon sayısı")}
       ${row("Stop başabaşa çekildi", b.beZorlama, v.beZorlama, "Rejim kapalıyken kârdaki pozisyonun stopu girişe taşındı")}
@@ -1176,7 +1176,7 @@ async function labScanStart() {
     const d = await r.json();
     if (!r.ok || d.error) throw new Error(d.error || "tarama başlatılamadı");
     btn.disabled = true;
-    $("#labRes").innerHTML = `<div class="rk-empty" id="labScanWait">🔍 Tarama koşuyor… <b id="labScanPct">hazırlanıyor</b><div class="lab-scan-bar"><i id="labScanFill" style="width:2%"></i></div><span class="muted">15 varyant × 3 koşu — ilk yarım dakika veri hazırlığıdır, çubuk sonra akar.</span></div>`;
+    $("#labRes").innerHTML = `<div class="rk-empty" id="labScanWait">Tarama koşuyor… <b id="labScanPct">hazırlanıyor</b><div class="lab-scan-bar"><i id="labScanFill" style="width:2%"></i></div><span class="muted">15 varyant × 3 koşu — ilk yarım dakika veri hazırlığıdır, çubuk sonra akar.</span></div>`;
     LAB_SCAN_TIMER = setInterval(labScanPoll, 3000);
   } catch (e) { $("#labRes").innerHTML = `<div class="rk-empty">Tarama başlatılamadı: ${e.message}</div>`; }
 }
@@ -1205,7 +1205,7 @@ const LAB_HUKUM = {
   "veri-az": { et: "· veri az",     tip: "Kıyas için yeterli kapanmış işlem yok." },
   uydurma: { et: "⚠ uydurma",       tip: "Avantaj yalnız tek yarıda — o döneme uydurulmuş görünüyor. Canlıya alma." },
   kotu:    { et: "✗ kötü",          tip: "Canlı kurallardan geride — bu ayarı alma." },
-  teshis:  { et: "🧪 teşhis",       tip: "Gerçek bir seçenek değil; bir maliyetin/filtrenin toplam etkisini ölçmek için koşulur." },
+  teshis:  { et: "teşhis",       tip: "Gerçek bir seçenek değil; bir maliyetin/filtrenin toplam etkisini ölçmek için koşulur." },
 };
 function labScanPaint(r) {
   const fR = (v) => (v == null ? "—" : `${v >= 0 ? "+" : ""}${v}R`);
@@ -1224,7 +1224,7 @@ function labScanPaint(r) {
     </tr>`;
   }).join("");
   $("#labRes").innerHTML = `
-    <div class="ls-head"><b>🔍 Tarama sonucu</b> — ${r.start} → bugün · evren ${r.universe} hisse · ${r.sureSn} sn
+    <div class="ls-head"><b>Tarama sonucu</b> — ${r.start} → bugün · evren ${r.universe} hisse · ${r.sureSn} sn
       <span class="ls-base">Canlı kurallar: ${r.baseline.islem} işlem · ort ${fR(r.baseline.ortR)} · getiri %${r.baseline.getiriPct} · maks düşüş %${r.baseline.maksDususPct}</span></div>
     <div class="tbl-wrap"><table class="ls-table">
       <thead><tr><th class="l">Hüküm</th><th class="l">Varyant</th><th>İşlem</th><th>Ort R</th><th>Fark (aralık)</th><th>WF ½/½</th><th>Getiri</th><th>Düşüş</th></tr></thead>
@@ -1237,7 +1237,7 @@ function labScanPaint(r) {
     labSetForm({ ...LAB_PRESETS.canli.v, ...v.params });
     document.querySelectorAll(".lab-preset").forEach((x) => x.classList.remove("on"));
     const tip = $("#labPresetTip"); tip.hidden = false;
-    tip.innerHTML = `🔍 <b>${v.ad}</b> forma dolduruldu — <b>Koştur</b> ile tam raporu al.`;
+    tip.innerHTML = `<b></b> forma dolduruldu — <b>Koştur</b> ile tam raporu al.`;
     $("#labForm").scrollIntoView({ block: "start", behavior: "smooth" });
   }));
 }
