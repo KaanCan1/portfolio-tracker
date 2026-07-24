@@ -419,7 +419,7 @@ function longtermPanel(lt) {
       </div>`).join("")
     : (lt.reclaim != null ? `<div class="lt-zone"><span class="lt-zlbl">200g üstüne dönüş tetiği</span><b>${fmtUSD(lt.reclaim)}</b></div>` : "");
   return `<div class="cm-lt">
-    <div class="cm-lt-h">🌱 Uzun Vade <span class="lt-verdict v-${vcls}">${lt.verdict.label}</span></div>
+    <div class="cm-lt-h">Uzun Vade <span class="lt-verdict v-${vcls}">${lt.verdict.label}</span></div>
     <div class="lt-val"><span class="lt-vlbl">Ort. uzaklık</span>${vchip("20g", val.to20)}${vchip("50g", val.to50)}${vchip("200g", val.to200)}</div>
     ${zonesHTML ? `<div class="lt-zones">${zonesHTML}</div>` : ""}
   </div>`;
@@ -571,7 +571,7 @@ function oppChips(o) {
     <span class="sw-vb v-${v.tone}">${v.label}</span>
     ${su ? `<span class="chip ${su.cls}">${o.setup.label}</span>` : ""}
     ${pat ? `<span class="chip pat-${patTone}">📐 ${pat.label}</span>` : ""}
-    ${o.weekly ? `<span class="chip wk-${o.weekly.tone}">📅 Haftalık ${WK_ARROW[o.weekly.dir] || ""}</span>` : ""}
+    ${o.weekly ? `<span class="chip wk-${o.weekly.tone}">Haftalık ${WK_ARROW[o.weekly.dir] || ""}</span>` : ""}
     <span class="sw-grade ${GRADE_CLS[o.grade] || "g-d"}">${o.grade}</span>
     ${oppInsiderChip(o.insider)}
     ${o.fromHighPct != null ? `<span class="opp-meta">52h zirveye −${o.fromHighPct.toFixed(0)}%</span>` : ""}
@@ -1039,13 +1039,13 @@ async function openChartModal(sym, ctx = null, fresh = false) {
   const pat = d.patterns?.pattern || null;
   const patTone = ({ bull: "good", bear: "bad", neutral: "warn" })[pat?.tone] || "warn";
   const wk = d.weekly || null;
-  const wkChip = wk ? `<span class="chip wk-${wk.tone}">📅 Haftalık ${WK_ARROW[wk.dir] || ""}</span>` : "";
+  const wkChip = wk ? `<span class="chip wk-${wk.tone}">Haftalık ${WK_ARROW[wk.dir] || ""}</span>` : "";
   const whyHTML = (d.why || []).map((w) => `<li class="s-${w.tone}">${w.text}</li>`).join("");
   // Horizon'a göre lens sırası: uzun-vade pozisyonu → biriktirme önce; aksi halde swing önce
   const swingHTML = qmChartPanel(d.qm);
   const ltHTML = longtermPanel(pl.longterm);
   const horizonChip = pos?.horizon
-    ? `<span class="chip ${pos.horizon === "swing" ? "hz-swing" : "hz-long"}">${pos.horizon === "swing" ? "⚡ Swing pozisyonu" : "🌱 Uzun vade pozisyonu"}</span>` : "";
+    ? `<span class="chip ${pos.horizon === "swing" ? "hz-swing" : "hz-long"}">${pos.horizon === "swing" ? "Swing pozisyonu" : "Uzun vade pozisyonu"}</span>` : "";
   const lensHTML = pos?.horizon === "long" ? ltHTML + swingHTML : swingHTML + ltHTML;
   // Stats kartı (görseldeki gibi): Market Cap · ADR% · RS Rating · 52h aralık · sektör
   const st2 = d.stats || {};

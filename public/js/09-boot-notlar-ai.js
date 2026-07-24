@@ -205,33 +205,33 @@ const QM_SETUP = {
   watch: { lbl: "KISMİ EŞLEŞME", cls: "qm-s-watch" },
 };
 const QM_STAGE = {
-  "breaking-out": { lbl: "🚀 KIRILIYOR", cls: "qm-st-go" },
-  "setting-up": { lbl: "⏳ KURULUYOR", cls: "qm-st-set" },
-  "extended": { lbl: "⚠️ GERGİN", cls: "qm-st-ext" },
-  "early": { lbl: "• ERKEN", cls: "qm-st-early" },
+  "breaking-out": { lbl: "KIRILIYOR", cls: "qm-st-go" },
+  "setting-up": { lbl: "KURULUYOR", cls: "qm-st-set" },
+  "extended": { lbl: "GERGİN", cls: "qm-st-ext" },
+  "early": { lbl: "ERKEN", cls: "qm-st-early" },
 };
 
 // Grafik modalı için Qullamaggie paneli (d.qm'den) — "girmeli miyim, stop ne?"
 function qmChartPanel(qm) {
   const rowQ = (k, val, c = "") => `<div class="cm-r"><span class="cm-k">${k}</span><span class="cm-v ${c}">${val}</span></div>`;
   if (!qm || !qm.ok || qm.setup === "none") {
-    return `<div class="cm-qm cm-qm-none"><div class="cm-qm-h">🏆 Qullamaggie</div>
+    return `<div class="cm-qm cm-qm-none"><div class="cm-qm-h">Qullamaggie</div>
       <div class="cm-qm-verdict v-early">Şu an QM kurulumu yok — büyük hamle + sıkışma yok ya da ADR/likidite yetersiz. Zorlama, başka aday bekle (Kural 1).</div></div>`;
   }
   const su = QM_SETUP[qm.setup] || QM_SETUP.breakout;
   const stg = QM_STAGE[qm.stage] || QM_STAGE.early;
   const verdict = {
-    "breaking-out": { cls: "go", txt: `✅ <b>Tetik aktif</b> — pivot ${fmtUSD(qm.pivotHigh)} kırılıyor. QM girişi: gün-içi <b>opening range high</b>'da al, stop <b>günün dibi</b> (≤1×ADR).` },
-    "setting-up": { cls: "set", txt: `⏳ <b>Henüz girme — bekle.</b> Pivot <b>${fmtUSD(qm.pivotHigh)}</b> kırılana kadar dur (pivota %${qm.consolidation?.nearHighPct} kaldı). Kırarsa 1-2 ay swing adayı.` },
-    "extended": { cls: "ext", txt: `⚠️ <b>Kovalama.</b> 10MA'dan ${qm.extendedOverMA10}×ADR uzak (gergin). Geri çekilip ortalamaya yaklaşınca tekrar değerlendir.` },
+    "breaking-out": { cls: "go", txt: `<b>Tetik aktif</b> — pivot ${fmtUSD(qm.pivotHigh)} kırılıyor. QM girişi: gün-içi <b>opening range high</b>'da al, stop <b>günün dibi</b> (≤1×ADR).` },
+    "setting-up": { cls: "set", txt: `<b>Henüz girme — bekle.</b> Pivot <b>${fmtUSD(qm.pivotHigh)}</b> kırılana kadar dur (pivota %${qm.consolidation?.nearHighPct} kaldı). Kırarsa 1-2 ay swing adayı.` },
+    "extended": { cls: "ext", txt: `<b>Kovalama.</b> 10MA'dan ${qm.extendedOverMA10}×ADR uzak (gergin). Geri çekilip ortalamaya yaklaşınca tekrar değerlendir.` },
     "early": qm.setup === "watch"
-      ? { cls: "early", txt: `👀 <b>Kısmi eşleşme.</b> +%${Math.round(qm.priorMovePct)} gerçek hamle var ama tam kurulum yok — henüz giriş sinyali değil, altta nedenini gör.` }
-      : { cls: "early", txt: `• <b>Erken.</b> Hamle var ama pivottan uzak — sıkışma olgunlaşsın, izle.` },
+      ? { cls: "early", txt: `<b>Kısmi eşleşme.</b> +%${Math.round(qm.priorMovePct)} gerçek hamle var ama tam kurulum yok — henüz giriş sinyali değil, altta nedenini gör.` }
+      : { cls: "early", txt: `<b>Erken.</b> Hamle var ama pivottan uzak — sıkışma olgunlaşsın, izle.` },
   }[qm.stage] || { cls: "early", txt: "—" };
   const chk = (qm.checklist || []).map((c) => `<span class="qm-chk ${c.pass ? "ok" : "no"}" title="${esc(c.k)}: ${esc(String(c.val))}">${c.pass ? "✓" : "✕"} ${c.k}</span>`).join("");
   const why = (qm.reasons || []).map((r) => `<div>• ${r}</div>`).join("");
   return `<div class="cm-qm">
-    <div class="cm-qm-h">🏆 Qullamaggie <span class="qm-setup ${su.cls}">${su.lbl}</span><span class="qm-stage ${stg.cls}">${stg.lbl}</span><span class="cm-qm-score">${qm.score}</span></div>
+    <div class="cm-qm-h">Qullamaggie <span class="qm-setup ${su.cls}">${su.lbl}</span><span class="qm-stage ${stg.cls}">${stg.lbl}</span><span class="cm-qm-score">${qm.score}</span></div>
     <div class="cm-qm-verdict v-${verdict.cls}">${verdict.txt}</div>
     ${rowQ("Giriş (pivot kırılımı)", fmtUSD(qm.entryTrigger), "i-entry")}
     ${rowQ("Stop (≤1×ADR)", `${fmtUSD(qm.stop)} <span class="muted">−%${qm.stopPct}</span>`, "neg")}
@@ -252,7 +252,7 @@ function qmSizeLine(qm) {
   const cc = cashContext();
   const cashWarn = cc && cc.cashPct < cc.tgt[0] - 1
     ? ` <span class="neg">· nakit %${cc.cashPct.toFixed(0)} hedef altı, dikkat</span>` : "";
-  return `<div class="cm-qm-size">📐 <b>Boyut:</b> ${parts}${cashWarn}</div>`;
+  return `<div class="cm-qm-size"><b>Boyut:</b> ${parts}${cashWarn}</div>`;
 }
 
 const VIEWS = ["notlar", "genel", "swingdefteri", "buyume", "radar", "analiz", "challenge", "raporlar"];
@@ -834,10 +834,10 @@ function cmHeroLevels(d, pos, pl) {
   if (qm?.ok && qm.setup !== "none" && qm.entryTrigger != null) {
     const dd = dist(qm.entryTrigger);
     const head = qm.stage === "breaking-out"
-      ? "🔥 Tetik AKTİF — pivot kırılıyor, ORH girişini değerlendir"
+      ? "Tetik AKTİF — pivot kırılıyor, ORH girişini değerlendir"
       : qm.stage === "extended"
-        ? "⚠️ Gergin — kovalama, geri çekilme bekle"
-        : "⏳ BU FİYATI BEKLE — pivot kırılmadan girme";
+        ? "Gergin — kovalama, geri çekilme bekle"
+        : "BU FİYATI BEKLE — pivot kırılmadan girme";
     return `<div class="cm-hero ${qm.stage === "breaking-out" ? "live" : ""}">
       <div class="cm-hero-h">${head}</div>
       <div class="cm-hero-row">
@@ -849,7 +849,7 @@ function cmHeroLevels(d, pos, pl) {
   if (pos?.qty > 0 && (pos.guard?.stop != null || pos.guard?.target != null || pos.costUSD != null)) {
     const sd = dist(pos.guard?.stop);
     return `<div class="cm-hero pos">
-      <div class="cm-hero-h">📍 Pozisyon planın — bu seviyeleri izle</div>
+      <div class="cm-hero-h">Pozisyon planın — bu seviyeleri izle</div>
       <div class="cm-hero-row">
         ${cell("MALİYET", pos.costUSD, "cost", pos.profitPct != null ? fmtPct(pos.profitPct) : "")}
         ${cell("İZ SÜREN STOP", pos.guard?.stop, "stop", pos.guard?.breached ? "İHLAL — çık!" : sd != null ? `%${Math.abs(sd).toFixed(1)} altta` : "")}
@@ -859,7 +859,7 @@ function cmHeroLevels(d, pos, pl) {
   const z = pl?.longterm?.zones?.[0];
   if (z) {
     return `<div class="cm-hero lt">
-      <div class="cm-hero-h">🌱 Uzun vade — kademeli biriktirme bölgesi</div>
+      <div class="cm-hero-h">Uzun vade — kademeli biriktirme bölgesi</div>
       <div class="cm-hero-row">
         ${cell("1. BÖLGE", z.price, "entry", z.isNow ? "ŞİMDİ bölgede" : dist(z.price) != null ? `%${Math.abs(dist(z.price)).toFixed(1)} uzakta` : "")}
         ${cell("200g DÖNÜŞ", pl?.longterm?.reclaim, "cost", "")}
@@ -981,6 +981,9 @@ function cmSetTool(tool) {
   $("#cmToolTrend")?.classList.toggle("active", tool === "trend");
   $("#cmToolHline")?.classList.toggle("active", tool === "hline");
 }
+// Araç çubuğu ikonları: emoji (📏/🗑) yerine çizgi-ikon — bir kez, açılışta doldurulur
+$("#cmMeasure")?.insertAdjacentHTML("afterbegin", svgIcon("ruler", "ic-sm"));
+$("#cmToolClear")?.insertAdjacentHTML("afterbegin", svgIcon("trash", "ic-sm"));
 $("#cmToolTrend")?.addEventListener("click", () => cmSetTool(CM_DRAW.tool === "trend" ? null : "trend"));
 $("#cmToolHline")?.addEventListener("click", () => cmSetTool(CM_DRAW.tool === "hline" ? null : "hline"));
 $("#cmToolClear")?.addEventListener("click", () => {

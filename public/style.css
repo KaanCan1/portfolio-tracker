@@ -869,25 +869,25 @@ tfoot td.l { text-align: left; }
 
 /* Grafik modalı: verdict + gösterge paneli */
 .cm-verdict { font-size: 14px; font-weight: 800; padding: 9px 12px; border-radius: 9px; margin-bottom: 12px; text-align: center; }
-.cm-verdict.v-good { background: #e7f4ed; color: var(--green-d); border: 1px solid var(--green-line); }
-.cm-verdict.v-warn { background: #fdf3df; color: #9a7416; border: 1px solid #f0dca8; }
-.cm-verdict.v-bad  { background: #f6eceb; color: #a4554a; border: 1px solid #e6cfcb; }
+.cm-verdict.v-good { background: var(--green-soft); color: var(--green-d); border: 1px solid var(--green-line); }
+.cm-verdict.v-warn { background: var(--amber-bg); color: var(--amber-d); border: 1px solid var(--amber-line); }
+.cm-verdict.v-bad  { background: var(--red-bg); color: var(--red-d); border: 1px solid var(--red-line); }
 .cm-sec { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 12px 0 6px; border-top: 1px solid var(--border); padding-top: 10px; }
 .cm-sigs { display: flex; flex-direction: column; gap: 7px; margin-bottom: 10px; }
 .cm-sig { display: grid; grid-template-columns: auto auto; grid-template-areas: "n v" "t t"; gap: 1px 8px; align-items: baseline; }
 .cm-sig-n { grid-area: n; font-size: 12px; font-weight: 700; }
 .cm-sig-v { grid-area: v; justify-self: end; font-size: 12px; font-weight: 800; font-variant-numeric: tabular-nums; padding: 1px 6px; border-radius: 5px; }
 .cm-sig-t { grid-area: t; font-size: 11px; color: var(--muted); line-height: 1.35; }
-.s-good { background: #e7f4ed; color: var(--green-d); }
-.s-warn { background: #fdf3df; color: #9a7416; }
-.s-bad  { background: #f4ecec; color: #a4554a; }
+.s-good { background: var(--green-soft); color: var(--green-d); }
+.s-warn { background: var(--amber-bg); color: var(--amber-d); }
+.s-bad  { background: var(--red-bg); color: var(--red-d); }
 
 /* Pozisyon önerisi */
 .cm-ps { display: flex; flex-direction: column; gap: 7px; }
-.cm-psr { display: grid; grid-template-columns: auto 1fr; grid-template-areas: "tag val" "tag risk"; gap: 1px 8px; align-items: baseline; background: #f4f8f5; border: 1px solid #dcebe1; border-radius: 8px; padding: 7px 10px; }
+.cm-psr { display: grid; grid-template-columns: auto 1fr; grid-template-areas: "tag val" "tag risk"; gap: 1px 8px; align-items: baseline; background: var(--bg3); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; }
 .cm-psr > b { grid-area: tag; align-self: center; font-size: 11px; font-weight: 800; color: var(--green-d); white-space: nowrap; }
 .cm-psv { grid-area: val; font-size: 12.5px; font-variant-numeric: tabular-nums; }
-.cm-psrisk { grid-area: risk; font-size: 11px; color: #a4554a; font-weight: 600; }
+.cm-psrisk { grid-area: risk; font-size: 11px; color: var(--red-d); font-weight: 600; }
 .cm-psnote { font-size: 10.5px; color: var(--muted); line-height: 1.45; margin-top: 7px; }
 
 /* ===================== Grafik modalı ===================== */
@@ -3281,7 +3281,9 @@ ul.sw-qm-list li b { font-weight: 700; color: var(--ink); }
   font: inherit; font-size: 12.5px; font-weight: 700; color: var(--ink2);
   background: transparent; border: none; border-right: 1px solid var(--line);
   padding: 7px 11px; cursor: pointer; transition: background .13s, color .13s;
+  display: inline-flex; align-items: center; gap: 6px;
 }
+.cm-tool svg.ic-sm { width: 14px; height: 14px; display: block; }
 .cm-tool:last-child { border-right: none; }
 .cm-tool:hover { background: var(--bg2); }
 .cm-tool.active { background: var(--green-d); color: #fff; }
@@ -3301,23 +3303,23 @@ ul.sw-qm-list li b { font-weight: 700; color: var(--ink); }
 .cm-hero-h { font-size: 11.5px; font-weight: 800; letter-spacing: .3px; color: rgba(255,255,255,.85); margin-bottom: 9px; }
 .cm-hero.live .cm-hero-h { color: #7dffb4; }
 .cm-hero-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
-.cm-hc { border-radius: 9px; padding: 7px 9px 6px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.07); border-top: 2px solid transparent; min-width: 0; }
+/* Seviye kartları: 4 renkli üst-bordür rainbow (AI-dashboard teli) kaldırıldı —
+ * anlam yalnız rakam renginde (giriş yeşil · stop kırmızı), hedef/maliyet nötr */
+.cm-hc { border-radius: 9px; padding: 7px 9px 6px; background: rgba(255,255,255,.05); min-width: 0; }
 .cm-hc span { display: block; font-size: 9.5px; font-weight: 800; letter-spacing: .5px; color: rgba(255,255,255,.55); }
 .cm-hc b { display: block; font-family: var(--mono); font-size: 15.5px; font-weight: 700; letter-spacing: -.3px; margin: 2px 0 1px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .cm-hc i { display: block; font-style: normal; font-size: 10px; color: rgba(255,255,255,.55); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.cm-hc.entry  { border-top-color: #4ad07f; } .cm-hc.entry b  { color: #7dffb4; }
-.cm-hc.stop   { border-top-color: #ff7b6e; } .cm-hc.stop b   { color: #ffa89f; }
-.cm-hc.target { border-top-color: #5fb8ff; } .cm-hc.target b { color: #9fd4ff; }
-.cm-hc.cost   { border-top-color: #b39dff; } .cm-hc.cost b   { color: #cfc2ff; }
-.cm-hc.now    { border-top-color: rgba(255,255,255,.35); }
+.cm-hc.entry b  { color: #7dffb4; }
+.cm-hc.stop   b { color: #ffa89f; }
 
 /* Yan panel modernizasyonu */
 .cm-side .cm-sec { border-top: none; margin: 14px 0 7px; padding-top: 0; display: flex; align-items: center; gap: 8px; }
 .cm-side .cm-sec::after { content: ""; flex: 1; height: 1px; background: var(--line); }
 .cm-stats-card { background: var(--card); border: 1px solid var(--line); box-shadow: var(--shadow); }
 .cm-pos { background: var(--card); border: 1px solid var(--line); box-shadow: var(--shadow); }
-.cm-pos-head { font-size: 13px; font-weight: 800; color: #6b54c9; }
-.cm-pos .cm-r { border-bottom: 1px dashed #e6def6; }
+/* Pozisyon başlığı: süs moru → mürekkep (tek accent disiplini); ayraç hex → token */
+.cm-pos-head { font-size: 13px; font-weight: 800; color: var(--ink); }
+.cm-pos .cm-r { border-bottom: 1px dashed var(--line); }
 .cm-pos .cm-v.pos { color: var(--green-d); font-weight: 800; }
 .cm-pos .cm-v.neg { color: var(--red); font-weight: 800; }
 .cm-qm { box-shadow: var(--shadow); }
