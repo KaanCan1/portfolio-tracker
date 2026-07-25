@@ -566,10 +566,10 @@ function chWatchSrv(S, watch, held, reg, startDate) {
     }
     if (!held.has(sym) && status !== "off") {
       const eDate = CH_EARN.map[sym];
-      if (eDate && chEarnBlocked(sym, today)) why = `📊 bilanço karartması: bilanço ${chFmtDSrv(eDate)} (≤3 gün) — bilanço gecesine pozisyon taşınmaz` + (why ? ` · ${why}` : "");
+      if (eDate && chEarnBlocked(sym, today)) why = `bilanço karartması: bilanço ${chFmtDSrv(eDate)} (≤3 gün) — bilanço gecesine pozisyon taşınmaz` + (why ? ` · ${why}` : "");
       else { const sct = CH_SECT.map[sym]; const clash = sct && [...held].find((h) => CH_SECT.map[h] === sct); if (clash) why = `sektör tavanı: ${clash} aynı sektörde açık (${sct}) — sektör başına 1 pozisyon` + (why ? ` · ${why}` : ""); }
     }
-    if (reg.state === "off" && !held.has(sym) && status !== "off") why = `⛔ REJİM KAPALI: ${reg.txt}` + (why ? ` · ayrıca: ${why}` : "");
+    if (reg.state === "off" && !held.has(sym) && status !== "off") why = `REJİM KAPALI: ${reg.txt}` + (why ? ` · ayrıca: ${why}` : "");
     out.push({ sym, status, close: c.close, trig, distPct, adr, nearHigh, up, entry, stop, tp2: entry * (1 + CH_ENG.tp2 / 100), notional, riskUSD: notional * (entry - stop) / entry, why });
   }
   const rank = { ready: 0, forming: 1, watch: 2, off: 3 };

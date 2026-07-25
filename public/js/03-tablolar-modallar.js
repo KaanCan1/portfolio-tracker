@@ -78,7 +78,7 @@ function renderGroup(title, rows, groupKey, horizon = "long") {
       : `${fmtTRY(live.priceTRY)}${live.dayChangePct != null ? ` <span class="chip ${cls(live.dayChangePct)}">${fmtPct(live.dayChangePct)}</span>` : ""}`;
 
     const tradeBtn = h.type === "stock"
-      ? `<button class="btn icon" data-trade="${h.symbol}" title="İşlem / Realize kâr">📈</button>` : "";
+      ? `<button class="btn icon" data-trade="${h.symbol}" title="İşlem / Realize kâr">${svgIcon("trendUp","ic-sm")}</button>` : "";
 
     const sig = h.sig;
     const sigTitle = sig ? (sig.summary || sig.signal?.label || "").replace(/"/g, "'") : "";
@@ -86,7 +86,7 @@ function renderGroup(title, rows, groupKey, horizon = "long") {
       ? `<span class="sig-dot sig-${sig.signal.tone}${sig.stale ? " sig-stale" : ""}" title="${sigTitle}" aria-label="${sig.signal.label}"></span>`
       : "";
     const ptChip = sig?.profitTake
-      ? `<span class="pt-chip pt-${sig.profitTake.level}" title="${sig.profitTake.text}">✂️ ${sig.profitTake.trim}</span>`
+      ? `<span class="pt-chip pt-${sig.profitTake.level}" title="${sig.profitTake.text}">${sig.profitTake.trim}</span>`
       : "";
     // Pozisyon durumu rozeti — uzun vade ile swing FARKLI yönetilir (Kaan'ın kararı):
     //  • Swing: tam iz süren stop disiplini (stop delindi / hedefte / stopa mesafe).
@@ -109,13 +109,13 @@ function renderGroup(title, rows, groupKey, horizon = "long") {
       } else {
         guardChip = (profitPct != null && profitPct <= -25)
           ? `<span class="gd-chip gd-thesis" title="Pozisyon %${Math.abs(profitPct).toFixed(0)} zararda — hikâye/tez hâlâ geçerli mi gözden geçir. Bozulduysa uzun vadede bile çık; tez sağlamsa panikle satma, bu bir fırsat olabilir.">⚠️ tez gözden geçir · ${profitPct.toFixed(0)}%</span>`
-          : `<span class="gd-chip gd-long" title="Uzun vade pozisyonu — iz süren stop uygulanmaz, ≥1 yıl tutulur. Tez bozulmadıkça (veya zarar %25'i aşmadıkça) satış sinyali verilmez.">🌱 uzun vade</span>`;
+          : `<span class="gd-chip gd-long" title="Uzun vade pozisyonu — iz süren stop uygulanmaz, ≥1 yıl tutulur. Tez bozulmadıkça (veya zarar %25'i aşmadıkça) satış sinyali verilmez.">uzun vade</span>`;
       }
     }
     // Bilanço Nöbetçisi: yaklaşan bilanço (≤7 gün)
     const e = h.earnings;
     const earnChip = e && e.daysLeft <= 7
-      ? `<span class="gd-chip gd-earn${e.daysLeft <= 2 ? " gd-earn-hot" : ""}" title="Bilanço ${fmtDate(e.date)}${e.hour === "bmo" ? " · açılış öncesi" : e.hour === "amc" ? " · kapanış sonrası" : ""} — gecelik gap riskine karşı pozisyonu gözden geçir">🗓️ ${e.daysLeft === 0 ? "bugün" : e.daysLeft + "g"}</span>`
+      ? `<span class="gd-chip gd-earn${e.daysLeft <= 2 ? " gd-earn-hot" : ""}" title="Bilanço ${fmtDate(e.date)}${e.hour === "bmo" ? " · açılış öncesi" : e.hour === "amc" ? " · kapanış sonrası" : ""} — gecelik gap riskine karşı pozisyonu gözden geçir">${e.daysLeft === 0 ? "bugün" : e.daysLeft + "g"}</span>`
       : "";
 
     // Swing rozeti: bu pozisyonun bir kısmı/tamamı Swing Defteri'nde takip ediliyorsa
@@ -126,9 +126,9 @@ function renderGroup(title, rows, groupKey, horizon = "long") {
     // Sıfır-maliyet rozeti: ana para geri alındıysa 🎁 bedava, yarıyı geçtiyse geri-alım %
     const fr = h.type === "stock" ? freeRollOf(h) : null;
     const freeChip = !fr ? "" : fr.free
-      ? `<span class="gr-hold-chip free" data-view-growth="1" title="Ana paranı geri aldın — bu pozisyon bedava biniyor (Büyüme sekmesi)">🎁 bedava</span>`
+      ? `<span class="gr-hold-chip free" data-view-growth="1" title="Ana paranı geri aldın — bu pozisyon bedava biniyor (Büyüme sekmesi)">bedava</span>`
       : fr.recovered != null && fr.recovered >= 50
-        ? `<span class="gr-hold-chip" data-view-growth="1" title="Ana paranın %${fr.recovered.toFixed(0)}'ini geri aldın — Büyüme sekmesi">🎁 %${fr.recovered.toFixed(0)}</span>`
+        ? `<span class="gr-hold-chip" data-view-growth="1" title="Ana paranın %${fr.recovered.toFixed(0)}'ini geri aldın — Büyüme sekmesi">%${fr.recovered.toFixed(0)}</span>`
         : "";
     // Opsiyon realize rozeti (yalnız bilgi): bu dayanağın opsiyonlarından NET realize kâr varsa
     // hissenin yanında belirt — sıfır maliyete ve Realize K/Z sütununa DAHİL DEĞİL.
@@ -158,7 +158,7 @@ function renderGroup(title, rows, groupKey, horizon = "long") {
       : "";
     const frCell = !fr ? `<span class="muted">—</span>`
       : fr.free
-        ? `<div class="zc-cell"${zcTip}><div class="zc-bar"><div class="zc-fill done" style="width:100%"></div></div><span class="zc-tag free">🎁 bedava</span></div>`
+        ? `<div class="zc-cell"${zcTip}><div class="zc-bar"><div class="zc-fill done" style="width:100%"></div></div><span class="zc-tag free">bedava</span></div>`
         : fr.costBasis
           ? `<div class="zc-cell"${zcTip}><div class="zc-bar"><div class="zc-fill" style="width:${Math.min(100, fr.recovered || 0).toFixed(0)}%"></div></div><span class="zc-tag">%${(fr.recovered || 0).toFixed(0)}${fr.sellShares != null ? ` · ${fmtNum(fr.sellShares, 1)} adet` : ""}</span></div>`
           : `<span class="muted">—</span>`;
@@ -177,7 +177,7 @@ function renderGroup(title, rows, groupKey, horizon = "long") {
       <td><div class="row-actions">
         ${tradeBtn}
         <button class="btn icon" data-edit="${h.id}" title="Düzenle">✎</button>
-        <button class="btn icon" data-del="${h.id}" title="Sil">🗑</button>
+        <button class="btn icon" data-del="${h.id}" title="Sil">${svgIcon("trash","ic-sm")}</button>
       </div></td>
     </tr>`;
   }).join("");
@@ -367,7 +367,7 @@ function renderOptionsGroup(rows) {
       <td class="${o.plPct != null ? cls(o.plPct) : ""}">${fmtPct(o.plPct)}</td>
       <td><div class="row-actions">
         <button class="btn icon" data-opt-edit="${o.id}" title="Düzenle / prim güncelle">✎</button>
-        <button class="btn icon" data-opt-del="${o.id}" title="Sil">🗑</button>
+        <button class="btn icon" data-opt-del="${o.id}" title="Sil">${svgIcon("trash","ic-sm")}</button>
       </div></td>
     </tr>
     <tr class="opt-detail"><td colspan="12">
@@ -424,7 +424,7 @@ function renderGoldGroup(rows) {
       <td class="l gold-date">${fmtDate(h.purchaseDate)}</td>
       <td><div class="row-actions">
         <button class="btn icon" data-edit="${h.id}" title="Düzenle">✎</button>
-        <button class="btn icon" data-del="${h.id}" title="Sil">🗑</button>
+        <button class="btn icon" data-del="${h.id}" title="Sil">${svgIcon("trash","ic-sm")}</button>
       </div></td>
     </tr>`;
   }).join("");

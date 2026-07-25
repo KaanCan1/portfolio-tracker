@@ -74,7 +74,7 @@ function renderAlerts() {
       <span class="al-cond">${AL_TYPES[a.type]} ${cond}</span>
       <span class="al-px">${a.price != null ? fmtUSD(a.price) : "—"}${a.dayChangePct != null ? ` <span class="${cls(a.dayChangePct)}">${fmtPct(a.dayChangePct)}</span>` : ""}</span>
       ${st}
-      <button class="btn icon" data-al-del="${a.id}" title="Sil">🗑</button>
+      <button class="btn icon" data-al-del="${a.id}" title="Sil">${svgIcon("trash","ic-sm")}</button>
     </div>`;
   }).join("");
   list.innerHTML = `
@@ -213,10 +213,10 @@ function renderDailyBoard() {
       ${badge ? `<span class="db-earn-badge b-${tone}">${badge}</span>` : ""}
     </li>`;
   }).join("");
-  const earnCard = `<div class="db-card db-earn-card">${head("📅", "a", "Yaklaşan Bilançolar", earn.length ? `${earn.length} bilanço · 21 gün` : "önümüzdeki 21 gün")}
+  const earnCard = `<div class="db-card db-earn-card">${head(svgIcon("calendar","ic-sm"), "a", "Yaklaşan Bilançolar", earn.length ? `${earn.length} bilanço · 21 gün` : "önümüzdeki 21 gün")}
     ${earn.length ? `<ul class="db-earn-list">${earnRows}</ul>
        <div class="db-foot">Bilanço bir yazı-tura — 3 günden yakınsa pozisyonu küçültmeyi düşün (Kural 1).</div>`
-      : `<div class="db-empty">Önümüzdeki 21 günde tuttuğun hisselerde bilanço yok. 🟢</div>`}
+      : `<div class="db-empty">Önümüzdeki 21 günde tuttuğun hisselerde bilanço yok.</div>`}
   </div>`;
 
   /* ========== Swing Nöbeti: açık swing'lerde stop/hedef tetik (Kural 1) ========== */
@@ -304,11 +304,11 @@ function renderRealized2026() {
           <div class="r26-pend-info">
             <span class="sym">${r.symbol || "—"}</span>
             <span class="nm">${(r.label || "").replace(/"/g, "")}</span>
-            ${r.date ? `<span class="tnote">📅 ${fmtDate(r.date)}</span>` : ""}
+            ${r.date ? `<span class="tnote">${fmtDate(r.date)}</span>` : ""}
           </div>
           <label class="r26-pend-amt">₺ <input type="number" step="0.01" value="${Number(r.amountTRY) || 0}" data-r26amt="${r.id}" title="Hesaplanan tutar — aracı kurum farklı diyorsa üzerine yaz"></label>
           <button class="btn primary sm" data-r26approve="${r.id}" title="Bu tutarı doğrula ve hesaba kat">✓ Onayla</button>
-          <button class="btn icon" data-delr26="${r.id}" title="Kaydı sil (hesaba hiç girmesin)">🗑</button>
+          <button class="btn icon" data-delr26="${r.id}" title="Kaydı sil (hesaba hiç girmesin)">${svgIcon("trash","ic-sm")}</button>
         </div>`).join("")}
     </div>`;
   // ── Sembol başına grupla (MULL'un 5 işlemi tek MULL satırında toplanır) ──
@@ -328,7 +328,7 @@ function renderRealized2026() {
     const isTruth = String(r.id).startsWith("r26-truth-");
     const extra = isTruth
       ? (r.edited ? `<button class="rz-edit rz-reset" data-r26reset="${r.id}" title="Broker değerine geri dön">↺</button>` : "")
-      : `<button class="btn icon" data-delr26="${r.id}" title="Sil">🗑</button>`;
+      : `<button class="btn icon" data-delr26="${r.id}" title="Sil">${svgIcon("trash","ic-sm")}</button>`;
     return `<span class="r26-acts">${edit}${extra}</span>`;
   };
   const flag = (r) => r.edited ? `<span class="r26-auto r26-edited" title="Elle düzeltildi">✓ düzeltildi</span>` : r.auto ? `<span class="r26-auto" title="Satış işleminden otomatik">oto</span>` : "";
@@ -336,7 +336,7 @@ function renderRealized2026() {
       <td class="l r26-sub-c">
         <span class="nm">${(r.label || r.symbol || "").replace(/"/g, "")}</span>
         ${flag(r)}
-        ${r.date ? `<span class="tnote"> · 📅 ${fmtDate(r.date)}</span>` : ""}
+        ${r.date ? `<span class="tnote"> · ${fmtDate(r.date)}</span>` : ""}
       </td>
       <td class="${cls(r.amountTRY)}">${fmtTRY(r.amountTRY)}</td>
       <td>${actCell(r)}</td>
@@ -349,7 +349,7 @@ function renderRealized2026() {
       <td class="l">
         <span class="sym">${g.sym}</span> ${only.label && only.label !== g.sym ? `<span class="nm">${(only.label).replace(/"/g, "")}</span>` : ""}
         ${flag(only)}
-        ${only.date ? `<div class="tnote">📅 ${fmtDate(only.date)}</div>` : ""}
+        ${only.date ? `<div class="tnote">${fmtDate(only.date)}</div>` : ""}
       </td>
       <td class="${cls(g.total)}">${fmtTRY(g.total)}</td>
       <td>${actCell(only)}</td>
@@ -400,7 +400,7 @@ function renderFlows() {
       <td class="l"><span class="flow-tag ${f.type}">${f.type === "withdraw" ? "Çekme" : "Yatırma"}</span>${f.note ? `<div class="tnote">${f.note}</div>` : ""}</td>
       <td>${symFor(f.currency)}${fmtNum(f.amount, 2)}</td>
       <td class="${f.type === "withdraw" ? "neg" : "pos"}">${f.type === "withdraw" ? "−" : "+"}${fmtTRY0(try_)}</td>
-      <td><button class="btn icon" data-delflow="${f.id}" title="Sil">🗑</button></td>
+      <td><button class="btn icon" data-delflow="${f.id}" title="Sil">${svgIcon("trash","ic-sm")}</button></td>
     </tr>`;
   }).join("");
 
@@ -458,7 +458,7 @@ function renderAllTrades() {
         <td>—</td>
         <td class="muted">maliyet ${fmtUSD(t.shares * t.buyUSD)}</td>
         <td>—</td>
-        <td><button class="btn icon" data-delalltrade="${t.id}" title="Sil">🗑</button></td>
+        <td><button class="btn icon" data-delalltrade="${t.id}" title="Sil">${svgIcon("trash","ic-sm")}</button></td>
       </tr>`;
     }
     const pnl = t.shares * (t.sellUSD - t.buyUSD);
@@ -468,13 +468,13 @@ function renderAllTrades() {
     const isSwingSell = t.src === "swing" || /swing/i.test(t.note || "");
     return `<tr>
       <td class="l">${fmtDate(t.date)}</td>
-      <td class="l"><span class="sym">${t.symbol}</span>${isSwingSell ? ` <span class="tr-src-swing" title="Swing satışı — uzun vadeden ayrı değerlendirilir, toplama dahildir">⚡swing</span>` : ` <span class="tr-src-port" title="Uzun vade (portföy) satışı">uzun</span>`}${t.note ? `<div class="tnote">${t.note}</div>` : ""}</td>
+      <td class="l"><span class="sym">${t.symbol}</span>${isSwingSell ? ` <span class="tr-src-swing" title="Swing satışı — uzun vadeden ayrı değerlendirilir, toplama dahildir">swing</span>` : ` <span class="tr-src-port" title="Uzun vade (portföy) satışı">uzun</span>`}${t.note ? `<div class="tnote">${t.note}</div>` : ""}</td>
       <td>${fmtNum(t.shares, 4)}</td>
       <td>${fmtUSD(t.buyUSD)}</td>
       <td>${fmtUSD(t.sellUSD)}</td>
       <td class="${cls(pnl)}">${fmtUSD(pnl)}</td>
       <td class="${pct != null ? cls(pct) : ""}">${fmtPct(pct)}</td>
-      <td><button class="btn icon" data-delalltrade="${t.id}" title="Sil">🗑</button></td>
+      <td><button class="btn icon" data-delalltrade="${t.id}" title="Sil">${svgIcon("trash","ic-sm")}</button></td>
     </tr>`;
   }).join("");
 
@@ -542,7 +542,7 @@ function renderTrades() {
         <td class="muted">—</td>
         <td class="muted">maliyet ${fmtUSD(t.shares * t.buyUSD)}</td>
         <td class="muted">—</td>
-        <td><button class="btn icon" data-deltrade="${t.id}" title="Sil">🗑</button></td>
+        <td><button class="btn icon" data-deltrade="${t.id}" title="Sil">${svgIcon("trash","ic-sm")}</button></td>
       </tr>`;
     }
     const pnl = t.shares * (t.sellUSD - t.buyUSD);
@@ -557,7 +557,7 @@ function renderTrades() {
       <td>${fmtUSD(t.sellUSD)}</td>
       <td><span class="tt-pnl ${cls(pnl)}">${pnl >= 0 ? "+" : ""}${fmtUSD(pnl)}</span></td>
       <td class="${pct != null ? cls(pct) : ""}">${fmtPct(pct)}</td>
-      <td><button class="btn icon" data-deltrade="${t.id}" title="Sil">🗑</button></td>
+      <td><button class="btn icon" data-deltrade="${t.id}" title="Sil">${svgIcon("trash","ic-sm")}</button></td>
     </tr>`;
   }).join("");
 

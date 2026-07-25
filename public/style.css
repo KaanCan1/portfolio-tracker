@@ -697,7 +697,11 @@ tfoot td.l { text-align: left; }
 .ra-pill-score { font-size: 11px; font-weight: 700; color: var(--green-d); background: var(--green-soft); border-radius: 6px; padding: 1px 6px; }
 .ra-pill-lv { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .ra-pill-cuma { font-size: 12px; }
+/* Rozet/çip ikonları: emoji yerine çizgi-ikon — metinle aynı hizada, currentColor */
+svg.ic-xs { width: 13px; height: 13px; display: inline-block; vertical-align: -2px; flex-shrink: 0; }
 .rb-badge { display: inline-block; font-size: 11px; margin-left: 5px; vertical-align: middle; }
+.rb-badge svg.ic-xs { vertical-align: middle; }
+.chip.mini.cuma svg.ic-xs, .rd-swing svg.ic-xs { width: 12px; height: 12px; }
 .rb-badge.cuma { filter: saturate(1.1); }
 .rb-noscore { font-size: 13px; }
 .rb-swcell { min-width: 150px; }

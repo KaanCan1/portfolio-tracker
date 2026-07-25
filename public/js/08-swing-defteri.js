@@ -211,7 +211,7 @@ function decisionScorecardPanel(closed) {
   const recs = decisionRecs(closed);
   const journaled = recs.filter((r) => r.planFollow || r.conf || r.setupKind);
   if (!journaled.length) {
-    return closed.length ? `<section class="panel dj-panel dj-empty"><div class="panel-head"><div><h2>🧭 Karar Kalitesi</h2></div></div>
+    return closed.length ? `<section class="panel dj-panel dj-empty"><div class="panel-head"><div><h2>Karar Kalitesi</h2></div></div>
       <p class="dj-empty-note">Karar defterini doldurmaya başla: yeni swing açarken <b>tez · güven · setup</b> gir, kapatırken <b>“plana uydun mu?”</b> yanıtla. Zamanla <b>şans mı beceri mi</b> ayrışır — Kural 1'in gerçek ölçüsü budur.</p></section>` : "";
   }
   // ── 2×2 şans/beceri matrisi (planFollow gerekir) ──
@@ -332,7 +332,7 @@ function renderSwingDeck() {
             <div class="sw-goal-val ${pnlCls(thisMonth)}">${fmtUSD0(thisMonth)}</div>
           </div>
           <button class="sw-goal-target" id="swGoalEditBtn" title="Aylık hedefi düzenle">
-            Hedef ⚙<br><b>$${goal.min}–${goal.max}</b><span>/ay</span>
+            Hedef<br><b>$${goal.min}–${goal.max}</b><span>/ay</span>
           </button>
         </div>
         <div class="sw-goal-bar">
@@ -1388,7 +1388,7 @@ async function renderPlanGap(force) {
   const d = PGAP.d;
   if (!d || d.error) { el.innerHTML = ""; return; }
   if (!d.n) {
-    el.innerHTML = `<section class="panel pg-panel"><div class="panel-head"><div><h2>💸 Masada Bıraktığın Para</h2>
+    el.innerHTML = `<section class="panel pg-panel"><div class="panel-head"><div><h2>Masada Bıraktığın Para</h2>
       <span class="chart-sub">Stop/hedefine harfiyen uysaydın ne olurdu — disiplinin dolar karşılığı</span></div></div>
       <p class="dj-empty-note">Henüz ölçülebilir işlem yok. Stop <b>ve</b> hedefle açılan swing'ler kapandıkça burada birikir${d.atlanan ? ` (${d.atlanan} işlem planı/mum verisi eksik olduğu için ölçüme girmedi)` : ""}.</p></section>`;
     return;
@@ -1408,7 +1408,7 @@ async function renderPlanGap(force) {
       <td class="l"><b>${r.sym}</b><span class="pg-date">${fmtDate(r.openedAt)}</span></td>
       <td class="l"><span class="pg-tag ${m.cls}">${m.lbl}</span></td>
       <td>${fmtUSD(r.entry)}</td>
-      <td class="pg-plan">${fmtUSD(r.planCikis)}<span class="pg-how">${r.planNasil === "hedef" ? "🎯 hedef" : r.planNasil === "stop" ? "⛔ stop" : "açık"}</span></td>
+      <td class="pg-plan">${fmtUSD(r.planCikis)}<span class="pg-how">${r.planNasil === "hedef" ? "🎯 hedef" : r.planNasil === "stop" ? "stop" : "açık"}</span></td>
       <td>${r.gercekCikis != null ? fmtUSD(r.gercekCikis) : "—"}</td>
       <td class="${r.planPnl >= 0 ? "pos" : "neg"}">${usd(r.planPnl)}</td>
       <td class="${r.gercekPnl >= 0 ? "pos" : "neg"}">${usd(r.gercekPnl)}</td>
@@ -1419,7 +1419,7 @@ async function renderPlanGap(force) {
   el.innerHTML = `
     <section class="panel pg-panel">
       <div class="panel-head"><div>
-        <h2>💸 Masada Bıraktığın Para <span class="sw-chip">${d.n} işlem</span></h2>
+        <h2>Masada Bıraktığın Para <span class="sw-chip">${d.n} işlem</span></h2>
         <span class="chart-sub">Stop/hedefine harfiyen uysaydın ne olurdu — disiplinin dolar karşılığı</span>
       </div></div>
       <div class="pg-hero ${tone}">

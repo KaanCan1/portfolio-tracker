@@ -57,7 +57,7 @@ function radarDetail(s) {
     : "—";
   // Swing kurulumu varsa: giriş/stop/hedef planı (birleşik tabloda swing segmenti buraya taşındı)
   const sw = s.swing;
-  const swBlock = sw ? `<div class="rd-swing">⚡ <b>Swing kurulumu — ${sw.setup?.label || sw.setup?.type || ""}:</b>
+  const swBlock = sw ? `<div class="rd-swing">${svgIcon("zap","ic-xs")} <b>Swing kurulumu — ${sw.setup?.label || sw.setup?.type || ""}:</b>
     Giriş <b>${fmtUSD(sw.entry)}</b>${sw.entryType ? ` <span class="muted">${ENTRY_TAG[sw.entryType] || ""}</span>` : ""} ·
     Stop <b class="neg">${fmtUSD(sw.stop)}${sw.riskPct != null ? ` (−${sw.riskPct.toFixed(1)}%)` : ""}</b> ·
     Hedef <b class="pos">${fmtUSD(sw.target)}${sw.rewardPct != null ? ` (+${sw.rewardPct.toFixed(1)}%)` : ""}</b> ·
@@ -65,7 +65,7 @@ function radarDetail(s) {
     ${sw.entry != null ? swFromBtn({ symbol: s.symbol, entry: sw.entry, stop: sw.stop, target: sw.target, note: sw.setup?.label || "" }) : ""}</div>` : "";
   return `<tr class="rb-detail" data-for="${s.symbol}" hidden><td colspan="8">
     ${swBlock}
-    ${s.story ? `<div class="rd-story">💡 <b>Hikâye:</b> ${s.story}</div>` : ""}
+    ${s.story ? `<div class="rd-story"><b>Hikâye:</b> ${s.story}</div>` : ""}
     ${s.summaryText ? `<div class="rd-story rd-why"><b>Skor nereden geliyor?</b> ${s.summaryText}</div>` : ""}
     <div class="rd-grid">
       ${cell("1A", sgnPct(s.ret1M))}${cell("3A", sgnPct(s.ret3M))}${cell("6A", sgnPct(s.ret6M))}${cell("1Y", sgnPct(s.ret1Y))}${cell("YTD", sgnPct(s.retYTD))}
@@ -107,7 +107,7 @@ function unifiedRow(u) {
   const tgtCell = (u.target != null && u.upsidePct != null)
     ? `<div class="rb-tgt"><b>${fmtUSD(u.target)}</b><span class="rb-up ${cls(u.upsidePct)}">${u.upsidePct >= 0 ? "+" : ""}${u.upsidePct.toFixed(0)}%</span></div>`
     : "—";
-  const badges = `${u.cuma ? `<span class="rb-badge cuma" title="Cuma Hoca listesi">⭐</span>` : ""}${raActionable(u) ? `<span class="rb-badge sig" title="Taze swing tetiği — bugün girilebilir kurulum">📡</span>` : ""}`;
+  const badges = `${u.cuma ? `<span class="rb-badge cuma" title="Cuma Hoca listesi">${svgIcon("star","ic-xs")}</span>` : ""}${raActionable(u) ? `<span class="rb-badge sig" title="Taze swing tetiği — bugün girilebilir kurulum">${svgIcon("activity","ic-xs")}</span>` : ""}`;
   const scoreCell = u.score != null
     ? `<div class="rb-scorewrap"><div class="rb-bar"><i style="width:${u.score}%"></i></div><b>${u.score}</b></div>`
     : `<span class="muted rb-noscore">—</span>`;
@@ -170,7 +170,7 @@ function renderRadarBoard() {
     <div class="ra-strip-row">${action.map((u) => `<button class="ra-pill" data-rapill="${u.symbol}">
       <span class="ra-pill-sym">${u.symbol}</span><span class="ra-pill-score">skor ${u.score}</span>
       <span class="ra-pill-lv">gir ${fmtUSD(u.swing.entry)} · stop <span class="neg">${fmtUSD(u.swing.stop)}</span></span>
-      ${u.cuma ? `<span class="ra-pill-cuma">⭐</span>` : ""}</button>`).join("")}</div>
+      ${u.cuma ? `<span class="ra-pill-cuma">${svgIcon("star","ic-xs")}</span>` : ""}</button>`).join("")}</div>
   </div>` : "";
 
   // filtre

@@ -252,7 +252,7 @@
             </div>
             <div class="head-actions">
               <select id="r26Year" class="r26-year-sel" title="Vergi yılı seç"></select>
-              <button class="btn ghost sm" id="exportR26Btn" title="Seçili yılın beyan özeti + CSV çıktısı">📄 Beyan</button>
+              <button class="btn ghost sm" id="exportR26Btn" title="Seçili yılın beyan özeti + CSV çıktısı">Beyan</button>
               <button class="btn ghost sm" id="syncR26Btn" title="İşlem Geçmişi'ndeki tüm satışları (henüz eklenmemiş olanları) bu listeye yaz">↻ Satışları senkronla</button>
               <button class="btn primary sm" id="addR26Btn">+ Kayıt Ekle</button>
             </div>
@@ -299,7 +299,7 @@
         <section class="panel" id="radarBoardPanel">
           <div class="panel-head">
             <div>
-              <h2>Birleşik Hisse Radarı <span class="tip" data-tip="İpucu: Tek liste — 0–100 skor omurga, üstüne ⚡ swing kurulumu, ⭐ Cuma Hoca üyeliği ve 📡 taze tetik rozetleri. Satıra tıkla: swing planı (giriş/stop/hedef) + skorun nereden geldiği açılır.">?</span></h2>
+              <h2>Birleşik Hisse Radarı <span class="tip" data-tip="İpucu: Tek liste — 0–100 skor omurga, üstüne swing kurulumu, Cuma Hoca üyeliği ve taze tetik rozetleri. Satıra tıkla: swing planı (giriş/stop/hedef) + skorun nereden geldiği açılır.">?</span></h2>
               <span class="chart-sub" id="radarBoardSub">Skor · momentum · analist · bilanço · insider · swing kurulumu — tek birleşik liste</span>
             </div>
             <div class="head-actions">
@@ -308,8 +308,8 @@
                 <button class="rt" data-tier="strong">Güçlü Al</button>
                 <button class="rt" data-tier="buy">Al</button>
                 <button class="rt" data-tier="watch">İzle</button>
-                <button class="rt" data-tier="swing">⚡ Swing kurulumu</button>
-                <button class="rt" data-tier="cuma">⭐ Cuma Hoca</button>
+                <button class="rt" data-tier="swing">Swing kurulumu</button>
+                <button class="rt" data-tier="cuma">Cuma Hoca</button>
               </div>
               <input id="watchInput" class="watch-input" placeholder="Sembol ekle" maxlength="8" />
               <button class="btn primary sm" id="addWatchBtn">+ İzle</button>
@@ -318,7 +318,7 @@
           </div>
           <div class="radar-groupbar" id="radarGroups"></div>
           <details class="radar-legend">
-            <summary>ℹ️ Skor, rozetler &amp; hedef fiyat nasıl hesaplanıyor?</summary>
+            <summary>Skor, rozetler &amp; hedef fiyat nasıl hesaplanıyor?</summary>
             <div class="rl-body">
               <p>Her hisse <b>0–100 birleşik alınabilirlik skoru</b> alır. Skor 4 bileşenin ağırlıklı ortalamasıdır
                 (eksik veri sıfır sayılmaz; yalnızca gelen bileşenler üzerinden normalize edilir):</p>
@@ -328,13 +328,13 @@
                 <li><b>Bilanço &amp; büyüme (≈%30)</b> — gelir &amp; kâr büyümesi, net marj, PEG (büyümeye göre ucuzluk).</li>
                 <li><b>Insider (≈%15)</b> — son 90 günde yönetici açık piyasa alım/satımları.</li>
               </ul>
-              <p><b>Rozetler:</b> <b>⚡ Swing</b> — teknik kurulum var (giriş/stop/hedef; satıra tıkla). <b>⭐ Cuma Hoca</b> — TradingView “Strong Uptrend Stocks” listesinde. <b>📡</b> — bugün girilebilir taze tetik (kırılım/geri çekilme). <b>Sıralama</b>: yüksek skor + taze swing tetiği en üste (“Şimdi girilebilir”).</p>
+              <p><b>Rozetler:</b> <b>Swing</b> — teknik kurulum var (giriş/stop/hedef; satıra tıkla). <b>Cuma Hoca</b> — TradingView “Strong Uptrend Stocks” listesinde. <b>Taze tetik</b> — bugün girilebilir taze tetik (kırılım/geri çekilme). <b>Sıralama</b>: yüksek skor + taze swing tetiği en üste (“Şimdi girilebilir”).</p>
               <p><b>Karar kademesi:</b> 68+ Güçlü Al · 50–67 Al · 34–49 İzle · &lt;34 Nötr.</p>
-              <p><b>🎯 Model hedef fiyat (12 ay):</b> analist hedefi ücretsiz veride olmadığından, hedef
+              <p><b>Model hedef fiyat (12 ay):</b> analist hedefi ücretsiz veride olmadığından, hedef
                 <i>şeffaf bir model</i> ile tahmin edilir: temel büyümenin ~yarısı + analist eğilimi + trend + değerleme (PEG)
                 düzeltmeleri. Beklenen getiri −%25…+%70 ile sınırlanır. <b>Analist konsensüsü değil, model tahminidir</b> —
                 yatırım tavsiyesi değildir.</p>
-              <p><b>🔥 SICAK / ↑ YÜKSELİŞ / ↓ DÜŞÜŞ:</b> kısa (1a) + orta (3a) vade momentum ve trend yönüne göre etiketlenir.</p>
+              <p><b>↑↑ SICAK / ↑ YÜKSELİŞ / ↓ DÜŞÜŞ:</b> kısa (1a) + orta (3a) vade momentum ve trend yönüne göre etiketlenir.</p>
             </div>
           </details>
           <div id="radarBoard"></div>
@@ -346,11 +346,11 @@
           <div class="panel-head">
             <div>
               <h2>Haftalık Fırsatlar <span class="tip" data-tip="İpucu: Fırsat radarı tüm evreni tarayıp girilebilir kurulumları (yükseliş trendi + makul risk/ödül + aşırı alım değil) 0-100 skorla sıralar. Skor bir filtre, alım emri değil — planı (giriş/stop) yazılamayan fırsata girilmez. Geçmiş seçimlerin gerçek sonucu alttaki blokta dürüstçe ölçülür; garanti yok.">?</span> <span class="muted" id="oppSub"></span></h2>
-              <span class="chart-sub">Girilebilir kurulumların skorlu Top-10'u · ⭐ haftanın seçimi · geçmiş seçimlerin gerçek sonucu</span>
+              <span class="chart-sub">Girilebilir kurulumların skorlu Top-10'u · haftanın seçimi · geçmiş seçimlerin gerçek sonucu</span>
             </div>
             <button class="btn ghost sm" id="oppRefreshBtn">↻ Tara</button>
           </div>
-          <div class="opp-watch">📡 <b>Nöbetteki 10 hisse</b> — 🟢 insider alımı · 📰 taze haber · sembole tıkla, kartına gider.
+          <div class="opp-watch"><b>Nöbetteki 10 hisse</b> — insider alımı · taze haber · sembole tıkla, kartına gider.
             <div class="opp-watch-syms" id="oppWatchSyms"></div>
           </div>
           <div id="opps"></div>
@@ -903,7 +903,7 @@
     <div class="modal tax-modal">
       <div class="tax-head">
         <div>
-          <h3 class="tax-title">📄 <span id="taxYearTitle">2026</span> Yılı Realize Beyan Özeti</h3>
+          <h3 class="tax-title"><span id="taxYearTitle">2026</span> Yılı Realize Beyan Özeti</h3>
           <p class="tax-sub">Yıl içinde kapatılan pozisyonların gerçekleşen (realize) kâr/zararı — ₺ cinsinden.</p>
         </div>
         <button type="button" class="btn icon tax-close" id="taxCloseBtn" title="Kapat">✕</button>
@@ -912,14 +912,14 @@
       <div id="taxBody"></div>
 
       <div class="tax-note">
-        ℹ️ <b>Nasıl okunur?</b> <b>Net realize</b>, yıl içinde sattıkların üzerinden cebe giren/çıkan gerçek sonuçtur (açık pozisyonların kâğıt kârı dahil değildir).
+        <b>Nasıl okunur?</b> <b>Net realize</b>, yıl içinde sattıkların üzerinden cebe giren/çıkan gerçek sonuçtur (açık pozisyonların kâğıt kârı dahil değildir).
         Yurt dışı borsa işlemlerinde beyan, her satışın <b>işlem günündeki TL kuru</b> üzerinden hesaplanır — bu özet o mantığı kullanır.
         Kazanç ve zararlar yıl içinde mahsup edilebilir. <b>Bu bir vergi danışmanlığı değildir</b>; resmî beyan için kendi broker dökümünle ve mali müşavirinle teyit et.
       </div>
 
       <div class="modal-actions tax-actions">
-        <button type="button" class="btn ghost" id="taxPrintBtn">🖨️ Yazdır</button>
-        <button type="button" class="btn primary" id="taxCsvBtn">⬇️ CSV indir</button>
+        <button type="button" class="btn ghost" id="taxPrintBtn">Yazdır</button>
+        <button type="button" class="btn primary" id="taxCsvBtn">CSV indir</button>
       </div>
     </div>
   </div>

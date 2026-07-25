@@ -191,7 +191,7 @@ const ENTRY_TAG = { now: "şimdi", breakout: "kırılımda", pullback: "geri çe
 function swingRow(s) {
   const su = s.setup ? SETUP_META[s.setup.type] : null;
   const v = s.verdict || { tone: "warn", label: "—" };
-  const tags = `${s.owned ? `<span class="chip mini">portföy</span>` : ""}${s.watched ? `<span class="chip mini watch">izleme</span>` : ""}${s.cuma ? `<span class="chip mini cuma">⭐ Cuma Hoca</span>` : ""}`;
+  const tags = `${s.owned ? `<span class="chip mini">portföy</span>` : ""}${s.watched ? `<span class="chip mini watch">izleme</span>` : ""}${s.cuma ? `<span class="chip mini cuma">${svgIcon("star","ic-xs")} Cuma Hoca</span>` : ""}`;
   const entryCell = s.entry != null
     ? `${fmtUSD(s.entry)}<span class="sw-etag">${ENTRY_TAG[s.entryType] || ""}</span>`
     : `<span class="muted">bekle</span>`;
@@ -290,7 +290,7 @@ function cumaCard(c, item) {
     body = `
       <div class="cc-chips">
         <span class="cc-verdict v-${v.tone}">${v.label}</span>
-        ${su ? `<span class="cc-setup">📐 ${item.setup.label}</span>` : ""}
+        ${su ? `<span class="cc-setup">${item.setup.label}</span>` : ""}
         ${item.grade ? `<span class="sw-grade ${GRADE_CLS[item.grade] || "g-d"}">${item.grade}</span>` : ""}
       </div>
       <div class="cc-plan">
@@ -299,7 +299,7 @@ function cumaCard(c, item) {
         <span>Hedef<b class="pos">${fmtUSD(item.target)}</b></span>
         <span>R/R<b>${item.rr != null ? item.rr.toFixed(1) + "R" : "—"}</b></span>
       </div>
-      ${L ? `<div class="cc-pos">💰 Gir: <b>%${L.posPct.toFixed(1)}</b> portföy · <b>${fmtTRY0(L.posValTRY)}</b> <span class="muted">${fmtNum(L.shares, 2)} adet</span></div>` : ""}
+      ${L ? `<div class="cc-pos">Gir: <b>%${L.posPct.toFixed(1)}</b> portföy · <b>${fmtTRY0(L.posValTRY)}</b> <span class="muted">${fmtNum(L.shares, 2)} adet</span></div>` : ""}
       <div class="cc-acts">${swFromBtn({ symbol: sym, entry: item.entry, stop: item.stop, target: item.target, note: item.setup?.label || "" })}</div>`;
   } else {
     body = `<div class="cc-chips"><span class="cc-verdict v-${v.tone}">${v.label}</span></div>
@@ -452,7 +452,7 @@ function renderOppBacktest(h) {
   const el = $("#oppBacktest");
   if (!el) return;
   if (!h || !h.totalPicks) {
-    el.innerHTML = `<div class="opp-bt"><div class="opp-bt-h">📊 Geçmiş fırsatların sonucu</div><div class="opp-bt-empty">Sonuç birikiyor — her gün Top 10 kaydedilir, hedef/stop vurdukça istatistik buraya düşer. Birkaç gün sonra anlamlı olur.</div></div>`;
+    el.innerHTML = `<div class="opp-bt"><div class="opp-bt-h">Geçmiş fırsatların sonucu</div><div class="opp-bt-empty">Sonuç birikiyor — her gün Top 10 kaydedilir, hedef/stop vurdukça istatistik buraya düşer. Birkaç gün sonra anlamlı olur.</div></div>`;
     return;
   }
   const r = h.realized;
@@ -466,7 +466,7 @@ function renderOppBacktest(h) {
     `<span class="obt-pill ${s.ret > 0 ? "pos" : "neg"}" title="${s.date} · ${s.status === "target" ? "hedef" : "stop"}">${s.symbol} ${fmtPct(s.ret)}</span>`
   ).join("");
   el.innerHTML = `<div class="opp-bt">
-    <div class="opp-bt-h">📊 Geçmiş fırsatların sonucu <span class="muted">${h.firstDate || "?"}'den beri · ${h.days} gün · ${h.totalPicks} öneri izlendi</span></div>
+    <div class="opp-bt-h">Geçmiş fırsatların sonucu <span class="muted">${h.firstDate || "?"}'den beri · ${h.days} gün · ${h.totalPicks} öneri izlendi</span></div>
     ${stats}
     ${recent ? `<div class="opp-bt-list">${recent}</div>` : ""}
     <div class="opp-bt-note">“Geçmiş Top 10'a uysaydım ne olurdu?” — her gün listenin anlık kaydı alınır, sonraki mumlarla hedef mi stop mu önce vurdu ölçülür. Skoru gerçek sonuçla kalibre eder; geleceğin garantisi değildir.</div>
@@ -482,7 +482,7 @@ function oppPositionWindow(o) {
   if (!L) return "";
   const rewardTRY = L.shares * (o.target - o.entry) * ps.usdtry;
   return `<div class="opp-pos">
-    <div class="opp-pos-main">💰 Gir: <b>%${L.posPct.toFixed(1)}</b> portföy · <b>${fmtTRY0(L.posValTRY)}</b> <span class="muted">(≈${fmtUSD0(L.posVal)} · ${fmtNum(L.shares, 2)} adet${L.capped ? " · %25 sınırı" : ""})</span></div>
+    <div class="opp-pos-main">Gir: <b>%${L.posPct.toFixed(1)}</b> portföy · <b>${fmtTRY0(L.posValTRY)}</b> <span class="muted">(≈${fmtUSD0(L.posVal)} · ${fmtNum(L.shares, 2)} adet${L.capped ? " · %25 sınırı" : ""})</span></div>
     <div class="opp-pos-rr"><span class="neg">stopta −${fmtTRY0(L.riskTRY)}</span> &nbsp;→&nbsp; <span class="pos">hedefte +${fmtTRY0(rewardTRY)}</span> &nbsp;<b>${o.rr != null ? o.rr.toFixed(1) + "R" : ""}</b></div>
   </div>`;
 }
@@ -492,7 +492,7 @@ function oppScaledLine(o) {
   const sp = scaledEntryPlan(o);
   if (!sp) return "";
   const parts = sp.tranches.map((t) => `<span>%${t.pct}&nbsp;<b>${fmtUSD(t.price)}</b></span>`).join('<i>·</i>');
-  return `<div class="opp-scaled">🪜 ${sp.isBreakout ? "Piramit" : "Kademeli"}: ${parts} <span class="muted">→ ort ${fmtUSD(sp.avgCost)}</span></div>`;
+  return `<div class="opp-scaled">${sp.isBreakout ? "Piramit" : "Kademeli"}: ${parts} <span class="muted">→ ort ${fmtUSD(sp.avgCost)}</span></div>`;
 }
 
 // Kısa $ biçimi (insider değeri için): $1.2M / $850K
@@ -516,15 +516,15 @@ function fmtNewsDate(dt) {
 function oppInsiderChip(ins) {
   if (!ins || (!ins.buys && !ins.sells)) return "";
   if (ins.signal === "buy")
-    return `<span class="opp-ins ins-buy" title="Son 90 gün yönetici açık piyasa alımı">🟢 Insider alım ${fmtMoneyShort(ins.buyValue)}${ins.lastBuy ? ` · ${ins.lastBuy}` : ""}</span>`;
+    return `<span class="opp-ins ins-buy" title="Son 90 gün yönetici açık piyasa alımı">Insider alım ${fmtMoneyShort(ins.buyValue)}${ins.lastBuy ? ` · ${ins.lastBuy}` : ""}</span>`;
   if (ins.signal === "sell")
-    return `<span class="opp-ins ins-sell" title="Son 90 gün net yönetici satışı">🔴 Insider satış</span>`;
-  return `<span class="opp-ins ins-neu" title="Son 90 gün alım+satım karışık">⚪ Insider karışık</span>`;
+    return `<span class="opp-ins ins-sell" title="Son 90 gün net yönetici satışı">Insider satış</span>`;
+  return `<span class="opp-ins ins-neu" title="Son 90 gün alım+satım karışık">Insider karışık</span>`;
 }
 // Son haberler nöbeti
 function oppNews(news) {
   if (!Array.isArray(news) || !news.length) {
-    return `<div class="opp-news empty">📰 Son 7 günde öne çıkan haber yok</div>`;
+    return `<div class="opp-news empty">Son 7 günde öne çıkan haber yok</div>`;
   }
   const rows = news.slice(0, 2).map((n) =>
     `<a class="opp-news-row" href="${n.url || "#"}" target="_blank" rel="noopener" title="${(n.headline || "").replace(/"/g, "'")}">
@@ -532,7 +532,7 @@ function oppNews(news) {
        <span class="onr-head">${(n.headline || "").replace(/</g, "&lt;")}</span>
        <span class="onr-meta">${n.source ? n.source + " · " : ""}${fmtNewsDate(n.dt)}</span>
      </a>`).join("");
-  return `<div class="opp-news"><div class="opp-news-h">📰 Haber nöbeti</div>${rows}</div>`;
+  return `<div class="opp-news"><div class="opp-news-h">Haber nöbeti</div>${rows}</div>`;
 }
 
 // Hero için geniş mini grafik (giriş/stop/hedef referans çizgili)
@@ -570,7 +570,7 @@ function oppChips(o) {
   return `<div class="opp-chips">
     <span class="sw-vb v-${v.tone}">${v.label}</span>
     ${su ? `<span class="chip ${su.cls}">${o.setup.label}</span>` : ""}
-    ${pat ? `<span class="chip pat-${patTone}">📐 ${pat.label}</span>` : ""}
+    ${pat ? `<span class="chip pat-${patTone}">${pat.label}</span>` : ""}
     ${o.weekly ? `<span class="chip wk-${o.weekly.tone}">Haftalık ${WK_ARROW[o.weekly.dir] || ""}</span>` : ""}
     <span class="sw-grade ${GRADE_CLS[o.grade] || "g-d"}">${o.grade}</span>
     ${oppInsiderChip(o.insider)}
@@ -597,17 +597,17 @@ function oppDetailBody(o) {
     ${whyHTML ? `<ul class="opp-why">${whyHTML}</ul>` : ""}
     ${oppNews(o.news)}
     <div class="opp-acts">
-      <button class="btn ghost sm opp-chart">📊 Grafik + çizgiler</button>
+      <button class="btn ghost sm opp-chart">Grafik + çizgiler</button>
       ${swFromBtn({ symbol: o.symbol, entry: o.entry, stop: o.stop, target: o.target, note: o.setup?.label || "" })}
     </div>`;
 }
 
 // #1 fırsat: öne çıkan büyük "Haftanın Seçimi" kartı
 function oppHeroCard(o) {
-  const tags = `${o.owned ? `<span class="chip mini">portföy</span>` : ""}${o.watched ? `<span class="chip mini watch">izleme</span>` : ""}${o.cuma ? `<span class="chip mini cuma">⭐ Cuma Hoca</span>` : ""}`;
+  const tags = `${o.owned ? `<span class="chip mini">portföy</span>` : ""}${o.watched ? `<span class="chip mini watch">izleme</span>` : ""}${o.cuma ? `<span class="chip mini cuma">${svgIcon("star","ic-xs")} Cuma Hoca</span>` : ""}`;
   const hot = o.insider?.signal === "buy" || (Array.isArray(o.news) && o.news.length);
   return `<div class="opp-hero${hot ? " hot" : ""}" data-sym="${o.symbol}">
-    <div class="opp-hero-badge">⭐ Haftanın Seçimi</div>
+    <div class="opp-hero-badge">Haftanın Seçimi</div>
     <div class="opp-hero-grid">
       <div class="opp-hero-left">
         <div class="opp-hero-id">
@@ -632,8 +632,8 @@ function oppTableRow(o, i) {
   const su = o.setup ? SETUP_META[o.setup.type] : null;
   const v = o.verdict || { tone: "warn", label: "—" };
   const hot = o.insider?.signal === "buy" || (Array.isArray(o.news) && o.news.length);
-  const flag = o.insider?.signal === "buy" ? "🟢" : (Array.isArray(o.news) && o.news.length ? "📰" : "");
-  const tags = `${o.owned ? `<span class="chip mini">portföy</span>` : ""}${o.cuma ? `<span class="chip mini cuma">⭐</span>` : ""}`;
+  const flag = o.insider?.signal === "buy" ? "·i" : (Array.isArray(o.news) && o.news.length ? "·h" : "");
+  const tags = `${o.owned ? `<span class="chip mini">portföy</span>` : ""}${o.cuma ? `<span class="chip mini cuma">${svgIcon("star","ic-xs")}</span>` : ""}`;
   return `<div class="opp-row${hot ? " hot" : ""}" data-sym="${o.symbol}">
     <button class="opp-row-head" aria-expanded="false">
       <span class="orh-rank">#${i + 1}</span>
@@ -661,7 +661,7 @@ function renderOpportunities() {
   const ws = $("#oppWatchSyms");
   if (ws) {
     ws.innerHTML = (d.items || []).map((o) => {
-      const flag = o.insider?.signal === "buy" ? "🟢" : (Array.isArray(o.news) && o.news.length ? "📰" : "");
+      const flag = o.insider?.signal === "buy" ? "·i" : (Array.isArray(o.news) && o.news.length ? "·h" : "");
       return `<span class="ows-chip" data-seek="${o.symbol}">${o.symbol}${flag ? ` ${flag}` : ""}</span>`;
     }).join("");
   }
@@ -1069,7 +1069,7 @@ async function openChartModal(sym, ctx = null, fresh = false) {
     ${posCard}
     <div class="cm-ctx">
       <div class="cm-grade ${GRADE_CLS[pl.grade] || "g-d"}" title="Teknik kalite notu (A–D)">${pl.grade || "—"}</div>
-      <div class="cm-setup">${horizonChip}<span class="sw-trend">${pl.trend || "—"}</span>${pat ? `<span class="chip pat-${patTone}">📐 ${pat.label} ~%${pat.confidence}</span>` : ""}${wkChip}</div>
+      <div class="cm-setup">${horizonChip}<span class="sw-trend">${pl.trend || "—"}</span>${pat ? `<span class="chip pat-${patTone}">${pat.label} ~%${pat.confidence}</span>` : ""}${wkChip}</div>
     </div>
     ${lensHTML}
     <div class="cm-sec">Teknik göstergeler</div>
