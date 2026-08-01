@@ -5,6 +5,7 @@ import { readFile, readFile as _rf } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import { join, extname } from "node:path";
 import { qmAnalyze, qmADR } from "../qm.js";
+import { swingProven } from "../swing-proven.js";
 
 const ROOT = join(process.cwd(), "public");
 // Gerçek mum önbelleği — Meydan Okuma sekmesi önizlemede de gerçek fiyatlarla ölçülsün
@@ -585,7 +586,7 @@ const server = createServer(async (req, res) => {
       res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify({ ok: true })); return;
     }
     res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({ trades, live, goal })); return;
+    res.end(JSON.stringify({ trades, live, goal, proven: swingProven(trades) })); return;
   }
   // Swing kısmi satış (ana para çek) — gerçek satışı simüle et
   if (/^\/api\/swing-trades\/[^/]+\/sell$/.test(url) && req.method === "POST") {

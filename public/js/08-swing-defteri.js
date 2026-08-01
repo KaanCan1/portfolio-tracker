@@ -2,9 +2,11 @@
  * app.js'in SIRALI dilimi (bölme: 15 Tem 2026). Dosyalar index.html'deki sırayla yüklenir;
  * klasik script'ler global kapsamı paylaşır — sıra değiştirme, dosyayı IIFE'ye sarma. */
 /* ============================ Swing Defteri ============================
- * Açtığın gerçek swing pozisyonlarını stop + hedef fiyatla kaydeder; aylık
- * realize kazancı 12 ay boyunca aylık hedefe ($600-700) karşı izler. Amaç:
- * disiplin + kazanç hedefi takibi. Holdings/işlem geçmişinden bilinçli ayrı. */
+ * Açtığın gerçek swing pozisyonlarını stop + hedef fiyatla kaydeder; aylık realize
+ * kazancı 12 ay boyunca izler. Hero metriği DİLEK değil ÖLÇÜM: "Kanıtlanmış Aylık
+ * Katkı" = son 3 ayın realize'i ÷ geçen ay + bootstrap %90 aralığı (sunucu hesaplar,
+ * bkz. swingProven). Aylık hedef ikincil referanstır — veri desteklemiyorsa kart bunu
+ * açıkça söyler. Holdings/işlem geçmişinden bilinçli ayrı. */
 let SWINGDECK = { trades: [], live: {}, goal: { min: 600, max: 700 }, _loaded: false };
 const SW_MONTHS = ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"];
 // Aylık takip Haziran 2026'dan SABİT 12 ay başlar (sene filtresi yok, not defteri mantığı).
@@ -25,7 +27,7 @@ async function loadSwingDeck() {
   if (el && !SWINGDECK._loaded) el.innerHTML = `<div class="radar-empty">↻ Swing defteri yükleniyor…</div>`;
   try {
     const d = await (await fetch("/api/swing-trades")).json();
-    SWINGDECK = { trades: d.trades || [], live: d.live || {}, goal: d.goal || { min: 600, max: 700 }, _loaded: true };
+    SWINGDECK = { trades: d.trades || [], live: d.live || {}, goal: d.goal || { min: 600, max: 700 }, proven: d.proven || null, _loaded: true };
   } catch { SWINGDECK._loaded = true; }
   renderSwingDeck();
   renderDailyBoard(); // home "Swing Nöbeti" şeridi güncel swing verisiyle yenilensin
@@ -284,6 +286,85 @@ function decisionScorecardPanel(closed) {
   </section>`;
 }
 
+/* ---- Kanıtlanmış Aylık Katkı kartı ------------------------------------------------
+ * Eski hero "Bu Ay Realize / Hedef $600–700" idi: her gün ulaşılamayan bir çubuk.
+ * Yerine sunucunun ölçtüğü şey geçer — son 3 ayın realize'i ÷ geçen ay, üstünde
+ * bootstrap %90 aralığı. Aralık 0'ı içeriyorsa kart bunu SÖYLER; hedef önerisi de
+ * yalnız aralık tamamen 0'ın üstündeyse verilir. Hedef ikincil referansa düşer. */
+const SW_VERDICT = {
+  pozitif:  { tone: "ok",   txt: "Aralık tamamen 0'ın üstünde — katkı istatistiksel olarak gerçek." },
+  negatif:  { tone: "bad",  txt: "Aralık tamamen 0'ın altında — defter şu an para kaybettiriyor." },
+  gurultu:  { tone: "warn", txt: "Aralık 0'ı içeriyor — katkı gürültüden ayırt edilemiyor." },
+  yetersiz: { tone: "mute", txt: "Hüküm için yeterli kapanmış işlem yok." },
+};
+
+function provenCard(goal) {
+  const p = SWINGDECK.proven;
+  const editBtn = `<button class="sw-goal-target" id="swGoalEditBtn" title="Aylık hedefi düzenle">
+      Hedef<br><b>$${goal.min}–${goal.max}</b><span>/ay</span>
+    </button>`;
+  if (!p) {
+    return `<div class="sw-goal-card sw-proven">
+      <div class="sw-goal-head"><div><div class="sw-goal-lbl">Kanıtlanmış Aylık Katkı</div>
+        <div class="sw-goal-val">—</div></div>${editBtn}</div>
+      <div class="sw-goal-foot"><span class="sw-muted">ölçüm yüklenemedi</span></div>
+    </div>`;
+  }
+  const v = SW_VERDICT[p.verdict] || SW_VERDICT.yetersiz;
+  const cls = p.perMonth > 0 ? "pos" : p.perMonth < 0 ? "neg" : "";
+  // işaretli $ — fmtUSD0 negatifi "$-248" basar, burada "−$248" istiyoruz
+  const s$ = (n) => (n > 0 ? "+" : n < 0 ? "−" : "") + fmtUSD0(Math.abs(n));
+
+  // --- güven aralığı şeridi: alan [lo,hi] ∪ {0, nokta tahmin}, %8 pay ---
+  let ciBar = "";
+  if (p.ci) {
+    const lo = Math.min(p.ci.lo, 0, p.perMonth), hi = Math.max(p.ci.hi, 0, p.perMonth);
+    const pad = Math.max((hi - lo) * 0.08, 1);
+    const d0 = lo - pad, d1 = hi + pad, span = d1 - d0 || 1;
+    const at = (x) => ((x - d0) / span) * 100;
+    const pc = (x) => at(x).toFixed(2);
+    ciBar = `
+      <div class="sw-ci" title="1000 yeniden örneklemeyle (bootstrap) %90 güven aralığı">
+        <div class="sw-ci-band ${v.tone}" style="left:${pc(p.ci.lo)}%;width:${(at(p.ci.hi) - at(p.ci.lo)).toFixed(2)}%"></div>
+        <div class="sw-ci-zero" style="left:${pc(0)}%"></div>
+        <div class="sw-ci-dot ${cls}" style="left:${pc(p.perMonth)}%"></div>
+      </div>
+      <div class="sw-ci-ax">
+        <span>${s$(p.ci.lo)}</span><span class="sw-ci-ax-c">%90 aralık</span><span>${s$(p.ci.hi)}</span>
+      </div>`;
+  }
+
+  // --- alt satır: hedef önerisi ya da "veri hedef koymayı desteklemiyor" ---
+  let advice;
+  if (p.suggest) {
+    advice = `Veri savunulabilir hedef olarak <b>$${p.suggest.min}–${p.suggest.max}/ay</b> diyor.`;
+  } else if (p.verdict === "yetersiz") {
+    advice = `En az <b>5</b> kapanmış işlem gerekiyor — şu an <b>${p.n}</b>.`;
+  } else {
+    advice = `Veri şu an bir aylık gelir hedefini <b>desteklemiyor</b>.`;
+  }
+  const gap = p.perMonth > 0 && goal.min > 0 && goal.min / p.perMonth >= 2
+    ? `<div class="sw-pv-gap">Mevcut hedef ($${goal.min}) kanıtlanmış katkının <b>${Math.round(goal.min / p.perMonth)} katı</b>.</div>` : "";
+
+  return `
+    <div class="sw-goal-card sw-proven">
+      <div class="sw-goal-head">
+        <div>
+          <div class="sw-goal-lbl">Kanıtlanmış Aylık Katkı <i>son ${p.monthsBack} ay · ölçüm</i></div>
+          <div class="sw-goal-val ${cls}">${s$(p.perMonth)}<span class="sw-pv-unit">/ay</span></div>
+        </div>
+        ${editBtn}
+      </div>
+      ${ciBar}
+      <div class="sw-goal-foot">
+        <span class="sw-verdict ${v.tone}">${v.txt}</span>
+        <span class="sw-muted">${p.n} işlem · ${p.wins}K/${p.losses}Z · ${p.spanMonths} ay</span>
+      </div>
+      <div class="sw-pv-advice">${advice}</div>
+      ${gap}
+    </div>`;
+}
+
 function renderSwingDeck() {
   const el = $("#swingDeck");
   if (!el) return;
@@ -315,36 +396,16 @@ function renderSwingDeck() {
   const thisMonth = months[mIndex[curKey]]?.total || 0;
   const total12 = months.reduce((a, m) => a + m.total, 0);
   const openPnl = open.reduce((a, t) => a + (swEnrich(t).pnl || 0), 0);
-  // hedefi tutturan ay sayısı (en az min)
-  const hitMonths = months.filter((m) => m.total >= goal.min).length;
-  const activeMonths = months.filter((m) => m.count > 0).length;
 
-  // --- hero kartları ---
-  const pct = goal.min ? Math.max(0, Math.min(120, (thisMonth / goal.min) * 100)) : 0;
-  const goalTone = thisMonth >= goal.min ? "ok" : thisMonth > 0 ? "warm" : "zero";
+  // --- hero kartları: dilek değil ÖLÇÜM önde ---
   const pnlCls = (n) => (n > 0 ? "pos" : n < 0 ? "neg" : "");
   const hero = `
     <div class="sw-hero">
-      <div class="sw-goal-card">
-        <div class="sw-goal-head">
-          <div>
-            <div class="sw-goal-lbl">Bu Ay Realize Kazanç</div>
-            <div class="sw-goal-val ${pnlCls(thisMonth)}">${fmtUSD0(thisMonth)}</div>
-          </div>
-          <button class="sw-goal-target" id="swGoalEditBtn" title="Aylık hedefi düzenle">
-            Hedef<br><b>$${goal.min}–${goal.max}</b><span>/ay</span>
-          </button>
-        </div>
-        <div class="sw-goal-bar">
-          <div class="sw-goal-band" style="left:${((goal.min / goal.max) * 100).toFixed(1)}%;right:0"></div>
-          <div class="sw-goal-fill ${goalTone}" style="width:${Math.max(0, Math.min(100, (thisMonth / goal.max) * 100)).toFixed(1)}%"></div>
-        </div>
-        <div class="sw-goal-foot">
-          ${thisMonth >= goal.min
-            ? `<span class="pos">✓ Aylık hedef tutturuldu</span>`
-            : `<span>Hedefe <b>${fmtUSD0(Math.max(0, goal.min - thisMonth))}</b> kaldı</span>`}
-          <span class="sw-muted">${pct.toFixed(0)}% · alt hedef</span>
-        </div>
+      ${provenCard(goal)}
+      <div class="sw-mini">
+        <div class="sw-mini-lbl">Bu Ay Realize</div>
+        <div class="sw-mini-val ${pnlCls(thisMonth)}">${fmtUSD0(thisMonth)}</div>
+        <div class="sw-mini-sub">${months[mIndex[curKey]]?.count || 0} kapanış bu ay</div>
       </div>
       <div class="sw-mini">
         <div class="sw-mini-lbl">Açık Pozisyon K/Z</div>
@@ -356,18 +417,21 @@ function renderSwingDeck() {
         <div class="sw-mini-val ${pnlCls(total12)}">${fmtUSD0(total12)}</div>
         <div class="sw-mini-sub">${closed.length} kapanmış işlem</div>
       </div>
-      <div class="sw-mini">
-        <div class="sw-mini-lbl">Hedefi Tutturan Ay</div>
-        <div class="sw-mini-val">${hitMonths}<span class="sw-mini-den"> / ${activeMonths || 0}</span></div>
-        <div class="sw-mini-sub">işlem yapılan ${activeMonths} ayda</div>
-      </div>
     </div>`;
 
   // --- 12 ay bar grafik ---
-  const maxAbs = Math.max(goal.max, ...months.map((m) => Math.abs(m.total)), 1);
+  // Ölçek hedefe göre kurulunca gerçek aylar okunamaz hâle gelir (hedef 20× veriyse
+  // bütün barlar zemine yapışır). Hedef veriden çok uzaksa ölçeği VERİYE kur, bandı
+  // grafik dışına al — grafik gerçeği göstersin, dileği değil.
+  const dataMax = Math.max(...months.map((m) => Math.abs(m.total)), 1);
+  const goalFits = goal.max <= dataMax * 3;
+  const maxAbs = goalFits ? Math.max(goal.max, dataMax) : dataMax;
   const scale = maxAbs * 1.12;
   const goalTopPct = (1 - goal.max / scale) * 100;   // band üst kenarı (yukarıdan %)
   const goalBotPct = (1 - goal.min / scale) * 100;   // band alt kenarı
+  // Kanıtlanmış aylık katkı çizgisi — hedefin yanında gerçeğin nerede durduğu
+  const pv = SWINGDECK.proven;
+  const pvTopPct = pv && pv.perMonth > 0 && pv.perMonth <= scale ? (1 - pv.perMonth / scale) * 100 : null;
   const zeroFromTop = 100;                             // 0 çizgisi en altta (pozitif veriler)
   const bars = months.map((m) => {
     const h = Math.max(0, (Math.max(0, m.total) / scale) * 100);
@@ -391,14 +455,18 @@ function renderSwingDeck() {
       <div class="panel-head">
         <div>
           <h2>Aylık Swing Kazancı <span class="sw-chip">12 ay</span></h2>
-          <span class="chart-sub">Her ay realize ettiğin kâr · yeşil bant = aylık kazanç hedefi ($${goal.min}–${goal.max})</span>
+          <span class="chart-sub">Her ay realize ettiğin kâr${goalFits ? ` · yeşil bant = aylık hedef ($${goal.min}–${goal.max})` : ""}${pvTopPct != null ? ` · kesikli çizgi = kanıtlanmış katkı` : ""}</span>
         </div>
         <button class="btn primary sm" id="swAddBtn">+ Swing Seç</button>
       </div>
       <div class="sw-chart">
-        <div class="sw-goalband" style="top:${goalTopPct}%;height:${goalBotPct - goalTopPct}%">
-          <span class="sw-goalband-lbl">hedef $${goal.min}–${goal.max}</span>
-        </div>
+        ${goalFits
+          ? `<div class="sw-goalband" style="top:${goalTopPct}%;height:${goalBotPct - goalTopPct}%">
+               <span class="sw-goalband-lbl">hedef $${goal.min}–${goal.max}</span>
+             </div>`
+          : `<div class="sw-goal-off">hedef $${goal.min}–${goal.max} · grafik dışı</div>`}
+        ${pvTopPct != null
+          ? `<div class="sw-pvline${pvTopPct > 86 ? " low" : ""}" style="top:${pvTopPct.toFixed(2)}%"><span class="sw-pvline-lbl">kanıtlanmış ${fmtUSD0(pv.perMonth)}/ay</span></div>` : ""}
         <div class="sw-bars">${bars}</div>
       </div>
     </section>`;

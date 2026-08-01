@@ -106,6 +106,19 @@ $("#alertsList")?.addEventListener("click", async (e) => {
   if (d) { try { await fetch(`/api/alerts/${d.dataset.alDel}`, { method: "DELETE" }); await load(); } catch {} }
 });
 
+/* "Bu Ay Realize" KPI'ının alt satırı. Eskiden "hedefin %X kadarı" yazardı — hedef
+ * kanıtlanmamışken bu oran anlamsızdı. Artık swingProven ölçümünü gösterir (SWINGDECK
+ * 08'de tanımlı; bu fonksiyon yalnız render sırasında, tüm dosyalar yüklendikten
+ * sonra çağrılır). */
+function swProvenSub() {
+  const p = typeof SWINGDECK !== "undefined" ? SWINGDECK.proven : null;
+  if (!p || p.verdict === "yetersiz") return "kanıtlanmış katkı: henüz ölçülemiyor";
+  const s = (p.perMonth > 0 ? "+" : p.perMonth < 0 ? "−" : "") + fmtUSD0(Math.abs(p.perMonth));
+  return p.verdict === "gurultu"
+    ? `kanıtlanmış katkı ${s}/ay · gürültüden ayrışmıyor`
+    : `kanıtlanmış katkı ${s}/ay`;
+}
+
 function renderDailyBoard() {
   const el = $("#dailyBoard");
   if (!el) return;
@@ -117,7 +130,6 @@ function renderDailyBoard() {
 
   const grandTRY = S.meta?.totals?.grandTRY ?? null;
   const totalUSD = (grandTRY != null && usdtry) ? grandTRY / usdtry : null;
-  const dNow = new Date();
 
   /* ---------- modern minimal kart yardımcıları ---------- */
   const head = (icon, accent, ttl, sub) =>
@@ -171,17 +183,9 @@ function renderDailyBoard() {
   const avgRecovered = recVals.length ? recVals.reduce((a, b) => a + b, 0) / recVals.length : null;
   const unrealPct = totalCostBasis > 0 ? (totalUnreal / totalCostBasis) * 100 : null;
 
-  /* ---------- realize / aylık hedef ---------- */
-  const swGoal = SWINGDECK.goal || { min: 600, max: 700 };
-  const gMin = swGoal.min || 600, gMax = swGoal.max || 700;
+  /* ---------- bu ayki realize ---------- */
   const curKey = today.slice(0, 7);
   const thisMonth = swingMonthRealize(curKey);
-  const pm = dNow.getMonth() - 1, prevKey = `${dNow.getFullYear() + (pm < 0 ? -1 : 0)}-${String(((pm + 12) % 12) + 1).padStart(2, "0")}`;
-  const lastMonth = swingMonthRealize(prevKey);
-  let ytdRealize = 0;
-  for (let m = 0; m <= dNow.getMonth(); m++) ytdRealize += swingMonthRealize(`${dNow.getFullYear()}-${String(m + 1).padStart(2, "0")}`);
-  const daysLeft = new Date(dNow.getFullYear(), dNow.getMonth() + 1, 0).getDate() - dNow.getDate();
-  const dailyNeeded = daysLeft > 0 ? Math.max(0, gMin - thisMonth) / daysLeft : 0;
 
   /* ========== KPI şeridi (Net Değer · Açık K/Z · Bu Ay Realize · Risksiz) ========== */
   let kpiStrip = "";
@@ -190,7 +194,7 @@ function renderDailyBoard() {
     kpiStrip = `<div class="db-card db-kpis">
       ${kpi("Net Değer", fmtUSD0(totalUSD), delta(dayUSD, dayPct) || `<span class="db-kpi-muted">bugün —</span>`)}
       ${kpi("Açık K/Z", `<span class="${cls(totalUnreal)}">${sUSD(totalUnreal)}</span>`, unrealPct != null ? `maliyetin ${unrealPct >= 0 ? "+" : ""}${unrealPct.toFixed(1)}%'i` : "açık pozisyon kâr/zarar")}
-      ${kpi("Bu Ay Realize", `<span class="${cls(thisMonth)}">${fmtUSD0(thisMonth)}</span>`, `hedefin %${Math.max(0, Math.min(100, Math.round((thisMonth / gMin) * 100)))} kadarı`)}
+      ${kpi("Bu Ay Realize", `<span class="${cls(thisMonth)}">${fmtUSD0(thisMonth)}</span>`, swProvenSub())}
       ${kpi("Risksiz Oran", `${freePct.toFixed(0)}<span class="db-kpi-pct">%</span>`, `${fmtUSD0(freeValue)} bedava değer`)}
     </div>`;
   }

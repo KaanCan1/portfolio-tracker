@@ -8,6 +8,8 @@ import { readFileSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { qmAnalyze } from "./qm.js";
+import { bootCI, mulberry32, swingProven } from "./swing-proven.js";
+import { deriveCashTarget } from "./cash-target.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DATA_FILE = join(__dirname, "portfolio.json");
@@ -2171,6 +2173,13 @@ function vixRegime(vix) {
   };
 }
 
+/* Türetilmiş hedef nakit modeli ./cash-target.js'te (saf hesap, tek başına test edilebilir).
+ * Türetme portföy toplamı + altın değeri ister; bunları yalnız ağır /api/portfolio hesaplar.
+ * Hafif /api/sentiment (kartların ön-render'ı) aynı sayıyı gösterebilsin diye son bilinen
+ * bağlam burada tutulur — yoksa kart önce %20–25 yazıp sonra %7–12'ye atlardı. Çıktı değil
+ * GİRDİ önbelleklenir: VIX bandı değişmişse hedef güncel bantla yeniden türetilir. */
+let LAST_CASH_CTX = null; // { grandTotal, goldTRY, flows }
+
 /* ----------------- Sinyal motoru: RSI / SMA / analist ----------------
  * Teknikler (yavaş değişir) 6 saatte bir arka planda yenilenir; canlı fiyatla
  * birleştirilip her istekte sinyal + kâr-al önerisi üretilir.
@@ -3984,7 +3993,18 @@ app.get("/api/sentiment", async (_req, res) => {
   let regime = null;
   if (vix && isFinite(vix.value)) {
     const r = vixRegime(vix.value);
-    if (r) regime = { vix: vix.value, vixChangePct: vix.changePct, stale: !!vix.stale, ...r };
+    if (r) {
+      // Son bilinen portföy bağlamıyla aynı türetmeyi uygula — ön-render ile ağır
+      // çağrı aynı sayıyı göstersin. Bağlam yoksa (soğuk başlangıç) VIX temeli kalır.
+      const derived = LAST_CASH_CTX && deriveCashTarget(r.targetCash, LAST_CASH_CTX);
+      if (derived) {
+        r.baseCash = derived.baseCash;
+        r.targetCash = derived.targetCash;
+        r.targetInvested = [100 - derived.targetCash[1], 100 - derived.targetCash[0]];
+        r.derive = derived;
+      }
+      regime = { vix: vix.value, vixChangePct: vix.changePct, stale: !!vix.stale, ...r };
+    }
   }
   // "Sen Yokken": rejim/duygu bölge değişimini yakala (SWR önbellekli — maliyetsiz)
   try { await feedGet(); feedCheckMarket(regime, fearGreed); } catch {}
@@ -4191,11 +4211,25 @@ app.get("/api/portfolio", async (_req, res) => {
     const grandTotal = totalMarket + cashTL;
     const openTotal = totalOpen + cashTL;
 
-    // ---- Piyasa rejimi: VIX bandına göre hedef nakit vs gerçek nakit ----
+    // ---- Piyasa rejimi: hedef nakit vs gerçek nakit ----
+    // vixRegime piyasa temelini verir; deriveCashTarget onu portföyün gerçek
+    // kısıtlarıyla (altın rezervi + bilinen dış akış) düzeltir. targetCash ALANI
+    // türetilmiş değerle DEĞİŞTİRİLİR ki tüm tüketiciler (rejim kartı, fırsat
+    // özeti, pozisyon boyutlama, günlük rapor) tek ve doğru sayıyı görsün.
     let regime = null;
     if (vix && isFinite(grandTotal) && grandTotal > 0) {
       const r = vixRegime(vix.value);
       if (r) {
+        const goldTRY = enriched.reduce(
+          (s, h) => (h.type === "gold" && h.live?.marketValueTRY ? s + h.live.marketValueTRY : s), 0);
+        LAST_CASH_CTX = { grandTotal, goldTRY, flows: data.flows || [] }; // /api/sentiment ödünç alır
+        const derived = deriveCashTarget(r.targetCash, { grandTotal, goldTRY, flows: data.flows });
+        if (derived) {
+          r.baseCash = derived.baseCash;                 // VIX temeli (kart bunu da gösterir)
+          r.targetCash = derived.targetCash;             // türetilmiş hedef
+          r.targetInvested = [100 - derived.targetCash[1], 100 - derived.targetCash[0]];
+          r.derive = derived;
+        }
         const cashPct = (cashTL / grandTotal) * 100;
         const [lo, hi] = r.targetCash;
         let status, advice;
@@ -5754,7 +5788,7 @@ app.get("/api/swing-trades", async (_req, res) => {
         if (map[sym]) live[sym] = { price: map[sym].price, stale: !!map[sym].stale };
       }
     }
-    res.json({ trades, live, goal: data.swingGoal || { min: 600, max: 700 } });
+    res.json({ trades, live, goal: data.swingGoal || { min: 600, max: 700 }, proven: swingProven(trades) });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -6714,33 +6748,10 @@ function labReplay(ctx, P) {
   };
 }
 
-/* ===== Bootstrap güven aralığı — "bu fark gerçek mi, şans mı?" ====================
- * Nokta tahmini (ör. +0.88R) TEK bir tarihsel diziden gelir. 33 işlemde birkaç büyük
- * kazanç ortalamayı taşıyorsa, işlemler biraz farklı sırayla gelseydi sonuç bambaşka
- * olurdu. Yeniden örnekleme (with replacement) bunu ölçer: aynı işlem havuzundan 1000
- * alternatif geçmiş üretip istatistiğin nerede salındığına bakar.
- * Tohum SABİT → aynı parametre aynı sonucu verir (rastgelelik güveni bozmasın). */
-function mulberry32(seed) {
-  return function () {
-    seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
-    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
+/* Bootstrap güven aralığı (bootCI + mulberry32) ./swing-proven.js'te — saf hesap olduğu
+ * için oraya taşındı; Swing Defteri'nin "kanıtlanmış aylık katkı"sı ve Laboratuvar'ın
+ * fark aralığı AYNI fonksiyonu kullanır. Neden ve nasılı modülün başındaki notta. */
 const bMean = (a) => a.reduce((x, y) => x + y, 0) / a.length;
-function bootCI(arr, stat, iters = 1000, seed = 42) {
-  if (!arr || arr.length < 2) return null;
-  const rnd = mulberry32(seed), out = [];
-  const samp = new Array(arr.length);
-  for (let k = 0; k < iters; k++) {
-    for (let i = 0; i < arr.length; i++) samp[i] = arr[(rnd() * arr.length) | 0];
-    out.push(stat(samp));
-  }
-  out.sort((a, b) => a - b);
-  const q = (p) => out[Math.min(out.length - 1, Math.floor(p * out.length))];
-  return { lo: +q(0.05).toFixed(2), med: +q(0.5).toFixed(2), hi: +q(0.95).toFixed(2) };
-}
 /* ===== Walk-forward — "bu ayarlar gerçek mi, bu pencereye mi uydurulmuş?" ==========
  * Parametre çevirerek getiriyi yükseltmek KOLAYDIR: yeterince knob çevirirsen her
  * veri setinde harika görünen bir kombinasyon bulunur. Gerçek soru şudur: aynı ayar

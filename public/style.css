@@ -174,6 +174,12 @@ body {
 .rb-marker { position: absolute; top: -3px; width: 3px; height: 16px; border-radius: 2px; background: var(--ink); transform: translateX(-50%); }
 .regime-legend { display: flex; justify-content: space-between; gap: 12px; margin-top: 8px; font-size: 12.5px; color: var(--muted); }
 .regime-legend b { color: var(--ink); }
+/* Hedef nakdin nasıl türetildiği — sihirli sayı bırakma, hesabı göster */
+.regime-derive { margin-top: 7px; padding-top: 7px; border-top: 1px dashed var(--line); font-size: 11.5px; line-height: 1.55; color: var(--muted); cursor: help; }
+.regime-derive b { color: var(--ink2); font-variant-numeric: tabular-nums; }
+.regime-derive .cd-neg { color: var(--amber-d); }
+.regime-derive .cd-pos { color: var(--ink2); }
+.regime-derive b.cd-out { color: var(--green-d); font-weight: 800; }
 .regime-advice { margin-top: 12px; padding: 9px 12px; border-radius: 10px; font-size: 13px; font-weight: 600; background: var(--bg2); }
 .regime-advice.deploy { background: #e9f5ee; color: var(--green-d); }
 .regime-advice.raise-cash { background: var(--red-bg); color: var(--red); }
@@ -1997,7 +2003,7 @@ tbody tr:hover .row-actions .btn.icon { color: var(--ink2); }
 .db-swrow.near { border-left-color: var(--amber); background: var(--amber-bg); color: var(--amber-d); }
 
 /* ====================== Swing Defteri ====================== */
-.sw-hero { display: grid; grid-template-columns: 1.6fr 1fr 1fr 1fr; gap: 11px; margin-bottom: 12px; }
+.sw-hero { display: grid; grid-template-columns: 2.3fr 1fr 1fr 1fr; gap: 11px; margin-bottom: 12px; }
 .sw-goal-card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; box-shadow: var(--shadow-md); display: flex; flex-direction: column; gap: 10px; }
 .sw-goal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .sw-goal-lbl { font-size: 12.5px; font-weight: 600; color: var(--muted); }
@@ -2014,6 +2020,42 @@ tbody tr:hover .row-actions .btn.icon { color: var(--ink2); }
 .sw-goal-foot .pos { color: var(--green-d); font-weight: 700; }
 .sw-goal-foot b { font-variant-numeric: tabular-nums; }
 .sw-muted { color: var(--muted); font-size: 12px; }
+
+/* ---- Kanıtlanmış Aylık Katkı kartı (ölçüm + bootstrap güven aralığı) ---- */
+.sw-proven .sw-goal-lbl i { display: block; font-style: normal; font-weight: 500; color: var(--muted); opacity: .85; font-size: 11px; margin-top: 1px; }
+/* Hüküm cümlesi uzun — bu kartta alt satır DAİMA yığılır, sayaçla yan yana sıkışmasın */
+.sw-proven .sw-goal-foot { flex-direction: column; align-items: flex-start; gap: 4px; }
+.sw-proven .sw-goal-target b { white-space: nowrap; }
+.sw-pv-unit { font-size: 14px; font-weight: 600; color: var(--muted); margin-left: 3px; letter-spacing: 0; }
+.sw-ci { position: relative; height: 13px; border-radius: 7px; background: var(--bg2); border: 1px solid var(--line); }
+.sw-ci-band { position: absolute; top: 0; bottom: 0; border-radius: 7px; background: var(--line-strong); opacity: .55; }
+.sw-ci-band.ok { background: var(--green); opacity: .45; }
+.sw-ci-band.warn { background: var(--amber); opacity: .32; }
+.sw-ci-band.bad { background: var(--red-d); opacity: .28; }
+.sw-ci-zero { position: absolute; top: -3px; bottom: -3px; width: 0; border-left: 1.5px solid var(--ink); opacity: .55; }
+.sw-ci-dot { position: absolute; top: 50%; width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px; border-radius: 50%; background: var(--ink); border: 2px solid var(--card); box-shadow: 0 0 0 1px var(--line-strong); }
+.sw-ci-dot.pos { background: var(--green-d); } .sw-ci-dot.neg { background: var(--red-d); }
+.sw-ci-ax { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; margin-top: -3px; }
+.sw-ci-ax-c { font-variant-numeric: normal; opacity: .75; }
+.sw-verdict { font-size: 12.5px; line-height: 1.35; }
+.sw-verdict.ok { color: var(--green-d); font-weight: 600; }
+.sw-verdict.warn { color: var(--amber-d); font-weight: 600; }
+.sw-verdict.bad { color: var(--red-d); font-weight: 600; }
+.sw-verdict.mute { color: var(--muted); }
+.sw-pv-advice { font-size: 12.5px; color: var(--ink2); border-top: 1px solid var(--line); padding-top: 9px; }
+.sw-pv-advice b { color: var(--ink); }
+.sw-pv-gap { font-size: 12px; color: var(--muted); margin-top: -4px; }
+.sw-pv-gap b { color: var(--ink2); }
+@media (max-width: 620px) {
+  .sw-goal-foot { flex-direction: column; align-items: flex-start; gap: 4px; }
+}
+/* 12 ay grafiği: kanıtlanmış katkı çizgisi + ölçek dışı hedef rozeti */
+.sw-pvline { position: absolute; left: 0; right: 0; border-top: 1.5px dashed var(--ink2); opacity: .7; pointer-events: none; z-index: 1; }
+/* Etiket sağda: sol taraf ilk ayların barlarıyla çakışıyordu. Çizgi dibe yakınsa
+   (katkı ölçeğe göre neredeyse sıfır) etiket çizginin ÜSTÜNE çıkar — ay eksenini ezmesin. */
+.sw-pvline-lbl { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); font-size: 10.5px; font-weight: 700; color: var(--ink2); background: var(--card); padding: 1px 6px; border-radius: 5px; white-space: nowrap; }
+.sw-pvline.low .sw-pvline-lbl { top: -3px; transform: translateY(-100%); }
+.sw-goal-off { position: absolute; right: 6px; top: 4px; font-size: 10.5px; font-weight: 700; color: var(--muted); background: var(--bg2); border: 1px solid var(--line); padding: 2px 7px; border-radius: 6px; z-index: 1; }
 .sw-arch { font-size: 9.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .3px; padding: 2px 6px; border-radius: 5px; background: var(--bg2); color: var(--muted); border: 1px solid var(--line); vertical-align: middle; }
 .sw-mini { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 13px 15px; box-shadow: var(--shadow-md); display: flex; flex-direction: column; gap: 4px; justify-content: center; }
 .sw-mini-lbl { font-size: 12px; font-weight: 600; color: var(--muted); }

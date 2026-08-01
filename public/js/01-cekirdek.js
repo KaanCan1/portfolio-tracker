@@ -317,6 +317,33 @@ function fngGaugeSVG(score) {
   </svg>`;
 }
 
+/* Hedef nakit artık düz bir VIX tablosu değil, türetilmiş bir sayı (bkz. cash-target.js).
+ * Kart bunu sihirli bir rakam olarak bırakmasın: temeli, altının düştüğü kısmı ve dış
+ * akış tamponunu tek satırda gösterir. Türetme temeli değiştirmediyse (altın yok +
+ * kayıtlı çekim yok) satır hiç çıkmaz — gereksiz gürültü olmasın. */
+function cashDeriveRow(rg) {
+  const d = rg?.derive;
+  if (!d || !d.changed) return "";
+  const parts = [`VIX temeli <b>%${d.baseCash[0]}–${d.baseCash[1]}</b>`];
+  if (d.gold.pct > 0)
+    parts.push(`<span class="cd-neg">altın rezervi −%${d.gold.pct}</span>`);
+  if (d.buffer.pct > 0)
+    parts.push(`<span class="cd-pos">dış akış tamponu +%${d.buffer.pct}</span>`);
+  const tip = [
+    `Hedef nakit türetilmiş bir sayıdır, düz VIX tablosu değil.`,
+    `VIX temeli: %${d.baseCash[0]}–${d.baseCash[1]} (fırsat cephanesi ihtiyacı).`,
+    d.gold.valueTRY > 0
+      ? `Altın ₺${d.gold.valueTRY.toLocaleString("tr-TR")} → %${Math.round(d.model.goldHaircut * 100)} iskontoyla ₺${d.gold.creditTRY.toLocaleString("tr-TR")} nakit-eşdeğeri sayılır (fiziksel satış spread'i, işçilik, T+3 gecikme). Cephanenin en fazla %${Math.round(d.model.goldMaxCover * 100)}'ini karşılayabilir — şu an %${d.gold.coversPct}'ini karşılıyor.`
+      : `Altın yok — cephanenin tamamı nakit olmalı.`,
+    d.buffer.monthlyOutflowTRY > 0
+      ? `Dış akış: son ${d.model.outflowLookback} ayın kayıtlı çekimlerinden aylık ₺${d.buffer.monthlyOutflowTRY.toLocaleString("tr-TR")}. ${d.buffer.months} aylık tampon = ₺${d.buffer.TRY.toLocaleString("tr-TR")}. Bu kısım ALTINLA görülemez: parayı o gün istiyorsun.`
+      : `Kayıtlı düzenli çekim yok → zorunlu satış tamponu 0. Nakit Akışı'na "Para Çek" girersen bu kalem kendiliğinden devreye girer.`,
+  ].join(" ");
+  return `<div class="regime-derive" title="${tip.replace(/"/g, "&quot;")}">
+    ${parts.join(" · ")} → <b class="cd-out">%${d.targetCash[0]}–${d.targetCash[1]}</b>
+  </div>`;
+}
+
 function renderSentiment(data) {
   const host = $("#sentimentRow");
   if (!host) return;
@@ -364,8 +391,9 @@ function renderSentiment(data) {
         <span>Hedef nakit <b>%${rg.targetCash[0]}–${rg.targetCash[1]}</b></span>
         <span>Senin nakit <b>%${rg.currentCashPct.toFixed(0)}</b> · portföy %${rg.currentInvestedPct.toFixed(0)}</span>
       </div>
+      ${cashDeriveRow(rg)}
       <div class="regime-advice ${rg.status}">${rg.advice}</div>` : `
-      <div class="regime-legend"><span>Hedef nakit <b>%${rg.targetCash[0]}–${rg.targetCash[1]}</b></span></div>`}
+      <div class="regime-legend"><span>Hedef nakit <b>%${rg.targetCash[0]}–${rg.targetCash[1]}</b></span></div>${cashDeriveRow(rg)}`}
     </div>` : "";
 
   host.innerHTML = (fngCard || regimeCard)
