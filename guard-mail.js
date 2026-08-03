@@ -40,14 +40,23 @@ const SEV = {
 
 const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const AY = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
-const trDate = (d) => `${d.getDate()} ${AY[d.getMonth()]} ${d.getFullYear()}`;
+/* Tarih/saat DAİMA Türkiye saatiyle. Render UTC'de koşuyor; sunucunun yerel
+ * saatini yazmak maile "16:42 taraması" yerine "13:42" bastırıyordu. */
+const TRZ = { timeZone: "Europe/Istanbul" };
+const trParts = (d) => {
+  const p = Object.fromEntries(new Intl.DateTimeFormat("en-CA", { ...TRZ, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false })
+    .formatToParts(d).map((x) => [x.type, x.value]));
+  return { gun: Number(p.day), ay: Number(p.month) - 1, yil: p.year, saat: `${p.hour}:${p.minute}` };
+};
+const trDate = (d) => { const t = trParts(d); return `${t.gun} ${AY[t.ay]} ${t.yil}`; };
 
 /* Konu satırı: gelen kutusunda AÇILMADAN okunabilmeli. "3 uyarı" hiçbir şey
  * söylemez; en ağır bulgu ne ise o yazılır. */
 export function digestSubject(items, now = new Date()) {
   const n = { crit: 0, warn: 0, info: 0 };
   for (const it of items) n[it.sev in n ? it.sev : "info"]++;
-  const d = `${now.getDate()} ${AY[now.getMonth()].slice(0, 3)}`;
+  const t = trParts(now);
+  const d = `${t.gun} ${AY[t.ay].slice(0, 3)}`;
   // Tek bulguda sembolü konuya taşı — "Planlı stopuna indi" hangi hisse olduğunu söylemiyor
   if (items.length === 1) {
     const it = items[0];
@@ -82,6 +91,7 @@ function card(it) {
             <td style="vertical-align:middle">
               ${it.sym ? `<span style="display:inline-block;background:${C.hero};color:#ffffff;font:700 12px/1 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;letter-spacing:.5px;padding:6px 9px;border-radius:5px">${esc(it.sym)}</span>` : ""}
               <span style="font:600 10px/1 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;letter-spacing:.8px;text-transform:uppercase;color:${s.fg};${it.sym ? "margin-left:8px" : ""}">${esc(it.kindLabel || s.label)}</span>
+              ${it.at ? `<span style="font:400 11px/1 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;color:${C.soft};margin-left:8px">${esc(it.at)}</span>` : ""}
             </td>
           </tr>
           <tr>
@@ -146,10 +156,15 @@ export function digestHtml(items, meta = {}, now = new Date()) {
     <tr><td>${group.map(card).join("")}</td></tr>`;
   }
 
+  // Kart saatleri gün içine yayılıyorsa bunu söyle — okuyan "hepsi şimdi mi
+  // oldu?" diye düşünmesin. Tek saat varsa gereksiz laf etme.
+  // sorted ÖNEM sırasında — saat aralığı için ayrıca zamana göre sırala (HH:MM
+  // sözlük sırası = zaman sırası)
+  const saatler = [...new Set(sorted.map((x) => x.at).filter(Boolean))].sort();
   const kunye = [
     meta.holdings != null ? `${meta.holdings} hisse tarandı` : null,
     meta.totalMV ? `portföy ${meta.totalMV}` : null,
-    `${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")} taraması`,
+    saatler.length > 1 ? `bulgular ${saatler[0]}–${saatler[saatler.length - 1]} arasında` : `${trParts(now).saat} taraması`,
   ].filter(Boolean).join(" · ");
 
   return `<div style="display:none;max-height:0;overflow:hidden;opacity:0">${esc(lead)}</div>

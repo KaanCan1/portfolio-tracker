@@ -1138,6 +1138,36 @@ async function guardSave(m) {
   await writeFile(GUARD_FILE, JSON.stringify(m), "utf8");
 }
 const usd0 = (x) => "$" + Math.round(Number(x) || 0).toLocaleString("en-US");
+
+/* ── Mail kuyruğu: acil ANINDA, gerisi GÜNDE BİR ────────────────────────────
+ * Bekçi saatlik koşar. Tek taramanın bulguları zaten tek mailde toplanıyor,
+ * ama sabah 10'daki bulguyla öğleden sonraki hâlâ ayrı mail oluyordu.
+ * Kural, aciliyete göre ayrışır:
+ *   crit (stop delindi / risk bütçesi doldu) → BEKLETİLMEZ. Bunu akşama
+ *     ertelemek aracın işini baltalar; sermaye o an tehlikede.
+ *   warn + info → kuyrukta bekler, günde bir kez toplu gider.
+ * Kritik bir mail zaten çıkıyorsa kuyruk ona BİNDİRİLİR — nasılsa mail
+ * gönderiyoruz, ikinci bir mail atmanın anlamı yok.
+ * Günlük boşaltma saati UTC: varsayılan 20:00 ≈ ABD kapanışı (23:00 TR).
+ * lastFlush günü tutulur, yoksa saat geçtikten sonra gelen her warn anında
+ * gider ve "günde bir" kuralı bozulurdu. */
+// Render UTC'de koşar; maildeki saat damgası Türkiye saatiyle yazılmalı
+const trSaat = (d) => new Intl.DateTimeFormat("tr-TR", { timeZone: "Europe/Istanbul", hour: "2-digit", minute: "2-digit" }).format(d);
+const GUARD_PENDING_KEY = "guard_pending";
+const GUARD_PENDING_FILE = join(__dirname, "guard_pending.json");
+const DIGEST_HOUR = Number(process.env.GUARD_DIGEST_HOUR ?? 20);
+const PENDING_MAX_DAYS = 2;   // bayatlamış bulgu artık aksiyon edilebilir değil
+async function pendingLoad() {
+  let v = null;
+  if (dbPool) { try { const r = await dbPool.query("SELECT value FROM app_data WHERE key=$1", [GUARD_PENDING_KEY]); v = r.rows.length ? r.rows[0].value : null; } catch {} }
+  else { try { v = JSON.parse(await readFile(GUARD_PENDING_FILE, "utf8")); } catch {} }
+  return { items: Array.isArray(v?.items) ? v.items : [], lastFlush: v?.lastFlush || null };
+}
+async function pendingSave(state) {
+  if (dbPool) { await dbPool.query("INSERT INTO app_data(key,value,updated_at) VALUES($1,$2,now()) ON CONFLICT(key) DO UPDATE SET value=$2, updated_at=now()", [GUARD_PENDING_KEY, state]); return; }
+  await writeFile(GUARD_PENDING_FILE, JSON.stringify(state), "utf8");
+}
+
 const GUARD = { busy: false, last: null, lastSummary: null };
 async function guardTick(trigger = "timer") {
   if (GUARD.busy) return { skipped: "busy" };
@@ -1277,15 +1307,37 @@ async function guardTick(trigger = "timer") {
       }
     } catch {}
     if (changed) await guardSave(notified);
-    // TEK mail: taramanın bütün bulguları önem sırasına dizilmiş halde tek gövdede.
-    // Bulgu yoksa mail yok — "bugün sakin" maili atmıyoruz, gelen kutusu değerli.
-    if (alerts.length) {
-      const now = new Date();
-      await chSendMail(digestSubject(alerts, now),
-        digestHtml(alerts, { holdings: stocks.length, totalMV: usd0(totMV), trigger }, now));
+
+    // ── Kuyruk kararı (kural yukarıda anlatıldı) ──
+    const now = new Date();
+    const saat = trSaat(now);
+    const st = await pendingLoad();
+    const bayatSinir = new Date(Date.now() - PENDING_MAX_DAYS * 86400_000).toISOString().slice(0, 10);
+    st.items = st.items.filter((x) => String(x?.day || "") >= bayatSinir);
+
+    const acil = alerts.filter((a) => a.sev === "crit");
+    for (const a of alerts) if (a.sev !== "crit") st.items.push({ day: today, at: saat, alert: a });
+    const bekleyen = st.items.map((x) => ({ ...x.alert, at: x.at }));
+
+    let gonderilecek = null;
+    if (acil.length) {
+      // Acil çıkıyorsa kuyruğu da bindir — nasılsa mail gidiyor, ikincisi gereksiz
+      gonderilecek = [...acil.map((a) => ({ ...a, at: saat })), ...bekleyen];
+    } else if (bekleyen.length && now.getUTCHours() >= DIGEST_HOUR && st.lastFlush !== today) {
+      gonderilecek = bekleyen;
     }
+
+    let mailSayisi = 0;
+    if (gonderilecek?.length) {
+      await chSendMail(digestSubject(gonderilecek, now),
+        digestHtml(gonderilecek, { holdings: stocks.length, totalMV: usd0(totMV), trigger }, now));
+      st.items = []; st.lastFlush = today; mailSayisi = 1;
+    }
+    await pendingSave(st);
+
     GUARD.last = new Date().toISOString();
-    GUARD.lastSummary = { trigger, holdings: stocks.length, alerts: alerts.length, mails: alerts.length ? 1 : 0 };
+    GUARD.lastSummary = { trigger, holdings: stocks.length, alerts: alerts.length,
+      acil: acil.length, kuyrukta: st.items.length, mails: mailSayisi };
     return GUARD.lastSummary;
   } catch (e) { console.error("Portföy Bekçisi hatası:", e.message); return (GUARD.lastSummary = { trigger, error: String(e.message || e) }); }
   finally { GUARD.busy = false; }
