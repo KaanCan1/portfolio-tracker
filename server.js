@@ -1958,6 +1958,38 @@ function normalizeMetals(j) {
     tam: pick(at("TAM", "tam-altin")),
   };
 }
+/* İKİNCİ, BAĞIMSIZ kur kaynağı: TCMB günlük bülteni (XML).
+ * METAL_URLS'teki iki uç aynı sağlayıcıya (Truncgil) ait — sağlayıcı tümden
+ * değişirse ikisi birden gider. 3 Ağu olayının asıl dersi buydu. TCMB ayrı
+ * kurum, ayrı altyapı: gerçek bir ikinci bacak.
+ *
+ * İKİ KISIT (bilerek kabul edildi):
+ *  · TCMB yalnız DÖVİZ yayımlar — altın bültende YOK (XAU yer almıyor).
+ *    Tam ikame değil; gram altın son bilinen değerden tamamlanır. Kabul
+ *    edilebilir çünkü felakete yol açan şey usdtry'ın null kalmasıydı
+ *    (her şey ₺ üzerinden hesaplanıyor), altın tek bir pozisyon.
+ *  · Bülten iş günlerinde ~15:30'da GÜNDE BİR çıkar; hafta sonu son iş
+ *    gününün kuru gelir. Yedek için fazlasıyla yeterli.
+ * Bağımlılık eklememek için XML regex'le okunuyor — girdi dar ve sabit. */
+const TCMB_URL = "https://www.tcmb.gov.tr/kurlar/today.xml";
+async function fetchTCMB() {
+  const r = await fetch(TCMB_URL, { signal: AbortSignal.timeout(8000) });
+  if (!r.ok) throw new Error("TCMB HTTP " + r.status);
+  const xml = await r.text();
+  const kur = (kod) => {
+    const blok = xml.match(new RegExp(`<Currency[^>]*Kod="${kod}"[\\s\\S]*?</Currency>`));
+    if (!blok) return null;
+    const al = (t) => { const m = blok[0].match(new RegExp(`<${t}>([^<]*)</${t}>`)); return m ? Number(m[1]) : null; };
+    // Unit önemli: bazı para birimleri 100 birim üzerinden kote edilir (JPY vb.)
+    const birim = al("Unit") > 0 ? al("Unit") : 1;
+    const satis = al("ForexSelling"), alis = al("ForexBuying");
+    if (!(satis > 0)) return null;
+    return { buying: alis > 0 ? alis / birim : null, selling: satis / birim, change: null };
+  };
+  const usd = kur("USD");
+  if (!usd) throw new Error("TCMB bülteninde USD yok");
+  return { updated: (xml.match(/Tarih="([^"]+)"/) || [])[1] || null, usd, eur: kur("EUR") };
+}
 async function fetchMetals() {
   return cached("metals", 60_000, async () => {
     let sonHata = null;
@@ -1976,10 +2008,27 @@ async function fetchMetals() {
         return out;
       } catch (e) { sonHata = e; }
     }
-    // Hiçbir uç veremedi → son bilinen değer (bellek, sonra DB)
-    if (lastMetals) return { ...lastMetals, stale: true };
-    const kv = await kvLoad(METALS_KEY).catch(() => null);
-    if (kv?.usd?.selling > 0) { lastMetals = kv; return { ...kv, stale: true }; }
+    // Truncgil'in HİÇBİR ucu veremedi. Sıra bağımsız kaynakta.
+    const yedek = lastMetals || (await kvLoad(METALS_KEY).catch(() => null));
+    try {
+      const t = await fetchTCMB();
+      // TCMB altın vermez → gram/ceyrek/yarim/tam son bilinen değerden gelir.
+      // usd/eur TAZE, altın tarafı eski: stale işaretlenir, ön yüz "son bilinen
+      // değer" rozetini gösterir. Kur doğru olduğu sürece ₺ toplamları sağlam.
+      const out = { ...(yedek || {}), updated: t.updated, usd: t.usd,
+                    eur: t.eur || yedek?.eur || null, source: "tcmb" };
+      delete out.stale;
+      lastMetals = out;
+      persistPrices();
+      kvSave(METALS_KEY, out).catch(() => {});
+      console.warn("  ⚠️ Truncgil yok — kur TCMB'den alındı" + (out.gram?.selling ? ", altın son bilinen değer" : ", ALTIN YOK"));
+      return { ...out, stale: true };
+    } catch (e) {
+      sonHata = e;
+      console.warn("  ⚠️ TCMB de veremedi:", e.message);
+    }
+    // İkisi de yoksa son bilinen değer (bellek, sonra DB)
+    if (yedek?.usd?.selling > 0) { lastMetals = yedek; return { ...yedek, stale: true }; }
     throw sonHata || new Error("döviz/altın alınamadı");
   });
 }
