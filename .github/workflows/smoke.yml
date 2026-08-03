@@ -1,0 +1,74 @@
+name: Açılış dumanı testi
+
+# NEDEN VAR: 1 Ağu 2026'da server.js iki yeni kök modül import etmeye başladı,
+# sync-public onları kopyalamadı ve public repo iki gün boyunca hiç açılmadı.
+# Kimse fark etmedi çünkü tek kontrol `node --check` idi — o YALNIZ sözdizimine
+# bakar, çözülmeyen bir import'u görmez. Burası sunucuyu GERÇEKTEN ayağa
+# kaldırıp /healthz ister; import zinciri kırıksa iş kırmızı yanar.
+#
+# Kasıtlı olarak DATABASE_URL'siz koşar: bu, taze klon yolunu (yerel dosya modu)
+# sınar. portfolio.json git'te takipli olmadığı için CI'da bulunmaz — yani bu iş
+# aynı zamanda loadData'nın "dosya yok → boş veriyle başla" davranışını da
+# doğrular. Dosya yokken çökerse burada yakalanır.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch: {}
+
+concurrency:
+  group: smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  boot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Bağımlılıklar
+        run: npm ci
+
+      - name: Sözdizimi (gerekli ama YETERLİ DEĞİL)
+        run: |
+          for f in server.js qm.js swing-proven.js cash-target.js guard-mail.js; do
+            [ -f "$f" ] || { echo "::error::$f yok"; exit 1; }
+            node --check "$f"
+          done
+
+      - name: Göreli import'lar çözülüyor mu
+        run: |
+          # sync-public'teki kapının aynısı — kırılma repoya başka yoldan da girebilir
+          eksik=0
+          for m in $(grep -oE 'from "\./[A-Za-z0-9._-]+\.js"' server.js | sed 's/from "\.\///; s/"$//'); do
+            if [ -f "$m" ]; then echo "  ✓ $m"; else echo "::error::server.js ./$m import ediyor ama dosya yok"; eksik=1; fi
+          done
+          [ $eksik = 0 ]
+
+      - name: Sunucu ayağa kalkıyor mu (asıl test)
+        run: |
+          # portfolio.json BİLEREK yok (gitignore'da) → taze klon yolu sınanır
+          [ -f portfolio.json ] && echo "::warning::portfolio.json repoda — taze klon yolu sınanmıyor"
+          DATABASE_URL= AUTH_PASSWORD=ci-duman-testi PORT=4099 node server.js > /tmp/boot.log 2>&1 &
+          pid=$!
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://localhost:4099/healthz || echo 000)
+            [ "$code" = "200" ] && { echo "  ✓ ${i}sn içinde ayağa kalktı"; kill $pid 2>/dev/null; exit 0; }
+            kill -0 $pid 2>/dev/null || { echo "::error::süreç öldü"; cat /tmp/boot.log; exit 1; }
+            sleep 1
+          done
+          echo "::error::30 sn içinde /healthz 200 dönmedi"
+          cat /tmp/boot.log
+          kill $pid 2>/dev/null
+          exit 1
+
+      - name: Açılış logu
+        if: always()
+        run: cat /tmp/boot.log 2>/dev/null || true
