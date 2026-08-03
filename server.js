@@ -111,7 +111,7 @@ function parseCookies(header) {
 function isAuthed(req) { return verifySession(parseCookies(req.headers.cookie).sid); }
 
 // Kapı: korunmayan yollar dışında her şey geçerli oturum ister
-const OPEN_PATHS = new Set(["/login", "/login.html", "/style.css", "/api/login", "/healthz", "/brand.svg", "/panda.svg",
+const OPEN_PATHS = new Set(["/login", "/login.html", "/style.css", "/api/login", "/healthz", "/brand.svg",
   "/manifest.json", "/sw.js", "/icon-192.png", "/icon-512.png", "/apple-touch-icon.png"]); // PWA varlıkları — tarayıcı bunları çerezsiz de çekebilir
 app.use((req, res, next) => {
   if (!AUTH.hash) return next(); // şifre yapılandırılmamış → açık mod (lokal/demo; canlıda AUTH_PASSWORD ayarla)
@@ -1155,7 +1155,12 @@ const usd0 = (x) => "$" + Math.round(Number(x) || 0).toLocaleString("en-US");
 const trSaat = (d) => new Intl.DateTimeFormat("tr-TR", { timeZone: "Europe/Istanbul", hour: "2-digit", minute: "2-digit" }).format(d);
 const GUARD_PENDING_KEY = "guard_pending";
 const GUARD_PENDING_FILE = join(__dirname, "guard_pending.json");
-const DIGEST_HOUR = Number(process.env.GUARD_DIGEST_HOUR ?? 20);
+/* Günlük boşaltma saati (UTC). 17 = 20:00 TR — Kaan'ın tercihi: özet akşam
+ * elinde olsun. TAKAS: ABD kapanışı 20:00 UTC, yani seans sonu (20:00–23:00 TR)
+ * bulguları o günkü boşaltmayı kaçırıp ertesi akşama kalır. Yalnız warn/info
+ * için geçerli — crit her hâlükârda anında gider, bekletilmez.
+ * Piyasa kapanışıyla hizalı özet isteyen GUARD_DIGEST_HOUR=20 verir. */
+const DIGEST_HOUR = Number(process.env.GUARD_DIGEST_HOUR ?? 17);
 const PENDING_MAX_DAYS = 2;   // bayatlamış bulgu artık aksiyon edilebilir değil
 async function pendingLoad() {
   let v = null;
