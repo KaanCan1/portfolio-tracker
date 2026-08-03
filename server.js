@@ -10,6 +10,7 @@ import { dirname, join } from "node:path";
 import { qmAnalyze } from "./qm.js";
 import { bootCI, mulberry32, swingProven } from "./swing-proven.js";
 import { deriveCashTarget } from "./cash-target.js";
+import { digestHtml, digestSubject } from "./guard-mail.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DATA_FILE = join(__dirname, "portfolio.json");
@@ -177,7 +178,9 @@ app.use(express.static(join(__dirname, "public"), {
  * Postgres) — Render free planın GEÇİCİ diskinde veri kaybını önler. Tanımsızsa
  * yerel JSON dosyası (geliştirme). Tüm uygulama verisi tek bir JSON belgesi
  * olarak app_data tablosunda 'portfolio' anahtarında tutulur; boş DB ilk
- * açılışta dosyadan tohumlanır (commit'li portfolio.json = başlangıç verisi).
+ * açılışta varsa yerel dosyadan tohumlanır. portfolio.json artık git'te
+ * TAKİPLİ DEĞİL (tek kaynak Supabase), yani taze klonda bulunmayabilir —
+ * readLocalData() bu durumu meşru sayar, bkz. oradaki not.
  * Supabase için "Session pooler" bağlantı dizesini kullan (IPv4 + tam uyumlu). */
 const DB_URL = process.env.DATABASE_URL || "";
 const STORE_KEY = "portfolio";
@@ -201,16 +204,40 @@ if (DB_URL) {
     dbPool = null;
   }
 }
+/* Yerel dosyayı okur. İki başarısızlık AYNI ŞEY DEĞİL:
+ *   YOK  → {} döner. Meşru taze kurulum; portfolio.json artık gitignore'da
+ *          (tek kaynak Supabase), yani taze klonda dosya bulunmaz.
+ *   BOZUK→ fırlatır. Dosya duruyor ama okunamıyorsa bunu "veri yok" saymak
+ *          TEHLİKELİ: {} dönersek ilk saveData bozuk dosyanın üstüne boş veri
+ *          yazar ve asıl kayıp orada olur. Sessizce devam etmektense açılış
+ *          patlasın — kullanıcı dosyayı düzeltip ya da taşıyıp geri döner. */
+async function readLocalData() {
+  let raw;
+  try {
+    raw = await readFile(DATA_FILE, "utf8");
+  } catch (e) {
+    if (e.code === "ENOENT") { console.log("  portfolio.json yok → boş veriyle başlanıyor"); return {}; }
+    throw e;  // izin hatası vb. — yutma
+  }
+  try {
+    return JSON.parse(raw);
+  } catch (e) {
+    throw new Error(`portfolio.json okunamadı (${e.message}). Üzerine boş veri yazmamak için durduruldu — dosyayı düzelt ya da kenara taşı.`);
+  }
+}
 async function loadData() {
   if (dbPool) {
     const r = await dbPool.query("SELECT value FROM app_data WHERE key=$1", [STORE_KEY]);
     if (r.rows.length) return r.rows[0].value;
+    // DB boş: yerel dosya yalnız TOHUM. Burada bozuk dosya ölümcül değil (DB
+    // zaten boş, ezilecek veri yok) ama sessiz de geçilmez — sebebi yazdır.
     let seed = {};
-    try { seed = JSON.parse(await readFile(DATA_FILE, "utf8")); } catch {}
+    try { seed = await readLocalData(); }
+    catch (e) { console.error("  ⚠️ tohum dosyası okunamadı, boş tohumlanıyor:", e.message); }
     await dbPool.query("INSERT INTO app_data(key,value) VALUES($1,$2) ON CONFLICT(key) DO NOTHING", [STORE_KEY, seed]);
     return seed;
   }
-  return JSON.parse(await readFile(DATA_FILE, "utf8"));
+  return readLocalData();
 }
 async function saveData(data) {
   if (dbPool) {
@@ -1096,7 +1123,10 @@ app.post("/api/push/test", async (_req, res) => {
  *  (a) KÂR SIÇRAMASI: günlük değişim ≥ max(%6, 1.2×ADR) ve kârda → "kârı koru" + sıfır-maliyet önerisi
  *  (b) RİSK: fiyat ≤ planStop → stop maili
  *  (c) YOĞUNLAŞMA: ağırlık >%35 ve stopsuz → günde 1 uyarı
- * İdempotensi: app_data guard_notified (tip:sym:gün); günde en çok 1 mail/tip/sembol. */
+ * İdempotensi: app_data guard_notified (tip:sym:gün); bir bulgu güne 1 kez girer.
+ * MAIL: bulgular toplanır, tarama sonunda TEK özet mail gider (./guard-mail.js önem
+ * sırasına dizer). Eskiden her tetik ayrı mail atıyordu; yoğun günde gelen kutusuna
+ * 3-4 kopuk mail düşüyor, önem sırası gelme sırasına kalıyordu. */
 const GUARD_KEY = "guard_notified";
 const GUARD_FILE = join(__dirname, "guard_notified.json");
 async function guardLoad() {
@@ -1133,7 +1163,9 @@ async function guardTick(trigger = "timer") {
     for (const k of Object.keys(notified)) if (String(notified[k]) < cutoff) delete notified[k];
     let changed = false;
     const mark = (key) => { if (notified[key]) return false; notified[key] = today; changed = true; return true; };
-    const mails = [];
+    // Bulgular ÖNCE toplanır, mail EN SONDA tek parça gider (guard-mail.js sıralar+çizer).
+    // İdempotensi değişmedi: mark() hâlâ tip:sembol:gün — bir bulgu güne yalnız bir kez girer.
+    const alerts = [];
     for (const h of stocks) {
       const sym = String(h.symbol).toUpperCase();
       const q = qmap[sym]; if (!q || !(q.price > 0)) continue;
@@ -1154,7 +1186,16 @@ async function guardTick(trigger = "timer") {
         let sugg;
         if (effCost <= 0) sugg = `Bu pozisyon zaten <b>bedava</b> (ana paranı geri almışsın) — kâr tümüyle risksiz. Stopu yukarı çek, kalanı koştur.`;
         else { const sh = Math.min(qty, effCost / price), remain = qty - sh; sugg = `Kalan ana parayı çekmek için ~<b>${sh.toFixed(2)} adet</b> sat (~${usd0(effCost)} cebe); kalan <b>${remain.toFixed(2)} adet</b> (${usd0(remain * price)}) bedava biner — tezin tam bu.`; }
-        mails.push({ subject: `📈 ${sym} +${dc.toFixed(1)}% sıçradı — kârı koru`, html: `<h2>📈 ${sym} bugün +${dc.toFixed(1)}%</h2><p>Günlük hareket ADR eşiğini (${spikeThresh.toFixed(1)}%) aştı; ${sym} <b>${usd0(price)}</b>, girişe göre ${((price / cost - 1) * 100).toFixed(0)}% kârda.</p><p><b>Öneri (sıfır maliyet):</b> ${sugg}</p><p style="color:#888;font-size:12px">Kârı koru + maksimize et: ana parayı çekip kalanı bedava bindirmek riski sıfırlar. Karar senin; bu bir hatırlatmadır, emir değil.</p>` });
+        alerts.push({ sev: "warn", kind: "spike", kindLabel: "Kâr sıçraması", sym,
+          title: `+${dc.toFixed(1)}% sıçradı — kârı koru`,
+          headline: `Günlük hareket ADR eşiğini (<b>${spikeThresh.toFixed(1)}%</b>) aştı.`,
+          stats: [
+            { label: "Fiyat", value: usd0(price) },
+            { label: "Bugün", value: `+${dc.toFixed(1)}%` },
+            { label: "Girişe göre", value: `+${((price / cost - 1) * 100).toFixed(0)}%` },
+            { label: "Pozisyon", value: usd0(price * qty) },
+          ],
+          actionLabel: "Sıfır maliyet önerisi", action: sugg });
         }
       }
       // (a2) sert günlük hareket (±%3) — mail yok, yalnız "Sen Yokken" akışı (sıçramayla çakışırsa tek olay)
@@ -1168,7 +1209,16 @@ async function guardTick(trigger = "timer") {
         feedPush({ key: `stop:${sym}:${today}`, type: "pos", sev: "crit", sym,
           title: `${sym} stop seviyesinde — planı uygula`, detail: `${usd0(price)} ≤ stop ${usd0(stop)} · Kural 1: önce sermayeyi koru` });
         if (mark(`stop:${sym}:${today}`)) {
-        mails.push({ subject: `🛑 ${sym} stop seviyesinde (${usd0(price)})`, html: `<h2>🛑 ${sym} planlı stopunda</h2><p>${sym} <b>${usd0(price)}</b>, plan stopun <b>${usd0(stop)}</b> seviyesine indi/geçti. Kural 1: önce sermayeyi koru — planını uygula, tezini yeniden değerlendir.</p>` });
+        alerts.push({ sev: "crit", kind: "stop", kindLabel: "Stop delindi", sym,
+          title: "Planlı stopuna indi",
+          headline: `Fiyat <b>${usd0(price)}</b>, plan stopun <b>${usd0(stop)}</b> seviyesine indi ya da altına geçti.`,
+          stats: [
+            { label: "Fiyat", value: usd0(price) },
+            { label: "Plan stop", value: usd0(stop) },
+            { label: "Pozisyon", value: usd0(price * qty) },
+            { label: "Ağırlık", value: `%${weight.toFixed(0)}` },
+          ],
+          action: "Planını uygula, tezini yeniden değerlendir. Kural 1: önce sermayeyi koru." });
         }
       }
       // (c) yoğunlaşma: ağırlık >%35 ve stopsuz
@@ -1176,7 +1226,16 @@ async function guardTick(trigger = "timer") {
         feedPush({ key: `weight:${sym}:${today}`, type: "pos", sev: "warn", sym,
           title: `${sym} portföyün %${weight.toFixed(0)}'i — stop yok`, detail: "Tek hisse seni sallayabilir · plan stop gir ya da kademeli azalt" });
         if (mark(`weight:${sym}:${today}`)) {
-        mails.push({ subject: `⚠️ ${sym} portföyün %${weight.toFixed(0)}'i — stop yok`, html: `<h2>⚠️ Yoğunlaşma riski: ${sym}</h2><p>${sym} portföyünün <b>%${weight.toFixed(0)}</b>'i ve <b>plan stopu yok</b>. Tek hisse seni sallayabilir (Kural 1). Bir plan stop gir ya da kademeli azalt.</p>` });
+        alerts.push({ sev: "warn", kind: "weight", kindLabel: "Yoğunlaşma riski", sym,
+          title: `Portföyün %${weight.toFixed(0)}'i — stop yok`,
+          headline: "Tek hisse seni sallayabilir; bu pozisyonun plan stopu <b>yok</b>.",
+          stats: [
+            { label: "Ağırlık", value: `%${weight.toFixed(0)}` },
+            { label: "Pozisyon", value: usd0(price * qty) },
+            { label: "Fiyat", value: usd0(price) },
+            { label: "Plan stop", value: "yok" },
+          ],
+          action: "Bir plan stop gir ya da kademeli azalt (Kural 1)." });
         }
       }
     }
@@ -1204,14 +1263,29 @@ async function guardTick(trigger = "timer") {
           title: "Risk bütçesi DOLDU — bu ay yeni giriş yok",
           detail: `Kullanım ${usd0(rb.used)} / ${usd0(rb.budget)} (%${Math.round(rb.ratio)}) · ay sonuna kadar yalnız yönet (Kural 1)` });
         if (mark(`rbfull:${rb.ym}`))
-          mails.push({ subject: `🧯 Risk bütçesi doldu (%${Math.round(rb.ratio)}) — bu ay yeni giriş yok`,
-            html: `<h2>🧯 Aylık risk bütçen doldu</h2><p>Ay içi realize zarar <b>${usd0(rb.lossUsed)}</b> + açık stop riski <b>${usd0(rb.openRisk)}</b> = <b>${usd0(rb.used)}</b>; bütçen ${usd0(rb.budget)} (sermayenin %${rb.pct}'i) idi.</p><p><b>Fren:</b> ay sonuna kadar yeni swing girişi önerilmez — mevcutları planına göre yönet, stopları koru. Kötü ay felakete dönmesin (Kural 1). Karar senin; bu bir hatırlatmadır, emir değil.</p>` });
+          alerts.push({ sev: "crit", kind: "riskbudget", kindLabel: "Risk bütçesi", sym: null,
+            title: `Aylık risk bütçen doldu (%${Math.round(rb.ratio)})`,
+            headline: `Ay içi realize zarar <b>${usd0(rb.lossUsed)}</b> + açık stop riski <b>${usd0(rb.openRisk)}</b> = <b>${usd0(rb.used)}</b>.`,
+            stats: [
+              { label: "Kullanım", value: usd0(rb.used) },
+              { label: "Bütçe", value: usd0(rb.budget) },
+              { label: "Doluluk", value: `%${Math.round(rb.ratio)}` },
+              { label: "Sermaye payı", value: `%${rb.pct}` },
+            ],
+            actionLabel: "Fren",
+            action: "Ay sonuna kadar yeni swing girişi önerilmez — mevcutları planına göre yönet, stopları koru. Kötü ay felakete dönmesin (Kural 1)." });
       }
     } catch {}
     if (changed) await guardSave(notified);
-    for (const m of mails) await chSendMail(m.subject, m.html);
+    // TEK mail: taramanın bütün bulguları önem sırasına dizilmiş halde tek gövdede.
+    // Bulgu yoksa mail yok — "bugün sakin" maili atmıyoruz, gelen kutusu değerli.
+    if (alerts.length) {
+      const now = new Date();
+      await chSendMail(digestSubject(alerts, now),
+        digestHtml(alerts, { holdings: stocks.length, totalMV: usd0(totMV), trigger }, now));
+    }
     GUARD.last = new Date().toISOString();
-    GUARD.lastSummary = { trigger, holdings: stocks.length, mails: mails.length };
+    GUARD.lastSummary = { trigger, holdings: stocks.length, alerts: alerts.length, mails: alerts.length ? 1 : 0 };
     return GUARD.lastSummary;
   } catch (e) { console.error("Portföy Bekçisi hatası:", e.message); return (GUARD.lastSummary = { trigger, error: String(e.message || e) }); }
   finally { GUARD.busy = false; }
