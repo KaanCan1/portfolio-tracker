@@ -3592,7 +3592,30 @@ const LEDGER_MAX_BARS = 40;  // açık işlem en çok 40 bar izlenir (~2 ay), so
 let ledger = [];
 let ledgerDirty = false;
 
+/* Kalıcılık: DB varsa app_data, yoksa dosya — challenge_ledger ile aynı desen.
+ * ÖNCESİ: defter YALNIZ diskteydi. Render'ın diski geçici olduğu için her
+ * deploy'da son commit'lenen hâle dönüyordu; aradaki kurulumlar sessizce
+ * kayboluyordu (3 Ağu: diskte 102, git'te 90 kayıt). Git'in yedek görevi
+ * görmesi de signal_ledger.json'ı takipte tutmayı zorunlu kılıyordu.
+ * Boş DB ilk açılışta dosyadan TOHUMLANIR — mevcut defter kaybolmasın. */
+const LEDGER_KEY = "signal_ledger";
 async function loadLedger() {
+  if (dbPool) {
+    try {
+      const r = await dbPool.query("SELECT value FROM app_data WHERE key=$1", [LEDGER_KEY]);
+      if (r.rows.length && Array.isArray(r.rows[0].value)) { ledger = r.rows[0].value; return; }
+    } catch {}
+    // DB'de yok → varsa dosyadan tohumla ve DB'ye yaz (tek seferlik geçiş)
+    try {
+      const j = JSON.parse(await readFile(LEDGER_FILE, "utf8"));
+      if (Array.isArray(j) && j.length) {
+        ledger = j;
+        await dbPool.query("INSERT INTO app_data(key,value,updated_at) VALUES($1,$2,now()) ON CONFLICT(key) DO NOTHING", [LEDGER_KEY, j]);
+        console.log(`  Sinyal defteri dosyadan tohumlandı → DB (${j.length} kayıt)`);
+      }
+    } catch {}
+    return;
+  }
   try {
     const j = JSON.parse(await readFile(LEDGER_FILE, "utf8"));
     if (Array.isArray(j)) ledger = j;
@@ -3601,6 +3624,14 @@ async function loadLedger() {
 async function persistLedger() {
   if (!ledgerDirty) return;
   ledgerDirty = false;
+  if (dbPool) {
+    try {
+      await dbPool.query(
+        "INSERT INTO app_data(key,value,updated_at) VALUES($1,$2,now()) ON CONFLICT(key) DO UPDATE SET value=$2, updated_at=now()",
+        [LEDGER_KEY, ledger]);
+    } catch {}
+    return;
+  }
   try { await writeFile(LEDGER_FILE, JSON.stringify(ledger, null, 1), "utf8"); } catch {}
 }
 
