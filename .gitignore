@@ -6,6 +6,8 @@ auth.json
 candle_cache.json
 news_cache.json
 price_cache.json
+guard_notified.json
+guard_pending.json
 vix_cache.json
 fng_cache.json
 opp_history.json

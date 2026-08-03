@@ -264,7 +264,12 @@ function buildCompare(history, current, dayOpenTotal) {
     return null;
   };
   const pushSeg = (label, base) => {
-    if (base == null || !(base > 0) || current == null) return;
+    // current 0 ise bu "portföy sıfırlandı" değil, DEĞERLEME BAŞARISIZ demektir:
+    // döviz kuru ya da fiyatlar gelmediğinde toplam 0 çıkıyor ve buradan -%100
+    // üretiliyordu (3 Ağu 2026: Truncgil v4 boşaldı, ekran gün/hafta/ay/yıl için
+    // -%100 yazdı). Elde pozisyon varken toplam 0 olamaz — yüzde göstermektense
+    // hiç gösterme; "son bilinen değer" rozeti zaten durumu anlatıyor.
+    if (base == null || !(base > 0) || !(current > 0)) return;
     segs.push({ label, pct: ((current - base) / base) * 100 });
   };
   // Yılbaşından itibaren (YTD): bu yılın ilk kayıt değerini baz al
@@ -713,7 +718,7 @@ function render() {
         <span class="mc-ic">${svgIcon("scale")}</span>
         <div class="label">Gerçek Getiri ${tipIcon("İpucu: Bugünkü toplam değer − net yatırdığın para, USD bazında. Piyasa kazancını cebinden eklediğin paradan ayırır; portföyün gerçekten büyüyor mu sorusunun tek dürüst cevabı.")}</div>
         <div class="value ${healthy ? cls(realProfit) : ""}">${healthy ? (fx.usdtry ? fmtUSD(realProfit / fx.usdtry) : fmtTRY(realProfit)) : "—"}</div>
-        <div class="meta">${realPct != null ? pctChip(realPct) : "—"} Sermaye ${fx.usdtry ? fmtUSD0(netInvested / fx.usdtry) : fmtTRY0(netInvested)}</div>
+        <div class="meta">${healthy && realPct != null ? pctChip(realPct) : "—"} Sermaye ${fx.usdtry ? fmtUSD0(netInvested / fx.usdtry) : fmtTRY0(netInvested)}</div>
       </div>` : ""}
       <div class="card">
         <span class="mc-ic">${svgIcon("dollar")}</span>

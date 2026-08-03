@@ -1860,6 +1860,13 @@ let lastFunds = {};       // FON KODU → son başarılı fiyat
     if (j?.metals) lastMetals = j.metals;
     if (j?.funds && typeof j.funds === "object") lastFunds = j.funds;
   } catch {}
+  // Render diski GEÇİCİ: yukarıdaki dosya deploy/uykuda yok olur ve döviz
+  // yedeği kaybolur. Kaynak da boş dönüyorsa ₺ toplamları çöker (3 Ağu olayı).
+  // O yüzden döviz/altın yedeği DB'den de yüklenir.
+  if (!lastMetals?.usd?.selling) {
+    const kv = await kvLoad("price_metals").catch(() => null);
+    if (kv?.usd?.selling > 0) lastMetals = kv;
+  }
 })();
 let priceSaveTimer = null;
 function persistPrices() {
@@ -1899,29 +1906,81 @@ async function fetchStocks(symbols) {
   });
 }
 
-/* ----------------- Canlı veri: Altın + Döviz (Truncgil) --------------- */
+/* ----------------- Canlı veri: Altın + Döviz (Truncgil) ---------------
+ * OLAY (3 Ağu 2026): v4 ucu 25 Tem'de SESSİZCE boşaldı — HTTP 200 dönüyor
+ * ama gövde yalnız {"Update_Date": "..."}. İstek "başarılı" sayıldığı için
+ * aşağıdaki catch HİÇ çalışmadı, son bilinen değere düşme mekanizması
+ * devreye girmedi ve usdtry null kaldı. Her şey ₺ cinsinden gösterildiğinden
+ * bütün toplamlar sıfırlandı, ön yüz gün/hafta/ay için -%100 yazdı.
+ * Yerelde fark edilmedi çünkü price_cache.json diskte duruyordu; Render'ın
+ * diski GEÇİCİ olduğu için orada her restart yedeği de siliyordu.
+ *
+ * DERS: HTTP 200 "veri geldi" demek değildir. Dört değişiklik:
+ *   1) Uç listesi — biri boşalırsa sıradaki denenir (v4 ölü, çıkarıldı)
+ *   2) YAPISAL doğrulama — usd/gram yoksa bu bir BAŞARISIZLIKTIR, sessizce
+ *      boş nesne dönmek yerine sıradaki uca/stale'e düşülür
+ *   3) Türkçe sayı ayrıştırma — v3 "47,5334" ve "6.166,55" gibi STRING
+ *      döner (v4 sayı dönüyordu). Ham bırakmak NaN üretirdi
+ *   4) Yedek DB'ye de yazılır — Render diski geçici, restart'ta kayboluyordu */
+const METAL_URLS = [
+  "https://finans.truncgil.com/v3/today.json",   // {Buying, Selling, Change}
+  "https://finans.truncgil.com/today.json",      // {Alış, Satış, Değişim}
+];
+const METALS_KEY = "price_metals";
+/* "6.166,55" → 6166.55 · "%-0,13" → -0.13 · 47.38 → 47.38
+ * Virgül YOKSA nokta ondalıktır (v4 biçimi) — o durumda nokta silinmez,
+ * yoksa "47.5334" → 475334 olurdu. */
+const trNum = (v) => {
+  if (v == null) return null;
+  if (typeof v === "number") return isFinite(v) ? v : null;
+  let s = String(v).replace(/[%\s ]/g, "");
+  if (!s) return null;
+  if (s.includes(",")) s = s.replace(/\./g, "").replace(",", ".");
+  const n = Number(s);
+  return isFinite(n) ? n : null;
+};
+function normalizeMetals(j) {
+  const at = (...keys) => { for (const k of keys) if (j?.[k]) return j[k]; return null; };
+  const pick = (o) => {
+    if (!o) return null;
+    const buying = trNum(o.Buying ?? o["Alış"]);
+    const selling = trNum(o.Selling ?? o["Satış"]);
+    const change = trNum(o.Change ?? o["Değişim"]);
+    return buying == null && selling == null ? null : { buying, selling, change };
+  };
+  return {
+    updated: j?.Update_Date || null,
+    gram: pick(at("GRA", "gram-altin")),
+    usd: pick(at("USD")),
+    eur: pick(at("EUR")),
+    ceyrek: pick(at("CEY", "ceyrek-altin")),
+    yarim: pick(at("YAR", "yarim-altin")),
+    tam: pick(at("TAM", "tam-altin")),
+  };
+}
 async function fetchMetals() {
   return cached("metals", 60_000, async () => {
-    try {
-      const j = await fetchJSON2("https://finans.truncgil.com/v4/today.json");
-      const pick = (o) =>
-        o ? { buying: o.Buying, selling: o.Selling, change: o.Change } : null;
-      const out = {
-        updated: j.Update_Date,
-        gram: pick(j.GRA),
-        usd: pick(j.USD),
-        eur: pick(j.EUR),
-        ceyrek: pick(j.CEY),
-        yarim: pick(j.YAR),
-        tam: pick(j.TAM),
-      };
-      if (out.usd?.selling && out.gram?.selling) { lastMetals = out; persistPrices(); }
-      return out;
-    } catch (e) {
-      // Truncgil erişilemezse son bilinen döviz/altın → ₺ toplamları çökmesin
-      if (lastMetals) return { ...lastMetals, stale: true };
-      throw e;
+    let sonHata = null;
+    for (const url of METAL_URLS) {
+      try {
+        const out = normalizeMetals(await fetchJSON2(url));
+        // YAPISAL KAPI: 200 geldi diye veri geldi sanma
+        if (!(out.usd?.selling > 0) || !(out.gram?.selling > 0)) {
+          sonHata = new Error(`${url} → gövde eksik (usd/gram yok)`);
+          console.warn("  ⚠️ döviz/altın kaynağı boş döndü:", url);
+          continue;
+        }
+        lastMetals = out;
+        persistPrices();
+        kvSave(METALS_KEY, out).catch(() => {});   // Render diski geçici → DB'ye de yaz
+        return out;
+      } catch (e) { sonHata = e; }
     }
+    // Hiçbir uç veremedi → son bilinen değer (bellek, sonra DB)
+    if (lastMetals) return { ...lastMetals, stale: true };
+    const kv = await kvLoad(METALS_KEY).catch(() => null);
+    if (kv?.usd?.selling > 0) { lastMetals = kv; return { ...kv, stale: true }; }
+    throw sonHata || new Error("döviz/altın alınamadı");
   });
 }
 
