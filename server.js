@@ -15,6 +15,7 @@ import { kaynak, kaynakDefteri } from "./sources.js";
 import { depoOlustur } from "./store.js";
 import { rateLimiter } from "./rate-limit.js";
 import { kuyrukKarari } from "./guard-queue.js";
+import { pozisyonBulgulari, bayatKaynakBulgusu, usd0 } from "./guard-alerts.js";
 
 // Dış veri kaynaklarının tek kaydı — sağlık ucu buradan okur
 const KAYNAKLAR = kaynakDefteri();
@@ -1152,7 +1153,7 @@ const GUARD_FILE = join(__dirname, "guard_notified.json");
 const guardDepo = depo(GUARD_KEY, { dosya: GUARD_FILE, varsayilan: {} });
 async function guardLoad() { return guardDepo.oku(); }
 async function guardSave(m) { return guardDepo.yaz(m); }
-const usd0 = (x) => "$" + Math.round(Number(x) || 0).toLocaleString("en-US");
+// usd0 ./guard-alerts.js'ten geliyor (bulgu metinleriyle aynı biçim)
 
 /* ── Mail kuyruğu: acil ANINDA, gerisi GÜNDE BİR ────────────────────────────
  * Bekçi saatlik koşar. Tek taramanın bulguları zaten tek mailde toplanıyor,
@@ -1217,76 +1218,25 @@ async function guardTick(trigger = "timer") {
     for (const h of stocks) {
       const sym = String(h.symbol).toUpperCase();
       const q = qmap[sym]; if (!q || !(q.price > 0)) continue;
-      const price = q.price, qty = Number(h.quantity), cost = Number(h.costUSD) || null;
-      const dc = q.dayChangePct != null ? q.dayChangePct : (q.prevClose ? (price / q.prevClose - 1) * 100 : null);
+      const price = q.price, qty = Number(h.quantity);
       const cc = candleCache[sym]?.candles;
-      const adr = cc && cc.length >= 21 ? chAdrAt(cc, cc.length - 1) : null;
-      const spikeThresh = Math.max(6, adr ? 1.2 * adr : 6);
-      const weight = price * qty / totMV * 100;
-      const inProfit = cost != null && price > cost;
-      // (a) kâr sıçraması → koru + sıfır-maliyet önerisi
-      const spiked = dc != null && dc >= spikeThresh && inProfit;
-      if (spiked) {
-        feedPush({ key: `spike:${sym}:${today}`, type: "pos", sev: "warn", sym,
-          title: `${sym} +${dc.toFixed(1)}% sıçradı — kârı koru`, detail: `${usd0(price)} · sıfır-maliyet fırsatı olabilir (Büyüme'ye bak)` });
-        if (mark(`spike:${sym}:${today}`)) {
-        const principal = cost * qty, realized = realizedOf[sym] || 0, effCost = principal - realized;
-        let sugg;
-        if (effCost <= 0) sugg = `Bu pozisyon zaten <b>bedava</b> (ana paranı geri almışsın) — kâr tümüyle risksiz. Stopu yukarı çek, kalanı koştur.`;
-        else { const sh = Math.min(qty, effCost / price), remain = qty - sh; sugg = `Kalan ana parayı çekmek için ~<b>${sh.toFixed(2)} adet</b> sat (~${usd0(effCost)} cebe); kalan <b>${remain.toFixed(2)} adet</b> (${usd0(remain * price)}) bedava biner — tezin tam bu.`; }
-        alerts.push({ sev: "warn", kind: "spike", kindLabel: "Kâr sıçraması", sym,
-          title: `+${dc.toFixed(1)}% sıçradı — kârı koru`,
-          headline: `Günlük hareket ADR eşiğini (<b>${spikeThresh.toFixed(1)}%</b>) aştı.`,
-          stats: [
-            { label: "Fiyat", value: usd0(price) },
-            { label: "Bugün", value: `+${dc.toFixed(1)}%` },
-            { label: "Girişe göre", value: `+${((price / cost - 1) * 100).toFixed(0)}%` },
-            { label: "Pozisyon", value: usd0(price * qty) },
-          ],
-          actionLabel: "Sıfır maliyet önerisi", action: sugg });
-        }
-      }
-      // (a2) sert günlük hareket (±%3) — mail yok, yalnız "Sen Yokken" akışı (sıçramayla çakışırsa tek olay)
-      if (dc != null && Math.abs(dc) >= 3 && !spiked) {
-        feedPush({ key: `gap:${sym}:${today}`, type: "pos", sev: dc < 0 ? "warn" : "info", sym,
-          title: `${sym} bugün ${dc >= 0 ? "+" : ""}${dc.toFixed(1)}% hareket etti`, detail: usd0(price) + (dc < 0 ? " · stop planını kontrol et" : "") });
-      }
-      // (b) risk: stop delindi
-      const stop = Number(h.planStop) || 0;
-      if (stop > 0 && price <= stop) {
-        feedPush({ key: `stop:${sym}:${today}`, type: "pos", sev: "crit", sym,
-          title: `${sym} stop seviyesinde — planı uygula`, detail: `${usd0(price)} ≤ stop ${usd0(stop)} · Kural 1: önce sermayeyi koru` });
-        if (mark(`stop:${sym}:${today}`)) {
-        alerts.push({ sev: "crit", kind: "stop", kindLabel: "Stop delindi", sym,
-          title: "Planlı stopuna indi",
-          headline: `Fiyat <b>${usd0(price)}</b>, plan stopun <b>${usd0(stop)}</b> seviyesine indi ya da altına geçti.`,
-          stats: [
-            { label: "Fiyat", value: usd0(price) },
-            { label: "Plan stop", value: usd0(stop) },
-            { label: "Pozisyon", value: usd0(price * qty) },
-            { label: "Ağırlık", value: `%${weight.toFixed(0)}` },
-          ],
-          action: "Planını uygula, tezini yeniden değerlendir. Kural 1: önce sermayeyi koru." });
-        }
-      }
-      // (c) yoğunlaşma: ağırlık >%35 ve stopsuz
-      if (weight > 35 && !(stop > 0)) {
-        feedPush({ key: `weight:${sym}:${today}`, type: "pos", sev: "warn", sym,
-          title: `${sym} portföyün %${weight.toFixed(0)}'i — stop yok`, detail: "Tek hisse seni sallayabilir · plan stop gir ya da kademeli azalt" });
-        if (mark(`weight:${sym}:${today}`)) {
-        alerts.push({ sev: "warn", kind: "weight", kindLabel: "Yoğunlaşma riski", sym,
-          title: `Portföyün %${weight.toFixed(0)}'i — stop yok`,
-          headline: "Tek hisse seni sallayabilir; bu pozisyonun plan stopu <b>yok</b>.",
-          stats: [
-            { label: "Ağırlık", value: `%${weight.toFixed(0)}` },
-            { label: "Pozisyon", value: usd0(price * qty) },
-            { label: "Fiyat", value: usd0(price) },
-            { label: "Plan stop", value: "yok" },
-          ],
-          action: "Bir plan stop gir ya da kademeli azalt (Kural 1)." });
-        }
+      // Bulgu üretimi ./guard-alerts.js'te (saf). Burada yalnız girdi toplanır
+      // ve yan etki uygulanır: akışa bas + idempotens kapısından geçir.
+      for (const b of pozisyonBulgulari({
+        sym, price, qty,
+        cost: Number(h.costUSD) || null,
+        gunlukPct: q.dayChangePct != null ? q.dayChangePct : (q.prevClose ? (price / q.prevClose - 1) * 100 : null),
+        adr: cc && cc.length >= 21 ? chAdrAt(cc, cc.length - 1) : null,
+        agirlik: price * qty / totMV * 100,
+        planStop: h.planStop,
+        realized: realizedOf[sym] || 0,
+        bugun: today,
+      })) {
+        feedPush(b.feed);
+        if (b.alert && mark(b.anahtar)) alerts.push(b.alert);
       }
     }
+
     // Swing Defteri açık pozisyonları: stop delinmesi / hedefe varış — akışa (mail bekçide kalır)
     for (const t of swOpen) {
       const sym = String(t.symbol).toUpperCase();
@@ -1331,21 +1281,10 @@ async function guardTick(trigger = "timer") {
      * warn seviyesi: veri bozuk ama sermaye doğrudan tehlikede değil —
      * kuyruğa girer, günlük özette görünür. */
     try {
-      for (const b of KAYNAKLAR.bayatOlanlar(SOURCE_STALE_MIN)) {
-        const yasMetni = b.yasDk == null ? "hiç doğrulanmış veri yok" : `${Math.floor(b.yasDk / 60)} saattir bayat`;
-        feedPush({ key: `kaynak:${b.ad}:${today}`, type: "sistem", sev: "warn", sym: null,
-          title: `Veri kaynağı bayat: ${b.ad}`, detail: yasMetni + (b.sonHata ? ` · ${b.sonHata}` : "") });
-        if (mark(`kaynak:${b.ad}:${today}`))
-          alerts.push({ sev: "warn", kind: "kaynak", kindLabel: "Veri kaynağı", sym: null,
-            title: `${b.ad} kaynağı bayat`,
-            headline: `Son doğrulanmış veri alınalı <b>${yasMetni}</b>. Ekrandaki sayılar son bilinen değerlerden.`,
-            stats: [
-              { label: "Kaynak", value: b.ad },
-              { label: "Son başarı", value: b.sonBasari ? b.sonBasari.slice(0, 16).replace("T", " ") : "—" },
-              { label: "Yaş", value: b.yasDk == null ? "—" : `${b.yasDk} dk` },
-              { label: "Eşik", value: `${SOURCE_STALE_MIN} dk` },
-            ],
-            action: (b.sonHata || "Kaynak yanıt vermiyor.") + " Sağlayıcı ucu değişmiş olabilir — /api/health/sources'a bak." });
+      for (const d of KAYNAKLAR.bayatOlanlar(SOURCE_STALE_MIN)) {
+        const b = bayatKaynakBulgusu(d, SOURCE_STALE_MIN, today);
+        feedPush(b.feed);
+        if (mark(b.anahtar)) alerts.push(b.alert);
       }
     } catch {}
 
