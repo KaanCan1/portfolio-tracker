@@ -11,6 +11,17 @@ import { qmAnalyze } from "./qm.js";
 import { bootCI, mulberry32, swingProven } from "./swing-proven.js";
 import { deriveCashTarget } from "./cash-target.js";
 import { digestHtml, digestSubject } from "./guard-mail.js";
+import { kaynak, kaynakDefteri } from "./sources.js";
+import { depoOlustur } from "./store.js";
+import { rateLimiter } from "./rate-limit.js";
+import { kuyrukKarari } from "./guard-queue.js";
+
+// Dış veri kaynaklarının tek kaydı — sağlık ucu buradan okur
+const KAYNAKLAR = kaynakDefteri();
+/* Bir kaynak bu kadar dakikadır doğrulanmış veri veremiyorsa bekçi uyarır.
+ * 180 dk seçildi: geçici ağ hıçkırıkları (dakikalar) gürültü yapmasın ama
+ * 3 Ağu'daki gibi GÜNLERCE süren sessizlik aynı gün yakalansın. */
+const SOURCE_STALE_MIN = Number(process.env.SOURCE_STALE_MIN ?? 180);
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DATA_FILE = join(__dirname, "portfolio.json");
@@ -266,8 +277,29 @@ async function kvSave(key, value) {
     await dbPool.query(
       "INSERT INTO app_data(key,value,updated_at) VALUES($1,$2,now()) ON CONFLICT(key) DO UPDATE SET value=$2, updated_at=now()",
       [key, value]);
-  } catch {}
+    return true;
+  } catch { return false; }
 }
+
+/* Ortak kalıcılık — 13 anahtarın elle yazılmış load/save çiftleri yerine.
+ * Davranışları sessizce ayrışmıştı: kimi DB-only, kimi dosya yedekli, kimi
+ * dosyadan tohumlanıyor. signal_ledger'ın DB yolu HİÇ YOKTU ve Render'ın
+ * geçici diski yüzünden her deploy'da kayıt kaybediyordu. Bkz. store.js. */
+const depo = depoOlustur({
+  dbOku: kvLoad,
+  dbYaz: async (k, v, o = {}) => {
+    if (!dbPool) return false;
+    try {
+      const sql = o.yalnizYoksa
+        ? "INSERT INTO app_data(key,value) VALUES($1,$2) ON CONFLICT(key) DO NOTHING"
+        : "INSERT INTO app_data(key,value,updated_at) VALUES($1,$2,now()) ON CONFLICT(key) DO UPDATE SET value=$2, updated_at=now()";
+      await dbPool.query(sql, [k, v]);
+      return true;
+    } catch { return false; }
+  },
+  dosyaOku: (yol) => readFile(yol, "utf8"),
+  dosyaYaz: (yol, metin) => writeFile(yol, metin, "utf8"),
+});
 
 /* ===== Alfa Avı challenge defteri — SADECE-EKLE (immutable açılışlar) =====
  * Client stratejiyi similar; açılan her plan buraya bir kez yazılır ve bir daha
@@ -275,22 +307,10 @@ async function kvSave(key, value) {
  * (%100 dürüst kayıt). Çıkışlar frozen parametrelerden deterministik hesaplanır. */
 const CH_KEY = "challenge_ledger";
 const CH_FILE = join(__dirname, "challenge_ledger.json");
-async function chLoadLedger() {
-  if (dbPool) {
-    const r = await dbPool.query("SELECT value FROM app_data WHERE key=$1", [CH_KEY]);
-    return r.rows.length ? r.rows[0].value : { trades: [] };
-  }
-  try { return JSON.parse(await readFile(CH_FILE, "utf8")); } catch { return { trades: [] }; }
-}
-async function chSaveLedger(led) {
-  if (dbPool) {
-    await dbPool.query(
-      "INSERT INTO app_data(key,value,updated_at) VALUES($1,$2,now()) ON CONFLICT(key) DO UPDATE SET value=$2, updated_at=now()",
-      [CH_KEY, led]);
-    return;
-  }
-  await writeFile(CH_FILE, JSON.stringify(led, null, 1), "utf8");
-}
+const chDepo = depo(CH_KEY, { dosya: CH_FILE, varsayilan: { trades: [] } });
+async function chLoadLedger() { return chDepo.oku(); }
+async function chSaveLedger(led) { return chDepo.yaz(led); }
+
 app.get("/api/challenge", async (_req, res) => {
   try {
     const led = await chLoadLedger();
@@ -1129,14 +1149,9 @@ app.post("/api/push/test", async (_req, res) => {
  * 3-4 kopuk mail düşüyor, önem sırası gelme sırasına kalıyordu. */
 const GUARD_KEY = "guard_notified";
 const GUARD_FILE = join(__dirname, "guard_notified.json");
-async function guardLoad() {
-  if (dbPool) { const r = await dbPool.query("SELECT value FROM app_data WHERE key=$1", [GUARD_KEY]); return r.rows.length ? r.rows[0].value : {}; }
-  try { return JSON.parse(await readFile(GUARD_FILE, "utf8")); } catch { return {}; }
-}
-async function guardSave(m) {
-  if (dbPool) { await dbPool.query("INSERT INTO app_data(key,value,updated_at) VALUES($1,$2,now()) ON CONFLICT(key) DO UPDATE SET value=$2, updated_at=now()", [GUARD_KEY, m]); return; }
-  await writeFile(GUARD_FILE, JSON.stringify(m), "utf8");
-}
+const guardDepo = depo(GUARD_KEY, { dosya: GUARD_FILE, varsayilan: {} });
+async function guardLoad() { return guardDepo.oku(); }
+async function guardSave(m) { return guardDepo.yaz(m); }
 const usd0 = (x) => "$" + Math.round(Number(x) || 0).toLocaleString("en-US");
 
 /* ── Mail kuyruğu: acil ANINDA, gerisi GÜNDE BİR ────────────────────────────
@@ -1162,16 +1177,14 @@ const GUARD_PENDING_FILE = join(__dirname, "guard_pending.json");
  * Piyasa kapanışıyla hizalı özet isteyen GUARD_DIGEST_HOUR=20 verir. */
 const DIGEST_HOUR = Number(process.env.GUARD_DIGEST_HOUR ?? 17);
 const PENDING_MAX_DAYS = 2;   // bayatlamış bulgu artık aksiyon edilebilir değil
-async function pendingLoad() {
-  let v = null;
-  if (dbPool) { try { const r = await dbPool.query("SELECT value FROM app_data WHERE key=$1", [GUARD_PENDING_KEY]); v = r.rows.length ? r.rows[0].value : null; } catch {} }
-  else { try { v = JSON.parse(await readFile(GUARD_PENDING_FILE, "utf8")); } catch {} }
-  return { items: Array.isArray(v?.items) ? v.items : [], lastFlush: v?.lastFlush || null };
-}
-async function pendingSave(state) {
-  if (dbPool) { await dbPool.query("INSERT INTO app_data(key,value,updated_at) VALUES($1,$2,now()) ON CONFLICT(key) DO UPDATE SET value=$2, updated_at=now()", [GUARD_PENDING_KEY, state]); return; }
-  await writeFile(GUARD_PENDING_FILE, JSON.stringify(state), "utf8");
-}
+const pendingDepo = depo(GUARD_PENDING_KEY, {
+  dosya: GUARD_PENDING_FILE,
+  varsayilan: { items: [], lastFlush: null },
+  // Şekil garantisi: bozuk/eski kayıt gelse de items DAİMA dizi olsun
+  normalize: (v) => ({ items: Array.isArray(v?.items) ? v.items : [], lastFlush: v?.lastFlush || null }),
+});
+async function pendingLoad() { return pendingDepo.oku(); }
+async function pendingSave(state) { return pendingDepo.yaz(state); }
 
 const GUARD = { busy: false, last: null, lastSummary: null };
 async function guardTick(trigger = "timer") {
@@ -1311,38 +1324,50 @@ async function guardTick(trigger = "timer") {
             action: "Ay sonuna kadar yeni swing girişi önerilmez — mevcutları planına göre yönet, stopları koru. Kötü ay felakete dönmesin (Kural 1)." });
       }
     } catch {}
+
+    /* Bayat veri kaynağı — 3 Ağu dersinin bekçiye taşınmış hâli. O gün döviz
+     * kaynağı 9 GÜN boyunca sessizce bozuktu; tek sinyal ön yüzdeki küçük bir
+     * rozetti ve kimse fark etmedi. Artık sessizlik uyarı üretiyor.
+     * warn seviyesi: veri bozuk ama sermaye doğrudan tehlikede değil —
+     * kuyruğa girer, günlük özette görünür. */
+    try {
+      for (const b of KAYNAKLAR.bayatOlanlar(SOURCE_STALE_MIN)) {
+        const yasMetni = b.yasDk == null ? "hiç doğrulanmış veri yok" : `${Math.floor(b.yasDk / 60)} saattir bayat`;
+        feedPush({ key: `kaynak:${b.ad}:${today}`, type: "sistem", sev: "warn", sym: null,
+          title: `Veri kaynağı bayat: ${b.ad}`, detail: yasMetni + (b.sonHata ? ` · ${b.sonHata}` : "") });
+        if (mark(`kaynak:${b.ad}:${today}`))
+          alerts.push({ sev: "warn", kind: "kaynak", kindLabel: "Veri kaynağı", sym: null,
+            title: `${b.ad} kaynağı bayat`,
+            headline: `Son doğrulanmış veri alınalı <b>${yasMetni}</b>. Ekrandaki sayılar son bilinen değerlerden.`,
+            stats: [
+              { label: "Kaynak", value: b.ad },
+              { label: "Son başarı", value: b.sonBasari ? b.sonBasari.slice(0, 16).replace("T", " ") : "—" },
+              { label: "Yaş", value: b.yasDk == null ? "—" : `${b.yasDk} dk` },
+              { label: "Eşik", value: `${SOURCE_STALE_MIN} dk` },
+            ],
+            action: (b.sonHata || "Kaynak yanıt vermiyor.") + " Sağlayıcı ucu değişmiş olabilir — /api/health/sources'a bak." });
+      }
+    } catch {}
+
     if (changed) await guardSave(notified);
 
-    // ── Kuyruk kararı (kural yukarıda anlatıldı) ──
+    // ── Kuyruk kararı — mantık ./guard-queue.js'te (saf, test edilebilir) ──
     const now = new Date();
     const saat = trSaat(now);
-    const st = await pendingLoad();
-    const bayatSinir = new Date(Date.now() - PENDING_MAX_DAYS * 86400_000).toISOString().slice(0, 10);
-    st.items = st.items.filter((x) => String(x?.day || "") >= bayatSinir);
+    const k = kuyrukKarari({
+      alerts, durum: await pendingLoad(), bugun: today, saat,
+      utcSaat: now.getUTCHours(), digestSaat: DIGEST_HOUR, maxGun: PENDING_MAX_DAYS,
+    });
 
-    const acil = alerts.filter((a) => a.sev === "crit");
-    for (const a of alerts) if (a.sev !== "crit") st.items.push({ day: today, at: saat, alert: a });
-    const bekleyen = st.items.map((x) => ({ ...x.alert, at: x.at }));
-
-    let gonderilecek = null;
-    if (acil.length) {
-      // Acil çıkıyorsa kuyruğu da bindir — nasılsa mail gidiyor, ikincisi gereksiz
-      gonderilecek = [...acil.map((a) => ({ ...a, at: saat })), ...bekleyen];
-    } else if (bekleyen.length && now.getUTCHours() >= DIGEST_HOUR && st.lastFlush !== today) {
-      gonderilecek = bekleyen;
+    if (k.gonderilecek?.length) {
+      await chSendMail(digestSubject(k.gonderilecek, now),
+        digestHtml(k.gonderilecek, { holdings: stocks.length, totalMV: usd0(totMV), trigger }, now));
     }
-
-    let mailSayisi = 0;
-    if (gonderilecek?.length) {
-      await chSendMail(digestSubject(gonderilecek, now),
-        digestHtml(gonderilecek, { holdings: stocks.length, totalMV: usd0(totMV), trigger }, now));
-      st.items = []; st.lastFlush = today; mailSayisi = 1;
-    }
-    await pendingSave(st);
+    await pendingSave(k.durum);
 
     GUARD.last = new Date().toISOString();
     GUARD.lastSummary = { trigger, holdings: stocks.length, alerts: alerts.length,
-      acil: acil.length, kuyrukta: st.items.length, mails: mailSayisi };
+      acil: k.acilSayisi, kuyrukta: k.durum.items.length, mails: k.mailSayisi };
     return GUARD.lastSummary;
   } catch (e) { console.error("Portföy Bekçisi hatası:", e.message); return (GUARD.lastSummary = { trigger, error: String(e.message || e) }); }
   finally { GUARD.busy = false; }
@@ -1351,6 +1376,18 @@ setTimeout(() => guardTick("startup").catch(() => {}), 120_000);
 setInterval(() => guardTick("timer").catch(() => {}), 60 * 60_000);
 app.post("/api/guard/scan", async (_req, res) => res.json(await guardTick("manual")));
 app.get("/api/guard/status", (_req, res) => res.json({ last: GUARD.last, lastSummary: GUARD.lastSummary, mailConfigured: !!process.env.RESEND_API_KEY }));
+
+/* Kaynak sağlığı — 3 Ağu dersinin kurumsallaşmış hâli. O gün döviz kaynağı
+ * 9 gün boyunca sessizce bozuktu ve tek sinyal ön yüzdeki küçük bir rozetti.
+ * Buradan her kaynağın son DOĞRULANMIŞ tazelemesi görünür. */
+app.get("/api/health/sources", (_req, res) => {
+  const d = KAYNAKLAR.durumlar();
+  res.json({
+    kaynaklar: d,
+    bayat: KAYNAKLAR.bayatOlanlar(SOURCE_STALE_MIN).map((x) => x.ad),
+    esikDk: SOURCE_STALE_MIN,
+  });
+});
 
 /* ===== Risk Bütçesi — aylık zarar freni ==========================================
  * Kural 1'in somut hali: ay için bir kayıp bütçesi (ay başı sermayenin %X'i) vardır.
@@ -1640,18 +1677,7 @@ async function pool(items, n, fn) {
 // Dakika-başı token limiti (sliding window). Sağlayıcı kotasını aşmaz.
 // softCap: arka plan işleri (radar) düşük tavanla geçer → ön plana (portföy
 // fiyatları) headroom kalır, kullanıcı isteği arka plan taramasının arkasında beklemez.
-function rateLimiter(maxPerMin) {
-  let hits = [];
-  return async function gate(softCap = maxPerMin) {
-    const cap = Math.min(softCap, maxPerMin);
-    for (;;) {
-      const now = Date.now();
-      hits = hits.filter((t) => now - t < 60_000);
-      if (hits.length < cap) { hits.push(now); return; }
-      await new Promise((r) => setTimeout(r, Math.max(250, 60_000 - (now - hits[0]) + 50)));
-    }
-  };
-}
+// rateLimiter ./rate-limit.js'e taşındı (saf hesap, tek başına test edilebilir)
 const finnhubGate = rateLimiter(55);   // 60/dk limitinde güvenli pay
 const tdGate = rateLimiter(7);          // 8/dk
 const FH_BG_CAP = 40;                   // periyodik arka plan taraması için yumuşak tavan
@@ -1858,21 +1884,18 @@ const PRICE_FILE = join(__dirname, "price_cache.json");
 let lastStocks = {};      // SEMBOL → son başarılı quote
 let lastMetals = null;    // son başarılı döviz/altın
 let lastFunds = {};       // FON KODU → son başarılı fiyat
-(async () => {
+const PRICE_CACHE_HAZIR = (async () => {
   try {
     const j = JSON.parse(await readFile(PRICE_FILE, "utf8"));
     if (j?.stocks && typeof j.stocks === "object") lastStocks = j.stocks;
     if (j?.metals) lastMetals = j.metals;
     if (j?.funds && typeof j.funds === "object") lastFunds = j.funds;
   } catch {}
-  // Render diski GEÇİCİ: yukarıdaki dosya deploy/uykuda yok olur ve döviz
-  // yedeği kaybolur. Kaynak da boş dönüyorsa ₺ toplamları çöker (3 Ağu olayı).
-  // O yüzden döviz/altın yedeği DB'den de yüklenir.
-  if (!lastMetals?.usd?.selling) {
-    const kv = await kvLoad("price_metals").catch(() => null);
-    if (kv?.usd?.selling > 0) lastMetals = kv;
-  }
 })();
+/* Render diski GEÇİCİ: yukarıdaki dosya deploy/uykuda yok olur ve döviz yedeği
+ * kaybolur. Kaynak da boş dönüyorsa ₺ toplamları çöker (3 Ağu olayı). DB'den
+ * tohumlama metalsKaynak.tohumla() ile yapılır — tanımının hemen ardında
+ * çağrılır, böylece sıralama açıkta kalmaz. */
 let priceSaveTimer = null;
 function persistPrices() {
   clearTimeout(priceSaveTimer);
@@ -1897,7 +1920,19 @@ async function fetchStocks(symbols) {
       const results = await pool(uniq, 8, (sym) => fhQuote(sym).catch(() => null));
       uniq.forEach((sym, i) => { if (results[i]) map[sym] = results[i]; });
     }
-    // Yedek (yalnızca yerel/ev IP'sinde çalışır): anahtarsız Yahoo.
+    // 2. YEDEK: TwelveData. Anahtar .env'de duruyordu ama fiyat zincirinde
+    // HİÇ kullanılmıyordu — yalnız mum verisi için çağrılıyordu. 3 Ağu akşamı
+    // Finnhub HTTP vermez oldu (TCP bağlanıyor, yanıt yok) ve TÜM hisseler
+    // "fiyat bulunamadı"ya düştü; oysa çalışan, anahtarlı bir sağlayıcı vardı.
+    // Yahoo'nun tek yedek olması bulutta işe yaramıyor (Render IP'leri bloklu).
+    if (Object.keys(map).length < uniq.length && TD_KEY) {
+      const eksik = uniq.filter((s) => !map[s]);
+      try {
+        const td = await tdQuotes(eksik);
+        for (const [sym, q] of Object.entries(td)) if (!map[sym]) map[sym] = q;
+      } catch { /* sıradaki yedeğe */ }
+    }
+    // 3. YEDEK (yalnızca yerel/ev IP'sinde çalışır): anahtarsız Yahoo.
     if (!Object.keys(map).length) {
       try { map = await fetchStocksYahoo(uniq); } catch {}
     }
@@ -1995,48 +2030,40 @@ async function fetchTCMB() {
   if (!usd) throw new Error("TCMB bülteninde USD yok");
   return { updated: (xml.match(/Tarih="([^"]+)"/) || [])[1] || null, usd, eur: kur("EUR") };
 }
-async function fetchMetals() {
-  return cached("metals", 60_000, async () => {
-    let sonHata = null;
+/* Döviz/altın kaynağı. TTL, istek birleştirme, stale yedeği ve kalıcılık
+ * artık sources.js'te — burada yalnız "nereden nasıl alınır" kalıyor.
+ * dogrula usd'yi ŞART, gram'ı OPSİYONEL sayar: TCMB altın yayımlamıyor ve
+ * felakete yol açan şey usdtry'ın null kalmasıydı, altın tek pozisyon. */
+const metalsKaynak = KAYNAKLAR.ekle(kaynak({
+  ad: "doviz-altin",
+  ttl: 60_000,
+  dogrula: (o) => o?.usd?.selling > 0,
+  // Yedek: önce DB (Render diski geçici), olmazsa disk önbelleği (yerel/dosya modu)
+  kalici: { yukle: async () => (await kvLoad(METALS_KEY)) || lastMetals, kaydet: (v) => kvSave(METALS_KEY, v) },
+  getir: async (sonIyi) => {
+    // 1) Truncgil — tam paket (döviz + altın)
     for (const url of METAL_URLS) {
       try {
         const out = normalizeMetals(await fetchJSON2(url));
-        // YAPISAL KAPI: 200 geldi diye veri geldi sanma
-        if (!(out.usd?.selling > 0) || !(out.gram?.selling > 0)) {
-          sonHata = new Error(`${url} → gövde eksik (usd/gram yok)`);
-          console.warn("  ⚠️ döviz/altın kaynağı boş döndü:", url);
-          continue;
-        }
-        lastMetals = out;
-        persistPrices();
-        kvSave(METALS_KEY, out).catch(() => {});   // Render diski geçici → DB'ye de yaz
-        return out;
-      } catch (e) { sonHata = e; }
+        if (out.usd?.selling > 0 && out.gram?.selling > 0) { lastMetals = out; persistPrices(); return out; }
+        console.warn("  ⚠️ döviz/altın kaynağı boş döndü:", url);
+      } catch { /* sıradaki uç */ }
     }
-    // Truncgil'in HİÇBİR ucu veremedi. Sıra bağımsız kaynakta.
-    const yedek = lastMetals || (await kvLoad(METALS_KEY).catch(() => null));
-    try {
-      const t = await fetchTCMB();
-      // TCMB altın vermez → gram/ceyrek/yarim/tam son bilinen değerden gelir.
-      // usd/eur TAZE, altın tarafı eski: stale işaretlenir, ön yüz "son bilinen
-      // değer" rozetini gösterir. Kur doğru olduğu sürece ₺ toplamları sağlam.
-      const out = { ...(yedek || {}), updated: t.updated, usd: t.usd,
-                    eur: t.eur || yedek?.eur || null, source: "tcmb" };
-      delete out.stale;
-      lastMetals = out;
-      persistPrices();
-      kvSave(METALS_KEY, out).catch(() => {});
-      console.warn("  ⚠️ Truncgil yok — kur TCMB'den alındı" + (out.gram?.selling ? ", altın son bilinen değer" : ", ALTIN YOK"));
-      return { ...out, stale: true };
-    } catch (e) {
-      sonHata = e;
-      console.warn("  ⚠️ TCMB de veremedi:", e.message);
-    }
-    // İkisi de yoksa son bilinen değer (bellek, sonra DB)
-    if (yedek?.usd?.selling > 0) { lastMetals = yedek; return { ...yedek, stale: true }; }
-    throw sonHata || new Error("döviz/altın alınamadı");
-  });
-}
+    // 2) TCMB — bağımsız kurum, ama YALNIZ döviz. Altın son iyi değerden taşınır.
+    const t = await fetchTCMB();
+    const out = { ...(sonIyi || {}), updated: t.updated, usd: t.usd,
+                  eur: t.eur || sonIyi?.eur || null, source: "tcmb" };
+    delete out.stale;
+    lastMetals = out; persistPrices();
+    console.warn("  ⚠️ Truncgil yok — kur TCMB'den alındı" + (out.gram?.selling ? ", altın son bilinen değer" : ", ALTIN YOK"));
+    return out;
+  },
+}));
+async function fetchMetals() { return metalsKaynak.oku(); }
+// Açılışta son iyi değeri yükle. Disk önbelleği okunduktan SONRA çalışır,
+// yoksa dosya modunda yedek daha yüklenmemiş olurdu. Doğrulamadan geçmeyen
+// kayıt yüklenmez — bozuk yedek "son iyi değer" olmamalı.
+PRICE_CACHE_HAZIR.then(() => metalsKaynak.tohumla()).catch(() => {});
 
 /* --------------------- Canlı veri: TEFAS fonları ---------------------- */
 function tefasDate(d) {
@@ -2111,25 +2138,25 @@ async function fetchFund(code) {
 const VIX_FILE = join(__dirname, "vix_cache.json");
 const VIX_TTL = 10 * 60_000;
 let lastVix = null;
-let vixRefreshing = false;
-(async () => {
+const VIX_HAZIR = (async () => {
   try {
     const j = JSON.parse(await readFile(VIX_FILE, "utf8"));
     if (isFinite(Number(j?.value))) lastVix = j;
   } catch {}
 })();
 
-// Yahoo'dan canlı VIX'i çekip belleğe + diske yazar. Hata olursa eldeki
-// değeri "bayat" işaretler. Asla throw etmez (arka planda çağrılır).
-async function refreshVix() {
-  if (vixRefreshing) return lastVix;
-  vixRefreshing = true;
-  try {
-    const url =
-      "https://query1.finance.yahoo.com/v8/finance/chart/%5EVIX?interval=1d&range=5d";
-    const r = await fetchRetry(url, {
-      headers: { "User-Agent": UA, Accept: "application/json" },
-    });
+/* VIX — arka plan modunda: istek yolunda beklemez, eldeki değeri anında verip
+ * arkada tazeler. Elle yazılmış refreshing bayrağı + stale işaretleme +
+ * disk yazımı sarmalayıcıya devredildi (bkz. sources.js). */
+const vixKaynak = KAYNAKLAR.ekle(kaynak({
+  ad: "vix",
+  ttl: VIX_TTL,
+  arkaPlanTazele: true,
+  dogrula: (o) => Number(o?.value) > 0,
+  kalici: { yukle: async () => (await kvLoad("vix_cache")) || lastVix, kaydet: (v) => kvSave("vix_cache", v) },
+  getir: async () => {
+    const url = "https://query1.finance.yahoo.com/v8/finance/chart/%5EVIX?interval=1d&range=5d";
+    const r = await fetchRetry(url, { headers: { "User-Agent": UA, Accept: "application/json" } });
     const j = await r.json();
     const meta = j?.chart?.result?.[0]?.meta;
     const v = Number(meta?.regularMarketPrice);
@@ -2140,27 +2167,13 @@ async function refreshVix() {
       prevClose: isFinite(prev) ? prev : null,
       changePct: prev ? ((v - prev) / prev) * 100 : null,
       fetchedAt: new Date().toISOString(),
-      stale: false,
     };
     writeFile(VIX_FILE, JSON.stringify(lastVix), "utf8").catch(() => {});
-  } catch {
-    if (lastVix) lastVix.stale = true; // throttle/hata: eldeki değeri koru
-  } finally {
-    vixRefreshing = false;
-  }
-  return lastVix;
-}
-
-// İstek yolunda asla beklemez: eldeki değeri anında verir, bayatsa arka
-// planda tazeler. Yalnızca hiç değer yoksa (ilk açılış) çekimi bekler.
-async function fetchVix() {
-  if (lastVix) {
-    const age = Date.now() - new Date(lastVix.fetchedAt || 0).getTime();
-    if (age > VIX_TTL) refreshVix(); // fire-and-forget
     return lastVix;
-  }
-  return refreshVix();
-}
+  },
+}));
+VIX_HAZIR.then(() => vixKaynak.tohumla()).catch(() => {});
+async function fetchVix() { return vixKaynak.oku().catch(() => null); }
 
 /* ============================================================
    Leopold Aschenbrenner — Situational Awareness LP 13F takibi
@@ -2314,23 +2327,26 @@ async function getLeopold() {
 const FNG_FILE = join(__dirname, "fng_cache.json");
 const FNG_TTL = 30 * 60_000;
 let lastFng = null;
-let fngRefreshing = false;
-(async () => {
+const FNG_HAZIR = (async () => {
   try {
     const j = JSON.parse(await readFile(FNG_FILE, "utf8"));
     if (isFinite(Number(j?.score))) lastFng = j;
   } catch {}
 })();
 
-async function refreshFng() {
-  if (fngRefreshing) return lastFng;
-  fngRefreshing = true;
-  try {
+/* Korku-Açgözlülük — VIX ile aynı desen: ikincil gösterge, sayfa açılışını
+ * bekletmemeli. arkaPlanTazele açık. */
+const fngKaynak = KAYNAKLAR.ekle(kaynak({
+  ad: "korku-acgozluluk",
+  ttl: FNG_TTL,
+  arkaPlanTazele: true,
+  dogrula: (o) => isFinite(Number(o?.score)),
+  kalici: { yukle: async () => (await kvLoad("fng_cache")) || lastFng, kaydet: (v) => kvSave("fng_cache", v) },
+  getir: async () => {
     const url = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata";
     const r = await fetchRetry(url, {
       headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+        "User-Agent": UA,
         Accept: "application/json, text/plain, */*",
         Referer: "https://edition.cnn.com/markets/fear-and-greed",
       },
@@ -2339,33 +2355,24 @@ async function refreshFng() {
     const fg = j?.fear_and_greed;
     const score = Number(fg?.score);
     if (!isFinite(score)) throw new Error("F&G yok");
+    const yuvarla = (v) => (isFinite(Number(v)) ? Math.round(Number(v)) : null);
     lastFng = {
       score: Math.round(score),
       rating: fg?.rating || null,
-      prevClose: isFinite(Number(fg?.previous_close)) ? Math.round(Number(fg.previous_close)) : null,
-      week: isFinite(Number(fg?.previous_1_week)) ? Math.round(Number(fg.previous_1_week)) : null,
-      month: isFinite(Number(fg?.previous_1_month)) ? Math.round(Number(fg.previous_1_month)) : null,
-      year: isFinite(Number(fg?.previous_1_year)) ? Math.round(Number(fg.previous_1_year)) : null,
+      prevClose: yuvarla(fg?.previous_close),
+      week: yuvarla(fg?.previous_1_week),
+      month: yuvarla(fg?.previous_1_month),
+      year: yuvarla(fg?.previous_1_year),
       updatedAt: fg?.timestamp || null,
       fetchedAt: new Date().toISOString(),
     };
     writeFile(FNG_FILE, JSON.stringify(lastFng), "utf8").catch(() => {});
-  } catch {
-    /* throttle/hata: eldeki değeri koru */
-  } finally {
-    fngRefreshing = false;
-  }
-  return lastFng;
-}
-
-async function fetchFearGreed() {
-  if (lastFng) {
-    const age = Date.now() - new Date(lastFng.fetchedAt || 0).getTime();
-    if (age > FNG_TTL) refreshFng(); // fire-and-forget
     return lastFng;
-  }
-  return refreshFng();
-}
+  },
+}));
+FNG_HAZIR.then(() => fngKaynak.tohumla()).catch(() => {});
+async function fetchFearGreed() { return fngKaynak.oku().catch(() => null); }
+
 
 // Fear & Greed skorundan band + ton üret (CNN ölçeği: 0–100)
 function fngBand(score) {
@@ -3165,6 +3172,41 @@ function tdCount() {
   tdDay.used++;
 }
 
+/* TwelveData: anlık fiyat — Finnhub düştüğünde devreye girer (bkz. fetchStocks).
+ * TOPLU sorgu: /quote virgüllü sembol listesi kabul eder, tek istekte hepsi
+ * gelir. Yanıt tek sembolde düz nesne, çoklu sembolde sembol-anahtarlı nesne —
+ * ikisi de ele alınır. Kota sayacı sembol başına artırılır (kredi öyle işliyor). */
+async function tdQuotes(syms) {
+  if (!TD_KEY || !syms.length) return {};
+  if (!tdBudgetOk(true)) return {};          // günlük arka plan tavanı: grafiğe yer kalsın
+  // Sembol başına 1 kredi. Bu dakika kaç kredi varsa o kadarını iste; kalan
+  // semboller son bilinen değerle dolar. Beklemek yok — istek yolundayız.
+  const kredi = tdGate.tryReserve(syms.length, 7);
+  if (!kredi) return {};
+  const hedef = syms.slice(0, kredi);
+  const url = `https://api.twelvedata.com/quote?symbol=${encodeURIComponent(hedef.join(","))}&apikey=${TD_KEY}`;
+  const r = await fetch(url, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(12_000) });
+  if (!r.ok) return {};
+  const j = await r.json();
+  if (j?.status === "error") return {};
+  const ham = hedef.length === 1 ? { [hedef[0]]: j } : j;
+  const out = {};
+  for (const [sym, q] of Object.entries(ham || {})) {
+    tdCount();                                     // günlük sayaç (dakikalık slot tryReserve'de ayrıldı)
+    const price = Number(q?.close);
+    if (!isFinite(price) || price === 0) continue;   // yapısal kapı: fiyat yoksa kayıt yok
+    const pc = Number(q?.previous_close) || null;
+    const dp = Number(String(q?.percent_change ?? "").replace(",", "."));
+    out[String(sym).toUpperCase()] = {
+      price,
+      prevClose: pc,
+      dayChangePct: isFinite(dp) ? dp : (pc ? ((price - pc) / pc) * 100 : null),
+      currency: q?.currency || "USD",
+    };
+  }
+  return out;
+}
+
 // TwelveData: günlük tam OHLC + tarih (mum grafiği için). order=ASC → eskiden yeniye.
 async function tdOHLC(sym, outputsize = 200, opts = {}) {
   if (!TD_KEY) return null;
@@ -3604,41 +3646,18 @@ let ledgerDirty = false;
  * görmesi de signal_ledger.json'ı takipte tutmayı zorunlu kılıyordu.
  * Boş DB ilk açılışta dosyadan TOHUMLANIR — mevcut defter kaybolmasın. */
 const LEDGER_KEY = "signal_ledger";
-async function loadLedger() {
-  if (dbPool) {
-    try {
-      const r = await dbPool.query("SELECT value FROM app_data WHERE key=$1", [LEDGER_KEY]);
-      if (r.rows.length && Array.isArray(r.rows[0].value)) { ledger = r.rows[0].value; return; }
-    } catch {}
-    // DB'de yok → varsa dosyadan tohumla ve DB'ye yaz (tek seferlik geçiş)
-    try {
-      const j = JSON.parse(await readFile(LEDGER_FILE, "utf8"));
-      if (Array.isArray(j) && j.length) {
-        ledger = j;
-        await dbPool.query("INSERT INTO app_data(key,value,updated_at) VALUES($1,$2,now()) ON CONFLICT(key) DO NOTHING", [LEDGER_KEY, j]);
-        console.log(`  Sinyal defteri dosyadan tohumlandı → DB (${j.length} kayıt)`);
-      }
-    } catch {}
-    return;
-  }
-  try {
-    const j = JSON.parse(await readFile(LEDGER_FILE, "utf8"));
-    if (Array.isArray(j)) ledger = j;
-  } catch {}
-}
+/* Sinyal defteri — 3 Ağu'ya kadar YALNIZ diskteydi ve Render'ın geçici diski
+ * yüzünden her deploy'da son commit'e dönüyordu (diskte 102, git'te 90 kayıt).
+ * tohumla:true → boş DB ilk açılışta dosyadaki defteri devralır. */
+const ledgerDepo = depo(LEDGER_KEY, { dosya: LEDGER_FILE, varsayilan: [], tohumla: true,
+  normalize: (v) => (Array.isArray(v) ? v : []) });
+async function loadLedger() { ledger = await ledgerDepo.oku(); }
 async function persistLedger() {
   if (!ledgerDirty) return;
   ledgerDirty = false;
-  if (dbPool) {
-    try {
-      await dbPool.query(
-        "INSERT INTO app_data(key,value,updated_at) VALUES($1,$2,now()) ON CONFLICT(key) DO UPDATE SET value=$2, updated_at=now()",
-        [LEDGER_KEY, ledger]);
-    } catch {}
-    return;
-  }
-  try { await writeFile(LEDGER_FILE, JSON.stringify(ledger, null, 1), "utf8"); } catch {}
+  try { await ledgerDepo.yaz(ledger); } catch {}
 }
+
 
 // Tarama sonrası: kurulumlu planları karneye yaz (sembol+tip başına tek aktif kayıt)
 function recordSignals(symbols) {
@@ -7418,9 +7437,9 @@ app.listen(PORT, () => {
 // Piyasa duygu verisini açılışta ısıt: ilk istekten önce VIX/F&G hazır olsun,
 // sonra periyodik tazele (istek yolu zaten asla beklemiyor).
 (async () => {
-  await Promise.allSettled([refreshVix(), refreshFng()]);
+  await Promise.allSettled([fetchVix(), fetchFearGreed()]);
 })();
-setInterval(() => { refreshVix(); refreshFng(); }, 10 * 60_000).unref?.();
+setInterval(() => { fetchVix(); fetchFearGreed(); }, 10 * 60_000).unref?.();
 
 // Gün içi 15dk'lık portföy noktası: sunucu kendi /api/portfolio'unu çağırır
 // (geçerli oturum çereziyle) → intraday seyri uygulama açık olmasa da birikir.

@@ -36,6 +36,9 @@ jobs:
       - name: Bağımlılıklar
         run: npm ci
 
+      - name: Birim testleri
+        run: npm test
+
       - name: Sözdizimi (gerekli ama YETERLİ DEĞİL)
         run: |
           for f in server.js qm.js swing-proven.js cash-target.js guard-mail.js; do
