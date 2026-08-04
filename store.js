@@ -47,8 +47,13 @@ export function depoOlustur({ dbOku, dbYaz, dosyaOku, dosyaYaz, log = console })
         // Kaybı önler: dosya Render'da geçici, DB kalıcı.
         if (tohumla) {
           try {
-            await dbYaz(anahtar, dosyaVeri, { yalnizYoksa: true });
-            log.log?.(`  ${anahtar}: dosyadan DB'ye tohumlandı`);
+            // YALNIZ gerçekten yazıldıysa haber ver. dbYaz DB yokken false
+            // döner; koşulsuz loglamak dosya modunda "tohumlandı" diye yalan
+            // söylüyordu — olmayan başarıyı raporlamak bu projede bir kez
+            // pahalıya patladı (3 Ağu: HTTP 200 ≠ veri geldi).
+            if (await dbYaz(anahtar, dosyaVeri, { yalnizYoksa: true })) {
+              log.log?.(`  ${anahtar}: dosyadan DB'ye tohumlandı`);
+            }
           } catch { /* tohumlama başarısızsa okuma yine de çalışsın */ }
         }
         return duzelt(dosyaVeri);

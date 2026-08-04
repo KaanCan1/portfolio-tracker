@@ -57,6 +57,35 @@ test("tohumla: DB boş + dosyada kayıt → DB'ye taşınır", async () => {
   assert.deepEqual(o.db.k, [1, 2, 3], "DB'ye tohumlanmalıydı");
 });
 
+test("tohumla: DB YOKKEN 'tohumlandı' diye YALAN SÖYLEMEZ", async () => {
+  const satirlar = [];
+  const depo = depoOlustur({
+    log: { log: (m) => satirlar.push(m) },
+    dbOku: async () => null,
+    dbYaz: async () => false,                 // dosya modu: DB yok
+    dosyaOku: async () => "[1,2,3]",
+    dosyaYaz: async () => {},
+  });
+  const d = depo("signal_ledger", { dosya: "/k.json", tohumla: true, varsayilan: [] });
+  assert.deepEqual(await d.oku(), [1, 2, 3], "okuma yine de çalışmalı");
+  assert.deepEqual(satirlar, [], "hiçbir şey yazılmadıysa 'tohumlandı' denmemeli");
+});
+
+test("tohumla: DB VARKEN gerçekten haber verir", async () => {
+  const satirlar = [];
+  const db = {};
+  const depo = depoOlustur({
+    log: { log: (m) => satirlar.push(m) },
+    dbOku: async () => null,
+    dbYaz: async (k, v) => { db[k] = v; return true; },
+    dosyaOku: async () => "[1]",
+    dosyaYaz: async () => {},
+  });
+  await depo("k", { dosya: "/k.json", tohumla: true }).oku();
+  assert.equal(satirlar.length, 1);
+  assert.match(satirlar[0], /tohumlandı/);
+});
+
 test("tohumla kapalıyken DB'ye yazılmaz", async () => {
   const o = ortam({ dosyalar: { "/k.json": "[1]" } });
   await o.kur()("k", { dosya: "/k.json" }).oku();
