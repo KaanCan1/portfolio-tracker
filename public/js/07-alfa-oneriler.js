@@ -1237,7 +1237,14 @@ function labScanPaint(r) {
       <td>%${v.maksDususPct}</td>
     </tr>`;
   }).join("");
-  $("#labRes").innerHTML = `
+  // Tek koşudaki uyarının aynısı: eksik zenginleştirme taramada da SESSİZ GEÇMEZ.
+  // Burada daha da önemli, çünkü tek satır değil 15 varyantın hepsi birden kayar.
+  const eksik = (r.eksikVeri || []).length
+    ? `<div class="lab-ci-box warn thin"><b>Eksik veriyle tarandı:</b> ${r.eksikVeri.join(" ve ")} verisi gelmedi,
+       bu taramada o filtre(ler) KAPALI — ${r.varyantlar.length} varyantın HEPSİ etkilendi. Sıralama yine kendi içinde tutarlı
+       ama mutlak rakamlar canlıdan sapar; veri gelince tekrar tara.</div>`
+    : "";
+  $("#labRes").innerHTML = eksik + `
     <div class="ls-head"><b>Tarama sonucu</b> — ${r.start} → bugün · evren ${r.universe} hisse · ${r.sureSn} sn
       <span class="ls-base">Canlı kurallar: ${r.baseline.islem} işlem · ort ${fR(r.baseline.ortR)} · getiri %${r.baseline.getiriPct} · maks düşüş %${r.baseline.maksDususPct}</span></div>
     <div class="tbl-wrap"><table class="ls-table">

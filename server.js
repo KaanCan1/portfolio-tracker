@@ -7241,6 +7241,11 @@ async function labScanRun(startISO) {
   return {
     start: startISO, universe: ctx.watch.length, sureSn: +((Date.now() - t0) / 1000).toFixed(1),
     baseline: { islem: B.tam.islem, isabet: B.tam.isabet, ortR: B.tam.ortR, getiriPct: B.tam.getiriPct, maksDususPct: B.tam.maksDususPct, sermaye: B.tam.sermaye, komisyon: B.tam.komisyon },
+    // Tek koşuda (POST /api/lab/backtest) olduğu gibi taramada da eksik zenginleştirme
+    // BİLDİRİLİR. Yoksa soğuk sunucuda bilanço/sektör filtreleri sessizce eksik koşar ve
+    // 15 varyantın hepsi sessizce kayar — 5 Ağu'da ölçüldü: soğuk/sıcak taramada
+    // varyantların bir kısmı farklı işlem sayısı verdi (hükümler aynı kaldı ama garanti yok).
+    eksikVeri: ctx.eksik,
     kesim: mid, varyantlar: out,
     not: "Tüm koşular risk %" + CH_ENG.riskPct + " ve canlı komisyonla (teşhis satırı hariç) — kaldıraç değil edge kıyaslanır. Sıralama: walk-forward tutarlılığı + bootstrap anlamlılık önce, ortalama R sonra. 'Sağlam' bile GARANTİ değildir; geçmiş tekrar etmez.",
   };
