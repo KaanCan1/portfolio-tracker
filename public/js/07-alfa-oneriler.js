@@ -927,13 +927,13 @@ let LAB_BUSY = false;
  * (60-hisse canlı taraması: iki yarıda artı, DD −33→−27; kanıt değil tutarlı eğilim). */
 const LAB_PRESETS = {
   canli: { ad: "Canlı kurallar", ikon: "🟢", tip: "Alfa Avı'nın bugünkü kuralları (22 Tem'den beri TP 5/20: ilk kârı erken al, kalanı trene bindir) — kıyas çizgisi.",
-    v: { tp1: 5, tp2: 20, riskPct: 3, commission: 1.5, rsMode: "half", rsMin: 30, ep: true, regimeGate: true, regimeBE: true } },
+    v: { tp1: 5, tp2: 20, riskPct: 3, commission: 1.5, rsMode: "half", rsMin: 30, ep: true, regimeGate: true, regimeBE: true, entryMode: "close" } },
   eski: { ad: "Eski kurallar (6/12)", ikon: "🕰", tip: "22 Tem'e kadar canlı olan TP 6/12 — yeni kural gerçekten önde mi diye ara sıra buna karşı koştur.",
-    v: { tp1: 6, tp2: 12, riskPct: 3, commission: 1.5, rsMode: "half", rsMin: 30, ep: true, regimeGate: true, regimeBE: true } },
+    v: { tp1: 6, tp2: 12, riskPct: 3, commission: 1.5, rsMode: "half", rsMin: 30, ep: true, regimeGate: true, regimeBE: true, entryMode: "close" } },
   koruma: { ad: "Düşüş modu", ikon: "🐢", tip: "Kaybederken oynanan mod: risk küçülür (%2), zayıf hisse eşiği sıkılır. Amaç kazanmak değil, kötü dönemi ucuz atlatmak.",
-    v: { tp1: 5, tp2: 12, riskPct: 2, commission: 1.5, rsMode: "half", rsMin: 50, ep: true, regimeGate: true, regimeBE: true } },
+    v: { tp1: 5, tp2: 12, riskPct: 2, commission: 1.5, rsMode: "half", rsMin: 50, ep: true, regimeGate: true, regimeBE: true, entryMode: "close" } },
   serbest: { ad: "Filtresiz", ikon: "🔬", tip: "Tüm korumalar kapalı — filtrelerin toplam ne kadar iş yaptığını GÖRMEK için. Canlıya almak için değil.",
-    v: { tp1: 5, tp2: 20, riskPct: 3, commission: 1.5, rsMode: "off", rsMin: 30, ep: true, regimeGate: false, regimeBE: false } },
+    v: { tp1: 5, tp2: 20, riskPct: 3, commission: 1.5, rsMode: "off", rsMin: 30, ep: true, regimeGate: false, regimeBE: false, entryMode: "close" } },
 };
 function labSetForm(v) {
   const f = $("#labForm"); if (!f) return;
@@ -1002,6 +1002,12 @@ function labInit() {
           ${yardim("Piyasa rejimi 'kapalı'yken yeni teknik giriş alınmaz (EP yarım boyutla devam eder).")}</label>
         <label class="lab-f lab-chk"><input name="regimeBE" type="checkbox" checked> Rejim: başabaş zorlaması
           ${yardim("Kötü piyasada kârdaki pozisyonun stopu girişe çekilir — koruma sağlar ama pozisyonları 'sıyrıkla' tıraşlayabilir.")}</label>
+        <label class="lab-f"><i>Giriş zamanı</i>
+          <select name="entryMode">
+            <option value="close">Kapanışta (canlı)</option>
+            <option value="intraday">Gün içi (alış-stop)</option>
+          </select>
+          ${yardim("Kapanışta = sinyal bar kapanınca teyitlenir, giriş kapanış fiyatından. Gün içi = akşamdan 'EMA8'i keserse al' emri bırakılır, gün içinde dolar: dolum ucuzlar AMA hacim teyidi kaybolur ve stop daha kördür (günün dibi henüz bilinmez).")}</label>
       </div>
       <div class="lab-actions">
         <button type="submit" class="btn primary sm" id="labGo">Koştur</button>
@@ -1051,6 +1057,7 @@ function labInit() {
       start: f.get("start"), tp1: +f.get("tp1"), tp2: +f.get("tp2"), riskPct: +f.get("riskPct"),
       commission: +f.get("commission"), rsMode: f.get("rsMode"), rsMin: +f.get("rsMin"),
       ep: f.get("ep") === "on", regimeGate: f.get("regimeGate") === "on", regimeBE: f.get("regimeBE") === "on",
+      entryMode: f.get("entryMode"),
     };
     try {
       const r = await fetch("/api/lab/backtest", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -1094,7 +1101,14 @@ function labPaint(d) {
         </div>
         <div class="lab-ci-legend"><span>varyant kötü ←</span><span>0</span><span>→ varyant iyi</span></div>
       </div>`;
-  $("#labRes").innerHTML = `
+  // Eksik zenginleştirme SESSİZ GEÇMEZ: bilanço/sektör verisi gelmediyse o filtreler
+  // bu koşuda kapalı demektir — sonuç hâlâ okunur ama neyin eksik olduğu söylenmeli.
+  const eksik = (d.eksikVeri || []).length
+    ? `<div class="lab-ci-box warn thin"><b>Eksik veriyle koşuldu:</b> ${d.eksikVeri.join(" ve ")} verisi gelmedi,
+       bu koşuda o filtre(ler) KAPALI. İki taraf da aynı şekilde etkilendiği için kıyas hâlâ adil,
+       ama mutlak rakamlar canlıdan sapar — veri gelince tekrar koştur.</div>`
+    : "";
+  $("#labRes").innerHTML = eksik + `
     <div class="tbl-wrap lab-tbl"><table>
       <thead><tr><th class="l">Metrik</th><th>Canlı kurallar</th><th>Varyantın</th></tr></thead>
       <tbody>${rows.map(([lbl, k, fmt]) => {

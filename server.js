@@ -12,10 +12,12 @@ import { bootCI, mulberry32, swingProven } from "./swing-proven.js";
 import { deriveCashTarget } from "./cash-target.js";
 import { digestHtml, digestSubject } from "./guard-mail.js";
 import { kaynak, kaynakDefteri } from "./sources.js";
+import { adrAt as chAdrAt, seansIciGirisSinyali } from "./entry-modes.js";
 import { depoOlustur } from "./store.js";
 import { rateLimiter } from "./rate-limit.js";
 import { kuyrukKarari } from "./guard-queue.js";
 import { pozisyonBulgulari, bayatKaynakBulgusu, usd0 } from "./guard-alerts.js";
+import { canliBarBindir } from "./live-bar.js";
 
 // Dış veri kaynaklarının tek kaydı — sağlık ucu buradan okur
 const KAYNAKLAR = kaynakDefteri();
@@ -393,7 +395,8 @@ const CH_ENG = {
 };
 const chEmaArr = (v, p) => { const k = 2 / (p + 1); let e = null; return v.map((c) => (e = e == null ? c.close : c.close * k + e * (1 - k))); };
 const chVmaArr = (v, p) => v.map((c, i) => i < p - 1 ? null : v.slice(i - p + 1, i + 1).reduce((a, b) => a + b.volume, 0) / p);
-const chAdrAt = (v, i, p = 20) => { let s = 0, k = 0; for (let j = i - p + 1; j <= i; j++) { if (j < 0) continue; s += (v[j].high - v[j].low) / v[j].close; k++; } return k ? (s / k) * 100 : null; };
+/* chAdrAt → ./entry-modes.js'ten import (adrAt). Tek tanım: gün içi giriş de aynı
+ * ADR'yi kullanıyor, iki kopya zamanla ayrışırdı. */
 const chSizeSrv = (entry, stop) => { const frac = (entry - stop) / entry; const riskUSD = CH_ENG.startCapital * CH_ENG.riskPct / 100; return Math.max(CH_ENG.minNotional, Math.min(CH_ENG.maxNotional, riskUSD / Math.max(0.001, frac))); };
 
 /* ---- RİSK İŞTAHI ENDEKSİ (RAI, 0-100) ------------------------------------
@@ -668,9 +671,11 @@ function chSrvEpSignal(S, sym, i) {
 
 /* RS yüzdeliği (1-99) — adayın ağırlıklı momentumu (chRsAt) evrendeki sırasına çevrilir.
  * Evren < 10 sembolse null döner → kural dürüstçe pasif kalır (yüzdelik anlamsızlaşır). */
-function chRsPct(S, watch, d, sym) {
+/* off=1 → bir önceki barın RS'i. Gün içi girişte gereklidir: emri verirken bugünün
+ * kapanışı (dolayısıyla bugünün RS'i) HENÜZ YOKTUR; off=0 kullanmak lookahead olurdu. */
+function chRsPct(S, watch, d, sym, off = 0) {
   const vals = [];
-  for (const w of watch) { const i = S[w]?.idx[d]; if (i != null) { const r = chRsAt(S[w], i); if (isFinite(r)) vals.push([w, r]); } }
+  for (const w of watch) { const i0 = S[w]?.idx[d], i = i0 == null ? null : i0 - off; if (i != null && i >= 0) { const r = chRsAt(S[w], i); if (isFinite(r)) vals.push([w, r]); } }
   if (vals.length < 10) return null;
   vals.sort((a, b) => a[1] - b[1]);
   const k = vals.findIndex(([w]) => w === sym);
@@ -714,10 +719,28 @@ async function chEngineTick(trigger = "timer") {
     led.notified = led.notified || {};
     for (const t of led.trades) syms.add(t.sym);
     const universe = [...syms].slice(0, CH_ENG.maxSyms);
+    const todayISO = new Date().toISOString().slice(0, 10);
+    /* CANLI BAR — mumlar 18 saat TTL'li olduğu için seans içinde bayat kalıyordu:
+     * açık pozisyonda dünün kapanışı görünüyor, hedef/stop kontrolü kapanmış
+     * mumla yapılıyordu ("... mumunda hedef görüldü" mailleri kapanış sonrası
+     * düşüyordu). Mumu sık tazelemek kotayı yakardı (60 sembol × 5 dk); onun
+     * yerine TEK toplu canlı kotasyon çağrısı bugünün barına bindiriliyor —
+     * portföyün kullandığı yolun aynısı, 60 sn önbellekli.
+     * Determinizm korunur: TP/stop high/low'a bakar, onlar gün içinde tek yönlü
+     * büyür (bkz. live-bar.js). */
+    /* YALNIZ defterdeki semboller — tüm evren DEĞİL. Girişler hâlâ kapanmış
+     * bara bağlı (aşağıdaki `d >= todayISO` kapısı), dolayısıyla canlı fiyat
+     * yalnız açık pozisyonun hedef/stop kontrolü ve panodaki mark için gerekli.
+     * 60 sembol istemek Finnhub'ın dk-55 sınırına takılıp her tiki ~1 dk'ya
+     * uzatır ve portföyün kotasını yerdi. */
+    const canliSyms = [...new Set(led.trades.map((t) => t.sym))];
+    const canliQ = canliSyms.length ? await fetchStocks(canliSyms).catch(() => ({})) : {};
     const S = {};
     for (const sym of universe) {
-      const v = candleCache[sym]?.candles;
-      if (v && v.length >= 60) S[sym] = { v, ema8: chEmaArr(v, 8), ema21: chEmaArr(v, 21), ema50: chEmaArr(v, 50), vma: chVmaArr(v, 20), idx: Object.fromEntries(v.map((c, i) => [c.time, i])) };
+      let v = candleCache[sym]?.candles;
+      if (!(v && v.length >= 60)) continue;
+      v = canliBarBindir(v, canliQ[sym], todayISO);
+      S[sym] = { v, ema8: chEmaArr(v, 8), ema21: chEmaArr(v, 21), ema50: chEmaArr(v, 50), vma: chVmaArr(v, 20), idx: Object.fromEntries(v.map((c, i) => [c.time, i])) };
     }
     let Q = null;
     try { const qv = await getCandles(CH_ENG.indexSym); Q = chMkSeries(qv); } catch {}
@@ -750,7 +773,6 @@ async function chEngineTick(trigger = "timer") {
     if (!ref) return (CH_ENG.lastSummary = { trigger, note: "önbellekte mum yok — tarama sonrası tekrar dener" });
 
     // 2) Kronolojik replay — client chRun ile birebir aynı kurallar
-    const todayISO = new Date().toISOString().slice(0, 10);
     const dates = ref.v.map((c) => c.time).filter((d) => d >= CH_ENG.startDate);
     const frozenByDate = {};
     for (const t of led.trades) (frozenByDate[t.date] ||= []).push(t);
@@ -771,7 +793,10 @@ async function chEngineTick(trigger = "timer") {
         if (c.low <= effStop) { const fr = p.rem, gap = c.open != null && c.open < effStop, px = gap ? c.open : effStop, pnl = fr * p.shares * (px - p.entry) - FEE; cash += fr * p.shares * px - FEE; p.fees = (p.fees || 0) + FEE; p.realized += pnl; (p.events ||= []).push({ d, k: gap ? "gap" : (p.stop >= p.entry && !p.tp1hit) ? "def" : p.tp1hit ? "be" : "stop", px, fr, pnl, fee: FEE }); p.rem = 0; p.open = false; p.exitDate = d; p.exitKind = gap ? "gap ile stop (açılışta boşluk — gerçek fiyattan)" : (p.stop >= p.entry && !p.tp1hit) ? "savunma stopu (başa-baş kilidi)" : p.tp1hit ? "başa-baş stop" : "stop"; continue; }
         if (!p.tp1hit && c.high >= p.tp1) { const fr = 0.25, pnl = fr * p.shares * (p.tp1 - p.entry) - FEE; cash += fr * p.shares * p.tp1 - FEE; p.fees = (p.fees || 0) + FEE; p.realized += pnl; p.rem -= fr; p.tp1hit = true; (p.events ||= []).push({ d, k: "tp1", px: p.tp1, fr, pnl, fee: FEE }); }
         if (p.tp1hit && !p.tp2hit && c.high >= p.tp2) { const fr = 0.25, pnl = fr * p.shares * (p.tp2 - p.entry) - FEE; cash += fr * p.shares * p.tp2 - FEE; p.fees = (p.fees || 0) + FEE; p.realized += pnl; p.rem -= fr; p.tp2hit = true; (p.events ||= []).push({ d, k: "tp2", px: p.tp2, fr, pnl, fee: FEE }); }
-        if (p.open && p.rem > 0 && c.close < s.ema21[i]) { const fr = p.rem, pnl = fr * p.shares * (c.close - p.entry) - FEE; cash += fr * p.shares * c.close - FEE; p.fees = (p.fees || 0) + FEE; p.realized += pnl; (p.events ||= []).push({ d, k: "trail", px: c.close, fr, pnl, fee: FEE }); p.rem = 0; p.open = false; p.exitDate = d; p.exitKind = "EMA21 iz süren stop"; }
+        // EMA21 iz süren: close'a bakar ve close gün içinde iki yöne de oynar.
+        // Canlı barda uygulamak tekrar oynatmada farklı sonuç verirdi → yalnız
+        // KAPANMIŞ barda (bkz. live-bar.js determinizm notu).
+        if (p.open && p.rem > 0 && !c.canli && c.close < s.ema21[i]) { const fr = p.rem, pnl = fr * p.shares * (c.close - p.entry) - FEE; cash += fr * p.shares * c.close - FEE; p.fees = (p.fees || 0) + FEE; p.realized += pnl; (p.events ||= []).push({ d, k: "trail", px: c.close, fr, pnl, fee: FEE }); p.rem = 0; p.open = false; p.exitDate = d; p.exitKind = "EMA21 iz süren stop"; }
         if (defensive && p.open && !p.tp1hit && c.close > p.entry) p.stop = Math.max(p.stop, p.entry); // bar sonu başa-baş ratchet
       }
       const held = new Set(positions.filter((x) => x.open).map((x) => x.sym));
@@ -996,7 +1021,12 @@ async function chEngineTick(trigger = "timer") {
 // Boot'ta panoyu Postgres warm-cache'ten yükle → ilk istek anında dolu döner (motor tiki beklemez)
 kvLoad("challenge_board").then((b) => { if (b && Array.isArray(b.positions) && !CH_ENG.lastBoard) CH_ENG.lastBoard = b; }).catch(() => {});
 setTimeout(() => chEngineTick("startup").catch(() => {}), 90_000);
-setInterval(() => chEngineTick("timer").catch(() => {}), 30 * 60_000);
+/* 30 dk → 5 dk. Eskiden her tik mum önbelleğine bakıyordu (18 saat TTL), sık
+ * koşmanın anlamı yoktu. Artık tik TEK toplu canlı kotasyon çağrısı yapıyor ve
+ * o da 60 sn önbellekli — yani 5 dk'da bir koşmak pratikte ek API maliyeti
+ * getirmiyor, buna karşılık hedef/stop kontrolü ve panodaki fiyat 6 kat
+ * tazeleniyor. Panodaki mark zaten canlı bardan geliyor. */
+setInterval(() => chEngineTick("timer").catch(() => {}), 5 * 60_000);
 // Elle tetikleme + durum (test için): POST tarar, GET son özeti döner
 app.post("/api/challenge/scan", async (_req, res) => res.json(await chEngineTick("manual")));
 app.get("/api/challenge/status", (_req, res) => res.json({ lastRun: CH_ENG.lastRun, lastSummary: CH_ENG.lastSummary, rai: CH_ENG.lastRai || null, mailConfigured: !!process.env.RESEND_API_KEY }));
@@ -6848,7 +6878,7 @@ app.delete("/api/flows/:id", async (req, res) => {
  * (dondurulmuş defter değil) → "kural X olsaydı ne olurdu?" sorusuna dürüst cevap.
  * Tek seferde baseline (canlı kurallar) + varyant koşulur, yan yana döner.
  * DÜRÜST NOT: evren bugünün evreni (radar+swing+çekirdek) — hafif survivorship var. */
-const LAB = { _running: false, last: null };
+const LAB = { _running: false, _startedAt: 0, last: null };
 const labClamp = (v, lo, hi, def) => { const n = Number(v); return isFinite(n) ? Math.min(hi, Math.max(lo, n)) : def; };
 function labParams(q = {}) {
   const tp1 = labClamp(q.tp1, 2, 20, CH_ENG.tp1);
@@ -6866,6 +6896,10 @@ function labParams(q = {}) {
     // (b) rejim kapalıyken açık kârdaki pozisyonun stopu başabaşa çekilir.
     regimeGate: q.regimeGate !== false && q.regimeGate !== "false", // (a) giriş bloğu
     regimeBE: q.regimeBE !== false && q.regimeBE !== "false",       // (b) başabaş zorlaması
+    // Giriş zamanlaması: "close" = canlı kural (bar kapanınca, entry = kapanış),
+    // "intraday" = alış-stop emri (dünkü EMA8 tetiği, gün içinde dolar). Gerekçe
+    // ve gün içi girişin kaybettiği filtreler ./entry-modes.js başında.
+    entryMode: q.entryMode === "intraday" ? "intraday" : "close",
   };
 }
 async function labCtx(start) {
@@ -6886,12 +6920,29 @@ async function labCtx(start) {
   const E = {}; for (const s of RAI_ETFS) { try { E[s] = chMkSeries(await getCandles(s)); } catch {} }
   let VIXSER = null; try { VIXSER = chMkSeries(await getFredVix()); } catch {}
   const RAIX = { Q, vol: VIXSER ? { ser: VIXSER, kind: "vix" } : E.VIXY ? { ser: E.VIXY, kind: "vixy" } : null, credit: chRatioSeries(E.HYG, E.IEF), rot: chRatioSeries(E.XLY, E.XLP), S };
-  await chRefreshEarnings(universe).catch(() => {});
-  await chRefreshSectors(universe).catch(() => {});
+  /* Bilanço + sektör zenginleştirmesi: SÜRELİ ve PARALEL.
+   * 5 Ağu 2026 dersi: bunlar 60 sembol için Finnhub'a gider ve hız sınırı kuyruğunda
+   * beklerler. Beklemenin bir tavanı yoktu → tek yavaş koşu LAB._running'i sonsuza
+   * kadar açık bırakıp laboratuvarı komple kilitliyordu ("meşgul — önceki koşu
+   * bitsin", ama biten koşu yok). Artık süre dolarsa koşu DEVAM eder; hangi
+   * filtrenin veri alamadığı `eksik` ile yukarı taşınır ve ekranda söylenir —
+   * sessizce eksik filtreyle koşup sonuca güvenmek çok daha kötü olurdu. */
+  const sureli = async (p, ms, ad) => ({
+    ad,
+    ok: await Promise.race([
+      Promise.resolve(p).then(() => true, () => false),
+      new Promise((r) => setTimeout(() => r(false), ms)),
+    ]),
+  });
+  const zengin = await Promise.all([
+    sureli(chRefreshEarnings(universe).catch(() => {}), 45_000, "bilanço karartması"),
+    sureli(chRefreshSectors(universe).catch(() => {}), 45_000, "sektör tavanı"),
+  ]);
+  const eksik = zengin.filter((z) => !z.ok).map((z) => z.ad);
   const emaGateAt = (d) => { if (!Q) return "on"; const i = chNear(Q, d); if (i == null || i < 21) return "on"; const c = Q.v[i].close; return c < Q.ema21[i] ? "off" : c < Q.ema8[i] ? "caution" : "on"; };
   const regimeAt = (d) => { const g = emaGateAt(d); const rb = chRaiBand(chRaiAt(RAIX, d)?.score); return chWorse(g, rb === "riskoff" ? "off" : rb === "temkin" ? "caution" : "on"); };
   const watch = universe.filter((s) => S[s]);
-  return { S, watch, regimeAt, start };
+  return { S, watch, regimeAt, start, eksik };
 }
 function labReplay(ctx, P) {
   const { S, watch, regimeAt } = ctx;
@@ -6922,14 +6973,23 @@ function labReplay(ctx, P) {
     }
     const held = new Set(positions.filter((x) => x.open).map((x) => x.sym));
     const free = (sym) => S[sym].idx[d] != null && !held.has(sym);
+    // Teknik şerit — giriş zamanlaması P.entryMode ile değişir. EP şeridi HER İKİ
+    // modda da kapanışta kalır (EP kuralları close<open, close>=EMA21 gibi kapanış
+    // teyitleri üzerine kurulu); böylece ölçülen fark YALNIZ teknik girişin
+    // zamanlamasından gelir, iki değişken birbirine karışmaz.
+    const seansIci = P.entryMode === "intraday";
+    const rsOff = seansIci ? 1 : 0;              // gün içi girişte bugünün RS'i bilinmez
+    const teknik = (sym, i) => seansIci
+      ? seansIciGirisSinyali(S[sym], sym, i)
+      : (() => { const g = chSrvSignal(S, sym, i); return g ? { ...g, lane: "tech" } : null; })();
     // Rejim kapalıyken teknik girişler bloklanır — KAÇ tanesinin engellendiğini de say
     // (yoksa "kapı ne kadar iş yaptı" sorusu ölçülemez, yalnız tahmin edilir)
     if (regime === "off") {
       diag.engellenenGiris += watch.filter(free)
-        .filter((sym) => { const i = S[sym].idx[d]; return i != null && chSrvSignal(S, sym, i); }).length;
+        .filter((sym) => { const i = S[sym].idx[d]; return i != null && teknik(sym, i); }).length;
     }
     const sigs = regime === "off" ? [] : watch.filter(free)
-      .map((sym) => { const i = S[sym].idx[d]; const g = chSrvSignal(S, sym, i); return g ? { ...g, lane: "tech", rs: chRsAt(S[sym], i) } : null; })
+      .map((sym) => { const i = S[sym].idx[d]; const g = teknik(sym, i); return g ? { ...g, rs: chRsAt(S[sym], i - rsOff) } : null; })
       .filter(Boolean).sort((a, b) => b.rs - a.rs || b.volRatio - a.volRatio);
     const eps = P.ep ? watch.filter(free)
       .map((sym) => { const i = S[sym].idx[d]; const g = chSrvEpSignal(S, sym, i); return g ? { ...g, lane: "ep" } : null; })
@@ -6940,7 +7000,7 @@ function labReplay(ctx, P) {
       if (chEarnBlocked(sig.sym, d)) continue;
       const sct = CH_SECT.map[sig.sym];
       if (sct && positions.some((p) => p.open && CH_SECT.map[p.sym] === sct)) continue;
-      const rsPctV = chRsPct(S, watch, d, sig.sym);
+      const rsPctV = chRsPct(S, watch, d, sig.sym, sig.lane === "ep" ? 0 : rsOff);
       if (P.rsMode === "gate" && sig.lane !== "ep" && rsPctV != null && rsPctV < P.rsMin) continue;
       let notional = size(sig.entry, sig.stop);
       const half = regime === "caution" || (regime === "off" && sig.lane === "ep");
@@ -7053,11 +7113,21 @@ function labCompare(base, vari, iters = 1000) {
   };
 }
 app.post("/api/lab/backtest", async (req, res) => {
-  if (LAB._running) return res.status(429).json({ error: "laboratuvar meşgul — önceki koşu bitsin" });
+  // Bayat kilit sigortası: koşu 10 dk'yı aşmışsa kilit takılmış demektir (süreç
+  // çökmüş, istek düşmüş vb.) — laboratuvarı sonsuza kadar kilitli bırakmaktansa
+  // devral. Normal koşu bunun çok altında biter.
+  if (LAB._running && Date.now() - (LAB._startedAt || 0) > 10 * 60_000) LAB._running = false;
+  if (LAB._running) {
+    const sn = Math.round((Date.now() - (LAB._startedAt || Date.now())) / 1000);
+    return res.status(429).json({ error: `laboratuvar meşgul — önceki koşu ${sn} sn'dir sürüyor, bitsin` });
+  }
   LAB._running = true;
+  const t0 = Date.now();
+  LAB._startedAt = t0;
   try {
     const P = labParams(req.body || {});
     const ctx = await labCtx(P.start);
+    const tCtx = Date.now() - t0;
     const baseline = labReplay(ctx, labParams({ start: P.start })); // canlı kurallar, aynı pencere
     const variant = labReplay(ctx, P);
     // Bootstrap: her stratejinin kendi ortR aralığı + asıl soru olan FARKIN aralığı
@@ -7077,7 +7147,10 @@ app.post("/api/lab/backtest", async (req, res) => {
       ? { canli: CH_ENG.riskPct, varyant: P.riskPct, kat: +(P.riskPct / CH_ENG.riskPct).toFixed(2) } : null;
     delete baseline._rs; delete variant._rs;   // ham R listesi istemciye gitmesin
     LAB.last = new Date().toISOString();
+    // Süre teşhisi: koşu uzarsa "bağlam mı, replay mi?" sorusu tahminle değil
+    // ölçümle cevaplansın (ctx = mum/rejim kurulumu, kalanı 6 replay).
     res.json({ start: P.start, universe: ctx.watch.length, params: P, baseline, variant, ci, wf, kaldirac,
+      sureSn: +((Date.now() - t0) / 1000).toFixed(1), ctxSn: +(tCtx / 1000).toFixed(1), eksikVeri: ctx.eksik,
       not: "Evren bugünün evrenidir (hafif survivorship). Sonuç geçmiştir, garanti değildir; komisyon dahil NET rakamlardır. Güven aralıkları 1000 yeniden örneklemeyle (bootstrap) hesaplanır — küçük örneklemde 'daha iyi' demenin dürüst sınırıdır." });
   } catch (e) { res.status(500).json({ error: e.message }); }
   finally { LAB._running = false; }
@@ -7104,6 +7177,7 @@ function labScanVariants() {
     { ad: "RS sert kapı (30)", not: "Zayıf hisseye hiç girme (14 Tem backtest'i bunu reddetmişti — teyit).", p: { rsMode: "gate" } },
     { ad: "RS yarım, eşik 50", not: "Filtre sıkılaşır: evrenin zayıf yarısı yarım boy.", p: { rsMin: 50 } },
     { ad: "EP kapalı", not: "Haber/gap girişleri yok — yalnız teknik sinyal.", p: { ep: false } },
+    { ad: "Gün içi giriş (alış-stop)", not: "Kapanışı bekleme: EMA8 tetiğine değince gir. 5 Ağu ölçümü: 3 pencerede de fark GÜRÜLTÜ, walk-forward hükmü pencereye göre değişiyor.", p: { entryMode: "intraday" } },
     { ad: "Rejim giriş bloğu kapalı", not: "Piyasa kötüyken de yeni giriş alınır.", p: { regimeGate: false } },
     { ad: "Rejim başabaş kapalı", not: "Kötü piyasada stop girişe ÇEKİLMEZ — sıyrık azalır, risk artar.", p: { regimeBE: false } },
     { ad: "Rejim tamamen kapalı", not: "İki rejim koruması da yok — filtre etkisinin tavan ölçümü.", p: { regimeGate: false, regimeBE: false } },
