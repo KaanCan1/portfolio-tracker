@@ -135,3 +135,33 @@ test("bayat kaynak: hiç veri yoksa bunu ayrıca söyler", () => {
   assert.match(b.alert.headline, /hiç doğrulanmış veri yok/);
   assert.equal(b.alert.stats.find((s) => s.label === "Yaş").value, "—");
 });
+
+/* ── Bayat kaynak: üç hâl üç ayrı cümle (5 Ağu yanlış alarm dersi) ────────── */
+
+test("tohumlanmış kaynak 'veri yok' DEMEZ — değer var, yaşı bilinmiyor", () => {
+  const b = bayatKaynakBulgusu(
+    { ad: "doviz-altin", yasDk: null, degerVar: true, tohumdan: true, tohumYasDk: 200,
+      sonBasari: null, sonHata: null }, 180, BUGUN);
+  assert.doesNotMatch(b.alert.headline, /hiç doğrulanmış veri yok/, "yanlış alarm cümlesi kullanılmamalı");
+  assert.match(b.alert.headline, /yeniden başladı/);
+  assert.match(b.alert.headline, /200 dk/);
+  assert.equal(b.alert.stats.find((s) => s.label === "Son başarı").value, "depodan");
+  assert.equal(b.alert.stats.find((s) => s.label === "Yaş").value, "200 dk+");
+});
+
+test("gerçekten verisi olmayan kaynak HÂLÂ 'veri yok' der", () => {
+  const b = bayatKaynakBulgusu(
+    { ad: "vix", yasDk: null, degerVar: false, tohumdan: false, tohumYasDk: null,
+      sonBasari: null, sonHata: "429" }, 180, BUGUN);
+  assert.match(b.alert.headline, /hiç doğrulanmış veri yok/);
+  assert.equal(b.alert.stats.find((s) => s.label === "Yaş").value, "—");
+  assert.match(b.alert.action, /429/);
+});
+
+test("gerçek yaşı bilinen bayat kaynak eski davranışını korur", () => {
+  const b = bayatKaynakBulgusu(
+    { ad: "doviz-altin", yasDk: 214, degerVar: true, tohumdan: false,
+      sonBasari: "2026-08-05T00:58:00.000Z", sonHata: "uç yanıt vermedi" }, 180, BUGUN);
+  assert.match(b.alert.headline, /3 saattir bayat/);
+  assert.equal(b.alert.stats.find((s) => s.label === "Yaş").value, "214 dk");
+});

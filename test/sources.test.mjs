@@ -161,3 +161,59 @@ test("defter: bayat kaynakları listeler", async () => {
   assert.deepEqual(bayat, ["bos"], "değeri hiç olmayan kaynak bayat sayılmalı");
   assert.equal(d.bayatOlanlar(0).length, 2, "eşik 0 iken taze kaynak da bayat sayılır");
 });
+
+/* ── Tohumlanmış kaynak: yeniden başlatma YANLIŞ ALARM üretmemeli ────────────
+ * 5 Ağu 2026 bekçi özetinde 6 bulgunun 4'ü veri kaynağıydı ve ikisi
+ * "hiç doğrulanmış veri yok" diyordu — oysa DB'den doğrulanmış değer
+ * yüklenmişti. Render ücretsiz katman uyuyup uyandıkça bu her seferinde
+ * tekrarlıyordu. Gerçek arıza ile yeniden başlatma ayrı şeyler. */
+
+test("tohumlanan kaynak ANINDA bayat sayılmaz — mühleti vardır", async () => {
+  const D = kaynakDefteri();
+  const k = D.ekle(kaynak({ ad: "t", getir: async () => { throw new Error("uç kapalı"); },
+    dogrula: (o) => o?.v > 0, kalici: { yukle: async () => ({ v: 9 }) }, log: sessiz }));
+  assert.equal(await k.tohumla(), true);
+  const d = k.durum();
+  assert.equal(d.degerVar, true, "DB'den doğrulanmış değer geldi");
+  assert.equal(d.yasDk, null, "gerçek yaş bilinmiyor — uydurulmamalı");
+  assert.equal(d.tohumdan, true);
+  assert.equal(d.tohumYasDk, 0);
+  assert.deepEqual(D.bayatOlanlar(180), [], "mühlet içinde uyarı ÇIKMAMALI");
+});
+
+test("tohumlanan kaynak mühleti aşarsa GERÇEK arızadır, uyarılır", async () => {
+  const gercek = Date.now;
+  try {
+    const D = kaynakDefteri();
+    const k = D.ekle(kaynak({ ad: "t", getir: async () => { throw new Error("uç kapalı"); },
+      dogrula: (o) => o?.v > 0, kalici: { yukle: async () => ({ v: 9 }) }, log: sessiz }));
+    await k.tohumla();
+    Date.now = () => gercek() + 200 * 60_000;          // 200 dk sonrası
+    assert.equal(D.bayatOlanlar(180).length, 1, "mühlet dolunca uyarı çıkmalı");
+    assert.equal(k.durum().tohumYasDk, 200);
+  } finally { Date.now = gercek; }
+});
+
+test("gerçek tazeleme olunca tohum kaydı düşer, yaş gerçek olur", async () => {
+  const D = kaynakDefteri();
+  let calis = false;
+  const k = D.ekle(kaynak({ ad: "t", ttl: 0,
+    getir: async () => { if (!calis) throw new Error("kapalı"); return { v: 1 }; },
+    dogrula: (o) => o?.v > 0, kalici: { yukle: async () => ({ v: 9 }) }, log: sessiz }));
+  await k.tohumla();
+  assert.equal(k.durum().tohumdan, true);
+  calis = true;
+  await k.oku();
+  const d = k.durum();
+  assert.equal(d.tohumdan, false, "canlı tazeleme sonrası tohum işareti kalkmalı");
+  assert.equal(d.tohumYasDk, null);
+  assert.equal(d.yasDk, 0, "artık gerçek yaş var");
+  assert.deepEqual(D.bayatOlanlar(180), []);
+});
+
+test("hiç değeri olmayan kaynak HER ZAMAN bayattır (mühlet yok)", async () => {
+  const D = kaynakDefteri();
+  D.ekle(kaynak({ ad: "bos", getir: async () => { throw new Error("yok"); },
+    dogrula: (o) => o?.v > 0, log: sessiz }));
+  assert.equal(D.bayatOlanlar(180).length, 1, "veri yokluğu en kötü hâl — mühlet tanınmaz");
+});

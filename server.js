@@ -2123,22 +2123,52 @@ const vixKaynak = KAYNAKLAR.ekle(kaynak({
   arkaPlanTazele: true,
   dogrula: (o) => Number(o?.value) > 0,
   kalici: { yukle: async () => (await kvLoad("vix_cache")) || lastVix, kaydet: (v) => kvSave("vix_cache", v) },
+  /* İKİ BAĞIMSIZ UÇ. 5 Ağu 2026: bekçi özetinde vix kaynağı "429" ile düşmüştü
+   * ve tek ucu vardı → Render'da ASLA başarılı olamıyordu, yani her gün kendini
+   * tekrar eden, çözülmesi imkânsız bir uyarı üretiyordu. Yahoo tüm bulut IP'lerini
+   * blokluyor (bu projede daha önce premarket denemesinde de yaşandı) ama YEREL
+   * çalıştırmada sorunsuz; FRED ise bulutta çalışır. İkisi de ücretsiz ve
+   * anahtarsız. Sıra bilinçli: Yahoo gün içi CANLI değer verir, FRED yalnız
+   * önceki kapanışı — yani FRED doğru ama daha kaba, o yüzden yedek. */
   getir: async () => {
-    const url = "https://query1.finance.yahoo.com/v8/finance/chart/%5EVIX?interval=1d&range=5d";
-    const r = await fetchRetry(url, { headers: { "User-Agent": UA, Accept: "application/json" } });
-    const j = await r.json();
-    const meta = j?.chart?.result?.[0]?.meta;
-    const v = Number(meta?.regularMarketPrice);
-    if (!isFinite(v) || v <= 0) throw new Error("VIX yok");
-    const prev = Number(meta?.chartPreviousClose);
-    lastVix = {
-      value: v,
-      prevClose: isFinite(prev) ? prev : null,
-      changePct: prev ? ((v - prev) / prev) * 100 : null,
-      fetchedAt: new Date().toISOString(),
-    };
-    writeFile(VIX_FILE, JSON.stringify(lastVix), "utf8").catch(() => {});
-    return lastVix;
+    try {
+      const url = "https://query1.finance.yahoo.com/v8/finance/chart/%5EVIX?interval=1d&range=5d";
+      const r = await fetchRetry(url, { headers: { "User-Agent": UA, Accept: "application/json" } });
+      const j = await r.json();
+      const meta = j?.chart?.result?.[0]?.meta;
+      const v = Number(meta?.regularMarketPrice);
+      if (!isFinite(v) || v <= 0) throw new Error("VIX yok");
+      const prev = Number(meta?.chartPreviousClose);
+      lastVix = {
+        value: v,
+        prevClose: isFinite(prev) ? prev : null,
+        changePct: prev ? ((v - prev) / prev) * 100 : null,
+        kaynak: "yahoo",
+        fetchedAt: new Date().toISOString(),
+      };
+      writeFile(VIX_FILE, JSON.stringify(lastVix), "utf8").catch(() => {});
+      return lastVix;
+    } catch (e) {
+      console.warn("  ⚠️ VIX/Yahoo düştü, FRED deneniyor:", e.message);
+      // FRED (VIXCLS) — günlük kapanış serisi. getFredVix zaten RAI için var.
+      const ser = await getFredVix();
+      const son = ser?.[ser.length - 1], onceki = ser?.[ser.length - 2];
+      const v = Number(son?.close);
+      if (!isFinite(v) || v <= 0) throw new Error(`VIX iki uçta da yok (yahoo: ${e.message})`);
+      const prev = Number(onceki?.close);
+      lastVix = {
+        value: v,
+        prevClose: isFinite(prev) ? prev : null,
+        changePct: prev ? ((v - prev) / prev) * 100 : null,
+        kaynak: "fred",
+        // FRED gün içi değil, ÖNCEKİ KAPANIŞ verir. Bunu saklamak yerine söyle:
+        // ekranda "canlı" sanılan sayı aslında dünün kapanışı olabilir.
+        asOf: son?.time || null,
+        fetchedAt: new Date().toISOString(),
+      };
+      writeFile(VIX_FILE, JSON.stringify(lastVix), "utf8").catch(() => {});
+      return lastVix;
+    }
   },
 }));
 VIX_HAZIR.then(() => vixKaynak.tohumla()).catch(() => {});

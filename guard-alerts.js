@@ -120,18 +120,30 @@ export function pozisyonBulgulari({ sym, price, qty, cost, gunlukPct, adr, agirl
 
 /* Bayat veri kaynağı. warn: veri bozuk ama sermaye doğrudan tehlikede değil. */
 export function bayatKaynakBulgusu(durum, esikDk, bugun) {
-  const yasMetni = durum.yasDk == null ? "hiç doğrulanmış veri yok" : `${Math.floor(durum.yasDk / 60)} saattir bayat`;
+  /* Üç ayrı hâl, üç ayrı cümle. Eskiden ikisi "hiç doğrulanmış veri yok" diye tek
+   * torbaya giriyordu ve YANLIŞ alarm veriyordu (5 Ağu): tohumlanmış kaynakta
+   * DOĞRULANMIŞ bir değer VARDIR, yalnız yaşı bilinmez. Panik hak etmeyen duruma
+   * panik cümlesi yazmak, gerçek arızayı da gürültüye gömer. */
+  const tohumdan = durum.yasDk == null && durum.degerVar;
+  const yasMetni = durum.yasDk != null
+    ? `${Math.floor(durum.yasDk / 60)} saattir bayat`
+    : tohumdan
+      ? `yeniden başlatmadan beri tazelenemedi (${durum.tohumYasDk ?? "?"} dk)`
+      : "hiç doğrulanmış veri yok";
+  const headline = tohumdan
+    ? `Sunucu yeniden başladı, kaynak <b>${durum.tohumYasDk ?? "?"} dk</b>dır tazelenemiyor. Ekrandaki sayılar kalıcı depodaki son doğrulanmış değerden — yaşı bilinmiyor.`
+    : `Son doğrulanmış veri alınalı <b>${yasMetni}</b>. Ekrandaki sayılar son bilinen değerlerden.`;
   return {
     anahtar: `kaynak:${durum.ad}:${bugun}`,
     feed: { key: `kaynak:${durum.ad}:${bugun}`, type: "sistem", sev: "warn", sym: null,
       title: `Veri kaynağı bayat: ${durum.ad}`, detail: yasMetni + (durum.sonHata ? ` · ${durum.sonHata}` : "") },
     alert: { sev: "warn", kind: "kaynak", kindLabel: "Veri kaynağı", sym: null,
       title: `${durum.ad} kaynağı bayat`,
-      headline: `Son doğrulanmış veri alınalı <b>${yasMetni}</b>. Ekrandaki sayılar son bilinen değerlerden.`,
+      headline,
       stats: [
         { label: "Kaynak", value: durum.ad },
-        { label: "Son başarı", value: durum.sonBasari ? durum.sonBasari.slice(0, 16).replace("T", " ") : "—" },
-        { label: "Yaş", value: durum.yasDk == null ? "—" : `${durum.yasDk} dk` },
+        { label: "Son başarı", value: durum.sonBasari ? durum.sonBasari.slice(0, 16).replace("T", " ") : tohumdan ? "depodan" : "—" },
+        { label: "Yaş", value: durum.yasDk != null ? `${durum.yasDk} dk` : tohumdan ? `${durum.tohumYasDk ?? "?"} dk+` : "—" },
         { label: "Eşik", value: `${esikDk} dk` },
       ],
       action: (durum.sonHata || "Kaynak yanıt vermiyor.") + " Sağlayıcı ucu değişmiş olabilir — /api/health/sources'a bak." },

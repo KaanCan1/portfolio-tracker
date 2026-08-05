@@ -33,9 +33,10 @@ export function kaynak({ ad, getir, dogrula, ttl = 60_000, kalici = null, log = 
   if (typeof dogrula !== "function") throw new Error(`kaynak(${ad}): dogrula zorunlu — "HTTP 200 = veri geldi" varsayımı bu projede bir kez çöktü`);
 
   let sonIyi = null;        // son DOĞRULANMIŞ değer
-  let sonBasariTs = 0;      // o değerin alındığı an
+  let sonBasariTs = 0;      // o değerin alındığı an (tohumda 0 — yaşı bilinmiyor)
   let sonHata = null;       // son başarısızlığın sebebi (sağlık ucu için)
   let sonDenemeTs = 0;
+  let tohumTs = 0;          // kalıcı depodan doldurulduğu an (aşağıdaki nota bak)
   let ucus = null;          // devam eden fetch (istek birleştirme)
 
   const simdi = () => Date.now();
@@ -54,6 +55,7 @@ export function kaynak({ ad, getir, dogrula, ttl = 60_000, kalici = null, log = 
     }
     sonIyi = ham;
     sonBasariTs = simdi();
+    tohumTs = 0;              // artık gerçek tazeleme var, tohum kaydı anlamsız
     sonHata = null;
     if (kalici?.kaydet) Promise.resolve(kalici.kaydet(ham)).catch(() => {});
     return ham;
@@ -98,7 +100,9 @@ export function kaynak({ ad, getir, dogrula, ttl = 60_000, kalici = null, log = 
       if (!kalici?.yukle || sonIyi) return false;
       try {
         const v = await kalici.yukle();
-        if (v && dogrula(v)) { sonIyi = v; sonBasariTs = 0; return true; }
+        // sonBasariTs 0 KALIR: bu değerin gerçek yaşını bilmiyoruz, uydurmayız.
+        // tohumTs ise "ne zaman doldurduk"u tutar → bayatlık sayacı buradan işler.
+        if (v && dogrula(v)) { sonIyi = v; sonBasariTs = 0; tohumTs = simdi(); return true; }
       } catch {}
       return false;
     },
@@ -115,6 +119,10 @@ export function kaynak({ ad, getir, dogrula, ttl = 60_000, kalici = null, log = 
         sonDeneme: sonDenemeTs ? new Date(sonDenemeTs).toISOString() : null,
         sonHata,
         degerVar: !!sonIyi,
+        // Değer kalıcı depodan geldi, henüz canlı tazeleme olmadı. "Veri yok"tan
+        // FARKLIDIR: doğrulanmış bir değerimiz var, yalnız yaşını bilmiyoruz.
+        tohumdan: !!sonIyi && !sonBasariTs,
+        tohumYasDk: tohumTs ? Math.round((simdi() - tohumTs) / 60_000) : null,
       };
     },
 
@@ -131,9 +139,22 @@ export function kaynakDefteri() {
     get(ad) { return kayit.get(ad); },
     durumlar() { return [...kayit.values()].map((k) => k.durum()); },
     /* Bayat sayılanlar: doğrulanmış tazeleme üzerinden esikDk geçmiş olanlar.
-     * Hiç değeri olmayan kaynak da bayat sayılır — "veri yok" en kötü hâl. */
+     * Hiç değeri olmayan kaynak da bayat sayılır — "veri yok" en kötü hâl.
+     *
+     * TOHUMLANMIŞ KAYNAK İSTİSNASI (5 Ağu 2026): önceden yaşı bilinmeyen her
+     * kaynak ANINDA bayat sayılıyordu. Render ücretsiz katman uykuya dalıp
+     * uyandığında süreç sıfırdan başlar, kaynaklar DB'den tohumlanır ve yaş
+     * null olur → bekçi her yeniden başlatmada "hiç doğrulanmış veri yok"
+     * uyarısı basıyordu. Oysa elimizde DOĞRULANMIŞ bir değer var; sorun
+     * verinin yokluğu değil, henüz kimsenin sormamış olması. Tohumlanmış
+     * kaynağa da aynı esikDk kadar süre tanınır: o süre içinde tazeleyemezse
+     * bu GERÇEK bir arızadır ve o zaman uyarılır. */
     bayatOlanlar(esikDk) {
-      return this.durumlar().filter((d) => !d.degerVar || d.yasDk == null || d.yasDk >= esikDk);
+      return this.durumlar().filter((d) => {
+        if (!d.degerVar) return true;                                  // veri hiç yok
+        if (d.yasDk != null) return d.yasDk >= esikDk;                  // gerçek yaş biliniyor
+        return d.tohumYasDk == null || d.tohumYasDk >= esikDk;          // tohumdan: mühlet tanı
+      });
     },
   };
 }
