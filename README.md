@@ -120,7 +120,9 @@ Two things I took from this:
 - **The most dangerous assumptions are never written down.** They live in the absence of a line, which is exactly why they survive review.
 - **Passing tests doesn't mean the model is correct.** Tests check what the code *does*, not whether it models the right thing. Those are separate questions, and only the second one needs domain knowledge.
 
-> Ticker names are withheld and figures are shown as percentages of portfolio value. Every number comes from real portfolio data with a fixed seed, so a re-run reproduces it. The measurement harness and the full write-up (each result stored with its biases) live in my private working repo, not in this snapshot.
+The engine behind this is in the repo: [`risk-mc.js`](risk-mc.js) — Cholesky factorisation with a jitter fallback, seeded Monte Carlo, VaR/CVaR and the Kupiec proportion-of-failures test, as a pure module with 13 tests ([`test/risk-mc.test.mjs`](test/risk-mc.test.mjs)). The correlation factor it produced now feeds position sizing through [`boyutlandirma.js`](boyutlandirma.js), derived per request from live covariance rather than hard-coded — the 1.32 above belongs to one portfolio at one moment, and freezing it would be its own kind of wrong.
+
+> Ticker names are withheld and figures are shown as percentages of portfolio value. Every number comes from real portfolio data with a fixed seed, so a re-run reproduces it. The CLI scripts that drive these runs, and the full write-up where each result is stored next to its known biases, stay in my private working repo.
 
 ---
 
