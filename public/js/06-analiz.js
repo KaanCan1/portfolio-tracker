@@ -182,7 +182,8 @@ function renderAnalizSummary() {
     stat("En Yoğun Tema", topTheme ? `%${topPct.toFixed(0)}` : "—", topTheme ? topTheme[0] : "—", topPct >= 40 ? "neg" : "") +
     stat("Bugün En İyi", best ? best.symbol : "—", best ? fmtPct(best.live.dayChangePct) : "—", best ? cls(best.live.dayChangePct) : "") +
     stat("Bugün En Kötü", worst ? worst.symbol : "—", worst ? fmtPct(worst.live.dayChangePct) : "—", worst ? cls(worst.live.dayChangePct) : "") +
-    stat("Realize K/Z", fmtUSD0(realizedUSD), `${trades.length} satış`, cls(realizedUSD));
+    // fmtUSD0 negatifi "$-240" basar; işaret rakamın önüne gelmeli (CLAUDE.md küçük kurallar)
+    stat("Realize K/Z", (realizedUSD < 0 ? "−" : "") + fmtUSD0(Math.abs(realizedUSD)), `${trades.length} satış`, cls(realizedUSD));
 }
 
 /* ===== Realize Özeti — sembol başına net K/Z (aracı kurum "Yatırım geliri" birebir) ===== */
@@ -230,6 +231,7 @@ async function renderProRisk() {
   if (PRORISK == null) {
     el.innerHTML = `<div class="radar-empty">Risk motoru çalışıyor — getiri serileri hesaplanıyor…</div>`;
     try { PRORISK = await (await fetch("/api/risk")).json(); } catch { PRORISK = { error: true }; }
+    korCarpaniYukle(PRORISK);   // aynı yanıt — çarpan için ikinci istek atılmaz
   }
   const R = PRORISK;
   if (!R || R.error) { el.innerHTML = `<div class="radar-empty">Risk verisi alınamadı (mum verisi eksik olabilir).</div>`; return; }
@@ -248,7 +250,20 @@ async function renderProRisk() {
   const kpis = `<div class="pr-kpis">
     ${kpi("VaR %95 (1 gün)", fx ? fmtTRY0(P.var95USD * fx) : fmtUSD0(P.var95USD), `≈ ${fmtUSD0(P.var95USD)} · portföyün %${P.var95Pct}`, P.var95Pct >= 4 ? "bad" : P.var95Pct >= 2.5 ? "warn" : "good", "Value at Risk: normal koşulda %95 ihtimalle 1 günde bu tutardan FAZLA kaybetmezsin. Tarihsel en kötü %5 gün de hesaba katılır.")}
     ${kpi("Yıllık Volatilite", `%${P.volAnnPct}`, "portföy oynaklığı", P.volAnnPct >= 40 ? "bad" : P.volAnnPct >= 25 ? "warn" : "good", "Portföyün yıllıklandırılmış standart sapması. %25 altı sakin, %40 üstü çok oynak.")}
-    ${kpi("Beta (SPY)", P.beta != null ? P.beta.toFixed(2) : "—", P.beta != null ? (P.beta > 1.1 ? "piyasadan agresif" : P.beta < 0.9 ? "piyasadan sakin" : "piyasayla uyumlu") : "—", P.beta != null && P.beta > 1.3 ? "warn" : "", "Piyasaya (S&P 500) duyarlılık. 1.5 = piyasa %1 düşünce portföy ~%1.5 düşer.")}
+    ${(() => {
+      /* 15 Ağu: beta TEK BAŞINA "piyasadan agresif" diye basılıyordu. Ölçüm (§14)
+       * bu portföyde R²'nin 0,13 olduğunu gösterdi — endeks hareketin %13'ünü
+       * açıklıyor, yani beta bir tanım değil gürültü. R² düşükken o cümle kurulamaz;
+       * alt satır artık R²'yi yazıyor ve düşükse betanın anlamsızlığını söylüyor. */
+      if (P.beta == null) return kpi("Beta (SPY)", "—", "—", "", "Piyasaya duyarlılık.");
+      const r2 = P.r2;
+      const zayif = r2 != null && r2 < 0.3;
+      const alt = r2 == null ? "R² bilinmiyor"
+        : zayif ? `R² ${r2.toFixed(2)} — endeks açıklamıyor, beta anlamsız`
+        : `R² ${r2.toFixed(2)} · ${P.beta > 1.1 ? "piyasadan agresif" : P.beta < 0.9 ? "piyasadan sakin" : "piyasayla uyumlu"}`;
+      return kpi("Beta (SPY)", P.beta.toFixed(2), alt, zayif ? "" : (P.beta > 1.3 ? "warn" : ""),
+        `${P.betaTuru === "bugünkü ağırlıklar" ? "BUGÜNKÜ ağırlıkların son " + (R.lookback || "N") + " güne uygulanmasıyla hesaplanır — 'bu portföyü o dönem tutsaydım' sorusunun cevabı. Hesabının FİİLEN yaptığı beta bundan farklıdır; onu Temel çizgi panelinde görürsün. " : ""}R² = endeksin portföyü açıklama oranı; düşükse (0.3 altı) risk piyasadan değil hisseye özgüdür ve beta yorumlanamaz.`);
+    })()}
     ${kpi("Çeşitlendirme", `%${P.diversification}`, `ort. korelasyon ${P.avgCorr}`, divTone, "Pozisyonlar ne kadar bağımsız hareket ediyor. Düşükse 'çok hisse ama tek bahis' demektir — gerçek çeşitlendirme yok.")}
   </div>`;
 
@@ -280,10 +295,24 @@ async function renderProRisk() {
   // ---- Panel 2: Tahsis & Rebalancing ----
   const tg = proTargets();
   let coreV = 0, satV = 0, goldV = 0, optV = 0, cashV = 0;
-  for (const h of (STATE.holdings || [])) { const v = h.live?.marketValueTRY || 0; if (h.type === "gold") goldV += v; else coreV += v; }
-  for (const p of (STATE.swingPositions || [])) satV += (p.valueUSD || 0) * fx;
-  const cash = STATE.cash || {}; cashV = (cash.tl || 0) + (cash.usd || 0) * fx + (cash.eur || 0) * (STATE.fx?.eurtry || 0);
-  for (const o of (STATE.options || [])) optV += (o.valueTRY || 0) * (o.direction === "short" ? -1 : 1);
+  // 14 Ağu: swing olarak yönetilen bir holding hem coreV'ye hem (defter kaydıyla) satV'ye
+  // giriyordu — uydu kovası şişip çekirdek olduğundan büyük görünüyordu. Artık bir pozisyon
+  // TEK kovaya düşer: swing işaretliyse (horizon ya da açık defter kaydı) uydu, değilse çekirdek.
+  // STATE?. — renderProRisk /api/risk'i BEKLİYOR; ilk açılışta bekleme biterken
+  // STATE hâlâ null olabiliyor ve buradaki patlama zincirdeki sonraki tüm
+  // render'ları (kıyas, karne, teknikler) sessizce düşürüyordu (16 Ağu).
+  const swAcik = STATE?.swingOpen || {};
+  const swingYonetiliyor = (h) => h.horizon === "swing" || !!swAcik[String(h.symbol).toUpperCase()];
+  for (const h of (STATE?.holdings || [])) {
+    const v = h.live?.marketValueTRY || 0;
+    if (h.type === "gold") goldV += v;
+    else if (h.type === "stock" && swingYonetiliyor(h)) satV += v;
+    else coreV += v;
+  }
+  // Defterdeki ayrı alımlar (Varlıklar'da olmayan kısım) — çift saymadan eklenir
+  for (const p of (STATE?.swingPositions || [])) satV += ((p.sayilanValueUSD !== undefined ? p.sayilanValueUSD : p.valueUSD) || 0) * fx;
+  const cash = STATE?.cash || {}; cashV = (cash.tl || 0) + (cash.usd || 0) * fx + (cash.eur || 0) * (STATE?.fx?.eurtry || 0);
+  for (const o of (STATE?.options || [])) optV += (o.valueTRY || 0) * (o.direction === "short" ? -1 : 1);
   const otherV = goldV + optV;
   const totA = coreV + satV + cashV + otherV;
   const buckets = [
@@ -334,12 +363,12 @@ async function renderProRisk() {
   const momoRows = momo.map((p) => `<div class="pr-mo-row"><span>${p.symbol}</span><span class="${cls(p.momo3mPct)}">${p.momo3mPct >= 0 ? "+" : ""}%${p.momo3mPct} <small>3a</small></span><span class="${p.momo6mPct != null ? cls(p.momo6mPct) : ""}">${p.momo6mPct != null ? (p.momo6mPct >= 0 ? "+" : "") + "%" + p.momo6mPct + " 6a" : ""}</span></div>`).join("");
   // Sektör/tema konsantrasyonu
   const themeMap = {};
-  for (const h of (STATE.holdings || [])) { if (h.type !== "stock") continue; const k = h.theme?.title || h.theme || "Diğer"; themeMap[k] = (themeMap[k] || 0) + (h.live?.marketValueTRY || 0); }
+  for (const h of (STATE?.holdings || [])) { if (h.type !== "stock") continue; const k = h.theme?.title || h.theme || "Diğer"; themeMap[k] = (themeMap[k] || 0) + (h.live?.marketValueTRY || 0); }
   const themeTot = Object.values(themeMap).reduce((s, v) => s + v, 0) || 1;
   const themeRows = Object.entries(themeMap).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([k, v]) => { const pct = v / themeTot * 100; return `<div class="pr-th-row"><span class="pr-th-lbl">${k}</span><div class="pr-th-bar"><i style="width:${pct.toFixed(0)}%;${pct >= 40 ? "background:var(--red)" : ""}"></i></div><span class="pr-th-pct ${pct >= 40 ? "neg" : ""}">%${pct.toFixed(0)}</span></div>`; }).join("");
   // Opsiyon vs Hisse realize (vergi kalemlerinden: label'da Call/Put = opsiyon)
   let optReal = 0, stkReal = 0;
-  for (const r of (STATE.realized2026 || [])) { if (r.pending) continue; /* onay bekleyen hesaba girmez */ const o = /\b(call|put)\b/i.test(r.label || ""); if (o) optReal += Number(r.amountTRY) || 0; else stkReal += Number(r.amountTRY) || 0; }
+  for (const r of (STATE?.realized2026 || [])) { if (r.pending) continue; /* onay bekleyen hesaba girmez */ const o = /\b(call|put)\b/i.test(r.label || ""); if (o) optReal += Number(r.amountTRY) || 0; else stkReal += Number(r.amountTRY) || 0; }
   const ovsH = `<div class="pr-ovh">
       <div class="pr-ovh-c ${cls(stkReal)}"><div class="pr-ovh-l">Hisse realize</div><div class="pr-ovh-v">${fmtTRY0(stkReal)}</div></div>
       <div class="pr-ovh-c ${cls(optReal)}"><div class="pr-ovh-l">Opsiyon realize</div><div class="pr-ovh-v">${fmtTRY0(optReal)}</div></div>
@@ -455,8 +484,14 @@ function renderRisk() {
   const S = STATE;
   const usdtry = S?.fx?.usdtry || 0;
   // Net değer serisi → USD (her snapshot kendi günkü kuruyla çevrilir)
+  /* Ölçüm tabanı (16 Ağu): defterin ilk 24 kaydı geriye doldurulmuş — hepsi tek kur,
+   * aralarında 30 güne varan boşluk. Seviye olarak anlamlılar (net değer grafiğinde
+   * dururlar) ama GÜNLÜK ADIM olarak sahteler; Sharpe, volatilite, maks düşüş, CAGR
+   * ve ileri tahmin hepsi günlük adımdan türüyor. Kıyas paneliyle AYNI pencereyi
+   * kullanır (server.js · OLCUM_BASLANGIC) — iki panel iki pencere konuşmasın. */
+  const tab = S?.meta?.olcumBaslangic || null;
   const series = (S?.history || [])
-    .filter((s) => s.total != null)
+    .filter((s) => s.total != null && (!tab || String(s.date).slice(0, 10) >= tab))
     .map((s) => ({ date: s.date, v: s.usdtry ? s.total / s.usdtry : (usdtry ? s.total / usdtry : s.total) }))
     .filter((p) => p.v > 0);
 
@@ -467,36 +502,51 @@ function renderRisk() {
     return;
   }
 
-  // Günlük getiriler
-  const rets = [];
-  for (let i = 1; i < series.length; i++) {
-    const r = series[i].v / series[i - 1].v - 1;
-    if (isFinite(r)) rets.push(r);
-  }
+  /* GETİRİ SERİSİ TEK KAYNAKTAN (16 Ağu). Bu panel getirileri ham net değer
+   * değişiminden hesaplıyordu: 29 Haziran'daki 4.900 TL yatırım "kazanç" olarak
+   * sayılıyordu (§14d'nin tekrarı) ve Kıyas paneli %−11,0 derken burası %−9,1
+   * diyordu. Artık ikisi de kiyas.js'in ürettiği aynı zaman ağırlıklı seriyi
+   * kullanıyor — bir sayının iki hesabı varsa biri bozuktur.
+   * `series` (dolar seviyeleri) yalnız ileri tahmin grafiğinde kalır: orada
+   * gereken şey getiri değil, net değerin kendisi. */
+  const KP = KIYAS.veri?.ok ? KIYAS.veri.portfoy : null;
+  if (!KP && !KIYAS.yukleniyor) renderKiyas();           // yüklenince kendisi bu paneli tazeler
+  const rets = KP?.gunluk?.length ? KP.gunluk : (() => {
+    const r = [];
+    for (let i = 1; i < series.length; i++) { const x = series[i].v / series[i - 1].v - 1; if (isFinite(x)) r.push(x); }
+    return r;
+  })();
   const n = rets.length;
   const mean = rets.reduce((a, b) => a + b, 0) / n;
   const variance = rets.reduce((a, b) => a + (b - mean) ** 2, 0) / (n > 1 ? n - 1 : 1);
   const sd = Math.sqrt(variance);
-  const dn = rets.filter((r) => r < 0);
-  const dSd = dn.length ? Math.sqrt(dn.reduce((a, b) => a + b * b, 0) / dn.length) : 0;
   const ANN = Math.sqrt(252);
-  const annVol = sd * ANN;
-  const sharpe = sd > 0 ? (mean / sd) * ANN : null;
-  const sortino = dSd > 0 ? (mean / dSd) * ANN : null;
+  const sharpe = KP ? KP.sharpe : (sd > 0 ? (mean / sd) * ANN : null);
 
   // Toplam getiri + CAGR (gerçek gün sayısına göre)
   const v0 = series[0].v, vN = series[series.length - 1].v;
-  const totRet = vN / v0 - 1;
-  const days = Math.max(1, (new Date(series[series.length - 1].date) - new Date(series[0].date)) / 86400000);
-  const cagr = v0 > 0 ? Math.pow(vN / v0, 365 / days) - 1 : null;
+  const totRet = KP ? KP.getiri : vN / v0 - 1;
+  // Pencere de Kıyas'la aynı olsun — aynı sekmede "75 gün" ve "73 gün" okunmasın
+  const days = Math.max(1, KIYAS.veri?.ok ? KIYAS.veri.takvimGun
+    : (new Date(series[series.length - 1].date) - new Date(series[0].date)) / 86400000);
 
-  // Maksimum düşüş + şu anki düşüş (underwater)
+  // Maksimum düşüş + şu anki düşüş (underwater) — akıştan arındırılmış zincirden
+  const ddSeri = KP?.zincir?.length ? KP.zincir : series.map((p) => p.v);
   let peak = -Infinity, maxDD = 0;
-  const dd = series.map((p) => { peak = Math.max(peak, p.v); const d = p.v / peak - 1; maxDD = Math.min(maxDD, d); return d; });
+  const dd = ddSeri.map((v) => { peak = Math.max(peak, v); const d = v / peak - 1; maxDD = Math.min(maxDD, d); return d; });
   const curDD = dd[dd.length - 1];
+  /* Zirve altında geçen süre. Maks düşüş "ne kadar düştün"ü söyler, bu "ne kadar
+   * süredir düşüktesin"i — ayrı sorular ve ikincisi hiçbir panelde yoktu. 3 gündür
+   * zirvenin altında olmakla 30 gündür olmak aynı şey değildir. */
+  let zirveAlti = 0;
+  for (let i = dd.length - 1; i >= 0 && dd[i] < -0.001; i--) zirveAlti++;
+  let enUzunAlti = 0, _sayac = 0;
+  for (const d of dd) { if (d < -0.001) { _sayac++; if (_sayac > enUzunAlti) enUzunAlti = _sayac; } else _sayac = 0; }
+  // Zirvenin tarihi: "35 gün" tek başına soyut, "30 Haziran'dan beri" bir olayı işaret eder
+  const ddTarih = KIYAS.veri?.ok ? KIYAS.veri.tarihler : series.map((p) => p.date);
+  const zirveGun = (zirveAlti && ddTarih?.length === dd.length) ? ddTarih[dd.length - 1 - zirveAlti] : null;
+  const trGun = (g) => { try { return new Date(g).toLocaleDateString("tr-TR", { day: "numeric", month: "long" }); } catch { return null; } };
 
-  const best = Math.max(...rets), worst = Math.min(...rets);
-  const posRatio = rets.filter((r) => r > 0).length / n;
 
   // Konsantrasyon (holdings piyasa değerinden)
   const mvs = (S?.holdings || [])
@@ -515,16 +565,9 @@ function renderRisk() {
   const pf = (frac, d = 1) => (frac == null || !isFinite(frac) ? "—" : `${frac >= 0 ? "+" : ""}${(frac * 100).toFixed(d)}%`);
   const pp = (frac, d = 0) => (frac == null || !isFinite(frac) ? "—" : `${(frac * 100).toFixed(d)}%`);
   const rat = (x, d = 2) => (x == null || !isFinite(x) ? "—" : x.toFixed(d));
-  const shCls = sharpe == null ? "" : sharpe >= 1 ? "pos" : sharpe < 0 ? "neg" : "";
-  const shLbl = sharpe == null ? "" : sharpe >= 2 ? "çok iyi" : sharpe >= 1 ? "sağlıklı" : sharpe >= 0 ? "zayıf" : "riskli";
 
   const hero = (lbl, val, sub, c = "", tip = "") =>
     `<div class="rk-card"><div class="rk-card-lbl">${lbl}${tip ? tipIcon(tip) : ""}</div><div class="rk-card-val ${c}">${val}</div><div class="rk-card-sub">${sub}</div></div>`;
-  const st = (lbl, val, c = "") => `<div class="rk-stat"><span>${lbl}</span><b class="${c}">${val}</b></div>`;
-
-  const note = `Sharpe <b class="${shCls}">${rat(sharpe)}</b>${shLbl ? ` (${shLbl})` : ""} — getirini aldığın riske göre okur. ` +
-    `En kötü anda zirveden <b class="neg">${pp(maxDD)}</b> düştün${curDD < -0.005 ? `, şu an <b class="neg">${pp(curDD)}</b> altındasın` : ", şu an zirveye yakınsın"}. ` +
-    (effN != null ? `Gerçekte <b>${effN.toFixed(1)}</b> pozisyona dağılmışsın${topSym ? ` (en ağır <b>${topSym}</b> %${topW.toFixed(0)})` : ""}${effN < 2.5 || (topW && topW > 40) ? ` — yoğunlaşma yüksek, tek hisse seni sallayabilir (Kural 1).` : "."}` : "");
 
   // ===== İleriye dönük tahmin (geometrik Brownian — geçmiş getiri eğilimi + oynaklık) =====
   const muLog = mean - variance / 2;            // günlük log-sürüklenme
@@ -579,6 +622,18 @@ function renderRisk() {
   const hLbl = hs >= 75 ? "güçlü" : hs >= 55 ? "sağlıklı" : hs >= 40 ? "dikkat" : "kırılgan";
   const hCls = hs >= 75 ? "pos" : hs >= 55 ? "" : hs >= 40 ? "warn" : "neg";
 
+  /* 16 Ağu: bu not eskiden Sharpe ve maks düşüşü tekrar okuyordu — ikisi de artık
+   * Kıyas karnesinde, endeksin yanında. Not yalnız BU panelin söylediği şeyi söyler:
+   * skor neyden kırıldı ve yoğunlaşma seni sallar mı (Kural 1). */
+  const kirilan = [];
+  if (sharpe != null && sharpe < 1) kirilan.push("riske göre getiri zayıf");
+  if (maxDD < -0.2) kirilan.push(`düşüş derin (${pp(maxDD)})`);
+  if (effN != null && effN < 2.5) kirilan.push("yoğunlaşma yüksek");
+  const note = `Sağlık skoru <b class="${hCls}">${hs}/100</b> (${hLbl})` +
+    (kirilan.length ? ` — skoru kıran: <b>${kirilan.join("</b>, <b>")}</b>. ` : ` — üç bileşende de sorun yok. `) +
+    (effN != null ? `Gerçekte <b>${effN.toFixed(1)}</b> pozisyona dağılmışsın${topSym ? ` (en ağır <b>${topSym}</b> %${topW.toFixed(0)})` : ""}${effN < 2.5 || (topW && topW > 40) ? ` — tek hisse seni sallayabilir (Kural 1).` : "."}` : "") +
+    (curDD < -0.005 ? ` Şu an zirveden <b class="neg">${pp(curDD)}</b> aşağıdasın.` : " Şu an zirveye yakınsın.");
+
   // ===== Birleşik grafik: geçmiş net değer + tahmin medyanı + %25–75 bandı + eşik =====
   const W = 720, HC = 250, pad = { l: 6, r: 70, t: 16, b: 24 };
   const base = series.length - 1;
@@ -616,8 +671,14 @@ function renderRisk() {
         <div class="rk-health-sub">Sharpe ${rat(sharpe)} · maks. düşüş ${pp(maxDD)} · ${effN != null ? effN.toFixed(1) + " etkin pozisyon" : "—"}</div>
       </div>
       <div class="rk-heads">
-        ${hero("Toplam Getiri", `<span class="${cls(totRet)}">${pf(totRet)}</span>`, `${Math.round(days)} günde · ${fmtUSD0(vN - v0)}`)}
-        ${hero("Maks. Düşüş", `<span class="neg">${pp(maxDD)}</span>`, curDD < -0.005 ? `şu an ${pp(curDD)}` : "şu an zirvede", "", "Zirveden dibe en derin kayıp — en kötü anda ne kadar acıya katlandın.")}
+        ${hero("Şu Anki Düşüş", curDD < -0.005 ? `<span class="neg">${pp(curDD)}</span>` : "zirvede",
+          curDD < -0.005 ? `en derin noktası ${pp(maxDD)}` : "yeni zirvedesin", "",
+          "Zirveden BUGÜN ne kadar aşağıdasın. Maksimum düşüş geçmişi anlatır, bu şu anki durumu — pozisyon kararı bunun üstünden verilir.")}
+        ${hero("Zirve Altında", zirveAlti ? `${zirveAlti} gün` : "0 gün",
+          !zirveAlti ? "bugün yeni zirve"
+            : zirveGun ? `son zirve ${trGun(zirveGun)}`
+            : `bu pencerede en uzunu ${enUzunAlti} gün`, "",
+          "Kaç kayıttır yeni zirve görmedin. 3 gündür zirvenin altında olmakla 30 gündür olmak aynı şey değil — ikincisi tezin çalışmadığının işareti olabilir.")}
         ${hero("Çeşitlendirme", effN != null ? effN.toFixed(1) : "—", topSym ? `en ağır ${topSym} %${topW.toFixed(0)}` : "etkin pozisyon", effN != null && effN < 2.5 ? "neg" : "", "Kaç bağımsız pozisyona dağılmışsın (1/HHI). Düşükse tek hisse seni sallar — Kural 1.")}
       </div>
     </div>
@@ -640,51 +701,190 @@ function renderRisk() {
       <div class="rk-fc-eta">${fcText}</div>
     </div>
 
-    <div class="rk-grid rk-grid-sm">
-      ${st("Sharpe", `${rat(sharpe)}${shLbl ? ` · ${shLbl}` : ""}`, shCls)}
-      ${st("Yıllık Volatilite", pp(annVol))}
-      ${st("En İyi / Kötü Gün", `${pf(best)} / ${pf(worst)}`)}
-      ${st("Pozitif Gün", pp(posRatio), posRatio >= 0.5 ? "pos" : "")}
-    </div>
-    ${benchmarkBlock(series, totRet, days, pf)}
-    <div class="rk-note">${note} <span class="rk-disc">Tahmin geçmiş volatiliteden türetilen bir <b>olasılık aralığıdır</b>, garanti değil.</span></div>`;
+    <div class="rk-note">${note}
+      <span class="rk-disc">Tahmin geçmiş volatiliteden türetilen bir <b>olasılık aralığıdır</b>, garanti değil.</span></div>
+    <div class="rk-cross">Getiri · Sharpe · volatilite · en kötü gün · pozitif gün → <b>Kıyas</b> panelinde,
+      endeksin aynı sayılarıyla yan yana. Tek başına okunan bir Sharpe iyi mi kötü mü söylemez.</div>`;
 }
 
-/* Benchmark: portföy TWR getirisi vs S&P 500 (SPY) + Nasdaq-100 (QQQ) — aynı pencerede.
- * "Piyasayı yeniyor muyum?" Fark (alpha) pozitifse evet. */
-let BENCH = { data: null, _loading: false };
-async function loadBenchmark() {
-  if (BENCH.data || BENCH._loading) return;
-  BENCH._loading = true;
-  try { BENCH.data = await (await fetch("/api/benchmark")).json(); if ($("#riskBox")) renderRisk(); }
-  catch {} finally { BENCH._loading = false; }
-}
-function benchReturn(series, d0, d1) {
-  if (!series?.length) return null;
-  const at = (target) => { let v = null; for (const p of series) { if (p.date <= target) v = p.close; else break; } return v; };
-  const c0 = at(d0), c1 = at(d1);
-  return (c0 && c1) ? (c1 / c0 - 1) : null;
-}
-function benchmarkBlock(series, totRet, days, pf) {
-  if (!BENCH.data) { loadBenchmark(); return ""; }
-  const d0 = series[0].date, d1 = series[series.length - 1].date;
-  const spy = benchReturn(BENCH.data.SPY, d0, d1), qqq = benchReturn(BENCH.data.QQQ, d0, d1);
-  if (spy == null && qqq == null) return "";
-  const row = (lbl, r) => {
-    if (r == null) return "";
-    const alpha = totRet - r;
-    return `<div class="bm-row"><span class="bm-lbl">${lbl}</span><b class="${cls(r)}">${pf(r)}</b>
-      <span class="bm-alpha ${cls(alpha)}">${alpha >= 0 ? "▲" : "▼"} ${pf(alpha)}</span></div>`;
-  };
-  return `<div class="rk-bench">
-    <div class="bm-head">Benchmark <span class="sw-muted">aynı ${Math.round(days)} günde · piyasayı yendin mi?</span></div>
-    <div class="bm-rows">
-      <div class="bm-row bm-port"><span class="bm-lbl">Portföyün</span><b class="${cls(totRet)}">${pf(totRet)}</b><span class="bm-alpha">—</span></div>
-      ${row("S&P 500 · SPY", spy)}
-      ${row("Nasdaq-100 · QQQ", qqq)}
+/* ===== KIYAS — "piyasayı yendin mi?" ======================================
+ * 16 Ağu. Bu soruya iki panel ayrı ayrı cevap veriyordu ve iki farklı sayı
+ * söylüyorlardı: Risk karnesinin altındaki "Benchmark" bloğu %66,7, altındaki
+ * "Temel çizgi" paneli TWR ile daha düşük. Benchmark bloğunun alt notunda
+ * "TWR — para giriş/çıkışı bozmaz" yazıyordu ama serisi akıştan hiç
+ * arındırılmamıştı; PR #51'de temel çizgide düzeltilen hata orada duruyordu.
+ * Not, ölçümü değil ölçümün olmasını istediğimiz hâlini anlatıyordu.
+ *
+ * İki panel bire indi ve sekmenin BAŞINA alındı: CLAUDE.md'nin dört ölçüm
+ * tuzağından biri temel çizgi yokluğu — "%44 getirdim" cümlesi tek başına iyi
+ * mi kötü mü söylemiyor. Sayfanın ilk söylediği şey artık bu.
+ *
+ * Hesap burada değil: kiyas.js (saf + 25 test) → /api/kiyas. Burası yalnız çizer.
+ */
+let KIYAS = { veri: null, yukleniyor: false };
+async function renderKiyas() {
+  const el = $("#kiyasBox"); if (!el) return;
+  if (!KIYAS.veri) {
+    if (!KIYAS.yukleniyor) {
+      KIYAS.yukleniyor = true;
+      el.innerHTML = `<div class="radar-empty">Endeks verisi alınıyor…</div>`;
+      try { KIYAS.veri = await (await fetch("/api/kiyas")).json(); }
+      catch { KIYAS.veri = { ok: false, neden: "ag" }; }
+      finally { KIYAS.yukleniyor = false; }
+      // Risk karnesi de bu seriyi kullanıyor — geldiğinde onu da tazele
+      if ($("#riskBox")) renderRisk();
+    } else return;
+  }
+  const K = KIYAS.veri;
+  const ray = $("#analizSecKiyas");
+  if (!K?.ok) {
+    const mesaj = K?.neden === "kayit" ? `Kıyas için en az ${K.minGun} günlük net değer kaydı gerek — şu an ${K.n}.`
+      : K?.neden === "ortak" ? `Portföy kayıtlarıyla endeks barları yalnız ${K.n} günde örtüşüyor — sağlıklı kıyas için az.`
+      : K?.neden === "endeks" ? "Endeks verisi alınamadı — kaynak meşgul olabilir, birkaç dakika sonra tazele."
+      : "Kıyas hesaplanamadı.";
+    if (ray) ray.textContent = "ölçülmedi — yeterli ortak gün yok";
+    el.innerHTML = `<div class="radar-empty">${mesaj}</div>`;
+    return;
+  }
+
+  const ana = K.ana || "QQQ";
+  const adlar = Object.keys(K.endeks);
+  // Bölüm rayı kendi kanıt miktarını yazar (CLAUDE.md tasarım kuralı 1)
+  if (ray) ray.textContent = `${K.n} ortak gün · ${K.takvimGun} takvim günü · zaman ağırlıklı`;
+
+  // ---- biçimleyiciler. fmtUSD0/fmtPct değil: burada her şey fraksiyon ve
+  //      işaret rakamın ÖNÜNE gelmeli (CLAUDE.md küçük kurallar).
+  const s2 = (f, d = 1) => (f == null || !isFinite(f) ? "—" : `${f >= 0 ? "+" : "−"}${Math.abs(f * 100).toFixed(d)}%`);
+  const y0 = (f, d = 0) => (f == null || !isFinite(f) ? "—" : `${(f * 100).toFixed(d)}%`);
+  const n2 = (x, d = 2) => (x == null || !isFinite(x) ? "—" : x.toFixed(d));
+  const yp = (f, d = 0) => (f == null || !isFinite(f) ? "—" : `%${(f * 100).toFixed(d)}`);  // düz metin içinde Türkçe sıra
+  const tar = (g) => { try { return new Date(g).toLocaleDateString("tr-TR", { day: "numeric", month: "short" }); } catch { return g; } };
+  const AD = { QQQ: "Nasdaq-100 · QQQ", SPY: "S&P 500 · SPY" };
+
+  /* ---- 1. HÜKÜM. Renk yalnız eylem gerektiren yerde (tasarım kuralı 3) ve
+   *      zafer rengi hak edilmeden verilmez: alfa pozitif olsa da düşüş bedeli
+   *      ağırsa sayı yeşil basılmaz — kart kendi cümlesinin tersini okutmasın. */
+  const h = K.hukum;
+  const alfaTon = !h ? "" : h.ton === "ok" ? "pos" : h.ton === "bad" ? "neg" : "";
+  const hero = `<div class="ky-hero">
+    <div class="ky-hero-n">
+      <span class="ky-hero-lbl">${ana} karşısında</span>
+      <b class="ky-hero-v ${alfaTon}">${s2(K.endeks[ana]?.alfa)}</b>
+      <span class="ky-hero-sub">${K.n} ortak günde · zaman ağırlıklı getiri farkı</span>
     </div>
-    <div class="bm-note">Sağdaki fark = alpha (portföy − endeks). Pozitifse piyasayı yendin. Getiri günlük değişimlerden (TWR) — para giriş/çıkışı bozmaz.</div>
+    <p class="ky-hukum ${h?.ton || ""}">${h?.metin || "Hüküm için yeterli veri yok."}</p>
   </div>`;
+
+  /* ---- 2. YARIŞ. Üç seri 100'e normalize; portföy dolu, endeksler ince.
+   *      Aynı sayıyı tablo da yazıyor — grafik SIRALAMAYI ve yolu gösterir,
+   *      okuma değerini değil. */
+  const W = 720, HG = 170, pd = { l: 4, r: 52, t: 12, b: 16 };
+  const seriler = [
+    { ad: "Portföyün", z: K.portfoy.zincir, sinif: "ky-p", kalin: 2.4 },
+    ...adlar.map((a) => ({ ad: a, z: K.endeks[a].zincir, sinif: a === ana ? "ky-x1" : "ky-x2", kalin: 1.5 })),
+  ];
+  const hepsi = seriler.flatMap((s) => s.z);
+  const yHi = Math.max(...hepsi) * 1.03, yLo = Math.min(...hepsi) * 0.98;
+  const xAt = (i, n) => pd.l + (n > 1 ? i / (n - 1) : 0) * (W - pd.l - pd.r);
+  const yAt = (v) => pd.t + (1 - (v - yLo) / (yHi - yLo || 1)) * (HG - pd.t - pd.b);
+  const yol = (z) => z.map((v, i) => `${i ? "L" : "M"} ${xAt(i, z.length).toFixed(1)} ${yAt(v).toFixed(1)}`).join(" ");
+  const uc = (s) => ({ y: yAt(s.z[s.z.length - 1]), v: s.z[s.z.length - 1] - 1 });
+  const grafik = `<div class="ky-grafik">
+    <svg viewBox="0 0 ${W} ${HG}" preserveAspectRatio="none" aria-hidden="true">
+      <line x1="${pd.l}" y1="${yAt(1).toFixed(1)}" x2="${(W - pd.r).toFixed(1)}" y2="${yAt(1).toFixed(1)}"
+            stroke="var(--line-strong)" stroke-width="1" stroke-dasharray="3 4" vector-effect="non-scaling-stroke"/>
+      ${seriler.map((s) => `<path d="${yol(s.z)}" fill="none" class="${s.sinif}" stroke-width="${s.kalin}"
+            stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>`).join("")}
+    </svg>
+    ${seriler.map((s) => { const u = uc(s); return `<span class="ky-uc ${s.sinif}" style="top:${(u.y / HG * 100).toFixed(1)}%">${s2(u.v, 0)}</span>`; }).join("")}
+    <div class="ky-lejant">${seriler.map((s) => `<span class="${s.sinif}"><i></i>${s.ad}</span>`).join("")}
+      <span class="ky-lejant-not">başlangıç = 100</span></div>
+  </div>`;
+
+  /* ---- 3. TABLO. Getiri tek başına yanıltır; aynı satırda riskiyle okunur.
+   *      "iyi" sütunu değil "sen vs endeks" — kazandığın hücre vurgulanır. */
+  const satirlar = [
+    ["Getiri", (m) => m.getiri, s2, true, "Pencere başından bugüne, dolar bazında, zaman ağırlıklı"],
+    ["Yıllık volatilite", (m) => m.yillikVol, (v) => y0(v), false, "Günlük getirilerin √252 ile yıllıklanmış oynaklığı — düşük olan iyi"],
+    ["Sharpe", (m) => m.sharpe, (v) => n2(v), true, "Getiri ÷ oynaklık. Aynı getiriyi daha az sarsıntıyla alan kazanır"],
+    ["Maks düşüş", (m) => m.maxDD, s2, true, "Zirveden dibe en kötü kayıp — katlandığın sarsıntı"],
+    ["En kötü gün", (m) => m.enKotuGun, s2, true, "Tek günde gördüğün en sert düşüş"],
+    ["Pozitif gün", (m) => m.pozitifOran, (v) => y0(v), true, "Kaç günün artıda kapandığı"],
+  ];
+  const tblSatir = ([ad, al, bic, buyukIyi, ipucu]) => {
+    const sen = al(K.portfoy);
+    const huc = adlar.map((a) => {
+      const v = al(K.endeks[a]);
+      return `<td class="ky-t-x">${bic(v)}</td>`;
+    }).join("");
+    const enIyiEndeks = adlar.map((a) => al(K.endeks[a])).filter((v) => v != null);
+    const kiyasDeger = enIyiEndeks.length ? (buyukIyi ? Math.max(...enIyiEndeks) : Math.min(...enIyiEndeks)) : null;
+    const kazandi = sen != null && kiyasDeger != null && (buyukIyi ? sen > kiyasDeger : sen < kiyasDeger);
+    return `<tr title="${ipucu}">
+      <td class="l ky-t-k">${ad}</td>
+      <td class="ky-t-sen ${kazandi ? "kazandi" : ""}">${bic(sen)}</td>
+      ${huc}</tr>`;
+  };
+  const tablo = `<div class="tbl-wrap"><table class="ky-tablo">
+    <thead><tr><th class="l"></th><th>Sen</th>${adlar.map((a) => `<th>${a}</th>`).join("")}</tr></thead>
+    <tbody>${satirlar.map(tblSatir).join("")}</tbody></table></div>`;
+
+  /* ---- 4. KARAKTER. Beta R² OLMADAN YORUMLANMAZ (docs/olcumler §14): R² düşükse
+   *      endeks portföyü açıklamıyordur ve beta gürültünün eğimidir. Yakalama
+   *      oranları asimetriyi gösterir — getiri tek başına söylemediği şeyi. */
+  const kart = (a) => {
+    const e = K.endeks[a], yk = e.yakalama || {};
+    const dusukR2 = e.r2 != null && e.r2 < 0.30;
+    return `<div class="ky-kart">
+      <div class="ky-kart-h">${AD[a] || a}</div>
+      <div class="ky-kart-g">
+        <div><span>Beta</span><b>${n2(e.beta)}</b></div>
+        <div><span>R²</span><b class="${dusukR2 ? "ky-zayif" : ""}">${n2(e.r2)}</b></div>
+        <div><span>Yukarı yakalama</span><b>${e.yakalama?.yukari != null ? y0(e.yakalama.yukari) : "—"}</b></div>
+        <div><span>Aşağı yakalama</span><b>${e.yakalama?.asagi != null ? y0(e.yakalama.asagi) : "—"}</b></div>
+      </div>
+      <p class="ky-kart-y">${e.r2 == null
+        ? "Beta için yeterli ortak gün yok."
+        : dusukR2
+          ? `Endeksin açıklama gücü <b>${yp(e.r2)}</b> — portföyünün hareketi büyük ölçüde <b>hisseye özgü</b>. Bu durumda beta yorumlanamaz; alfa da piyasa becerisi değil, tek tek hisse seçimidir.`
+          : `Endeksin açıklama gücü <b>${yp(e.r2)}</b> — beta ${n2(e.beta)} anlamlı okunabilir.`}
+        ${yk.yukari != null && yk.asagi != null ? `<i>Endeksin yükseldiği günlerde onun <b>${n2(yk.yukari)} katı</b> kazanıyor, düştüğü günlerde <b>${n2(yk.asagi)} katı</b> kaybediyorsun (${yk.yukariN}↑ / ${yk.asagiN}↓ gün) — ${
+          yk.yukari > 1.2 && yk.asagi > 1.2
+            ? `iki yönde de endeksi büyütüyorsun, <b>kaldıraç gibi davranıyor</b>${yk.yukari > yk.asagi ? "; yine de yukarı payın aşağı payından büyük" : ". Üstelik aşağı payın yukarı payından büyük: asimetri aleyhine"}`
+            : yk.yukari > yk.asagi ? "asimetri lehine" : "asimetri aleyhine: düşüşü yükselişten çok alıyorsun"}.</i>` : ""}
+        ${a === "SPY" ? `<i>Risk Masası'ndaki beta bundan farklıdır — o <b>bugünkü ağırlıkları</b> geçmişe uygular, buradaki ise hesabın fiilen yaptığıdır (docs/olcumler.md §14).</i>` : ""}
+      </p>
+    </div>`;
+  };
+
+  /* ---- 5. SON DÖNEM. Tüm pencerenin alfası geçmişi anlatır; edge HÂLÂ var mı
+   *      sorusunu ayrı sormak gerek. Kısa pencere → hüküm vermez, işaret eder. */
+  const sonlar = adlar.filter((a) => K.endeks[a].sonAlfa != null);
+  const sonBlok = sonlar.length ? `<div class="ky-son">
+    <div class="ky-son-h">Son ${K.endeks[sonlar[0]].sonGun} günde alfa</div>
+    ${sonlar.map((a) => `<div class="ky-son-r"><span>${a}</span><b class="${K.endeks[a].sonAlfa >= 0 ? "pos" : "neg"}">${s2(K.endeks[a].sonAlfa)}</b></div>`).join("")}
+    <p class="ky-son-n">${(() => {
+      const sonNeg = sonlar.every((a) => K.endeks[a].sonAlfa < 0);
+      const sonPoz = sonlar.every((a) => K.endeks[a].sonAlfa > 0);
+      const tumNeg = adlar.every((a) => (K.endeks[a].alfa ?? 0) < 0);
+      const tumPoz = adlar.every((a) => (K.endeks[a].alfa ?? 0) > 0);
+      if (tumPoz && sonNeg) return "Tüm pencerede öndesin ama <b>son dönemde değilsin</b> — üstünlük geçmişten geliyor. Bu kadar kısa pencere hüküm vermez, izlemeye alır.";
+      if (tumNeg && sonNeg) return "Hem tüm pencerede hem son dönemde gerisin — <b>tutarlı geri kalış</b>, geçici bir sapma değil. Kısa pencere yine de tek başına kanıt değil.";
+      if (tumNeg && sonPoz) return "Pencerenin tamamında gerisin ama <b>son dönemde öndesin</b> — toparlanma işareti olabilir; 30 gün bunu doğrulamaya yetmez.";
+      return "Son dönem tüm pencereyle aynı yönde. Kısa pencere, tek başına kanıt değil.";
+    })()}</p>
+  </div>` : "";
+
+  const not = `<p class="ky-not">
+    ${K.n} ortak gün · ${tar(K.d0)} → ${tar(K.d1)} · kurdan arındırılmış (TL anlık görüntü ÷ USDTRY).
+    Getiri <b>zaman ağırlıklı</b>${K.akisN ? ` · ${K.akisN} para hareketi arındırıldı` : ""};
+    yatırdığın para kazanç sayılmaz.
+    ${K.atlanan ? `Günlük istatistik (volatilite, Sharpe, beta, en kötü gün) ${K.gunlukN} gerçek günden — defterdeki ${K.atlanan} seyrek sıçrama dışarıda, birikimli getiri onları içerir.` : ""}
+    <b>Yanlılık:</b> pencere kısa ve tek rejim; bu panel "bu dönemde ne oldu"yu söyler, "strateji iyi mi"yi değil.
+  </p>`;
+
+  el.innerHTML = hero + grafik + tablo +
+    `<div class="ky-alt">${adlar.map(kart).join("")}${sonBlok}</div>` + not;
 }
 
 /* ===== Pozisyon Teknikleri — her holding'in trader metrikleri (h.sig'ten) ===== */
@@ -757,4 +957,5 @@ function renderPosTech() {
       ? "RSI &gt; 70 ısınmış · &lt; 30 aşırı satım. Trend = fiyatın SMA50/200'e göre yeri. 52h Zirve = 52 hafta zirvesinden uzaklık. Analist Hedef = ortalama hedefe potansiyel. Açık R = açık kârın stopuna göre kaç risk birimi (Kural 1)."
       : "Teknik veriler henüz taranıyor (RSI/SMA/52h analist). Birkaç dakika sonra tazele — ek API maliyeti olmadan günlük taramadan gelir."}</div>`;
 }
+
 

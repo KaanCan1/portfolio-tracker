@@ -63,8 +63,22 @@ function radarDetail(s) {
     Hedef <b class="pos">${fmtUSD(sw.target)}${sw.rewardPct != null ? ` (+${sw.rewardPct.toFixed(1)}%)` : ""}</b> ·
     R/R <b>${sw.rr != null ? sw.rr.toFixed(1) + "R" : "—"}</b>${sw.grade ? ` · Kalite <span class="sw-grade ${GRADE_CLS[sw.grade] || "g-d"}">${sw.grade}</span>` : ""}
     ${sw.entry != null ? swFromBtn({ symbol: s.symbol, entry: sw.entry, stop: sw.stop, target: sw.target, note: sw.setup?.label || "" }) : ""}</div>` : "";
-  return `<tr class="rb-detail" data-for="${s.symbol}" hidden><td colspan="8">
+  // Satırdan detaya inen ölçülmemiş katman: karar kademesi, tema, 4 sinyal noktası.
+  // Kaybolmadı, yalnız kararın önünden çekildi (14 Ağu).
+  const tierD = TIER_META[s.tier?.key] || TIER_META.neutral;
+  const dot = (key) => {
+    const sg = (s.signals || []).find((x) => x.key === key) || {};
+    return `<span class="rsig rsig-${sg.tone || "bad"}" title="${(sg.text || "").replace(/"/g, "")}">${sg.label || ""}</span>`;
+  };
+  const metaLine = `<div class="rd-meta">
+    ${s.tier ? `<span class="rb-tier ${tierD.cls}">${tierD.label}</span>` : ""}
+    ${s.theme ? `<span class="rb-theme rb-th-${s.theme.key || "other"}">${s.theme.title?.split(" · ")[0] || ""}</span>` : ""}
+    <span class="rd-sigs">${dot("mom")}${dot("ana")}${dot("fun")}${dot("ins")}</span>
+    <button class="btn icon rb-analiz" data-analiz="${s.symbol}" title="Teknik analizi aç / en güncel veriyle yenile">${svgIcon("refresh", "ic-sm")}</button>
+  </div>`;
+  return `<tr class="rb-detail" data-for="${s.symbol}" hidden><td colspan="4">
     ${swBlock}
+    ${metaLine}
     ${s.story ? `<div class="rd-story"><b>Hikâye:</b> ${s.story}</div>` : ""}
     ${s.summaryText ? `<div class="rd-story rd-why"><b>Skor nereden geliyor?</b> ${s.summaryText}</div>` : ""}
     <div class="rd-grid">
@@ -88,34 +102,36 @@ function buildUnifiedRadar() {
   const ra = RADAR.data?.items || [], sw = SWING.data?.items || [];
   const raBy = {}; for (const r of ra) raBy[r.symbol] = r;
   const swBy = {}; for (const s of sw) swBy[s.symbol] = s;
-  const syms = [...new Set([...ra.map((r) => r.symbol), ...sw.filter((s) => s.setup || s.cuma).map((s) => s.symbol)])];
+  // kapı: kurulum VARDI ama oynaklık/göreli güç eşiğine takıldı → listede kalsın,
+  // sebebi görünsün. Sessizce kaybolan kurulum, gösterilmeyen bilgidir.
+  const syms = [...new Set([...ra.map((r) => r.symbol), ...sw.filter((s) => s.setup || s.cuma || s.kapi).map((s) => s.symbol)])];
   return syms.map((sym) => {
     const r = raBy[sym], s = swBy[sym];
     const swing = (s && s.setup) ? { setup: s.setup, entry: s.entry, stop: s.stop, target: s.target, rr: s.rr, riskPct: s.riskPct, rewardPct: s.rewardPct, grade: s.grade, entryType: s.entryType, verdict: s.verdict, rsi: s.rsi } : null;
     const base = r || { symbol: sym, score: null, tier: null, signals: [], theme: null, name: s?.name || null, price: s?.price ?? null, dayChangePct: s?.dayChangePct ?? null };
-    return { ...base, symbol: sym, cuma: !!(r?.cuma || s?.cuma), swing };
+    return { ...base, symbol: sym, cuma: !!(r?.cuma || s?.cuma), swing, kapi: s?.kapi || null };
   });
 }
 function unifiedRow(u) {
-  const dotFor = (key) => {
-    const sg = (u.signals || []).find((x) => x.key === key) || {};
-    return `<span class="rsig rsig-${sg.tone || "bad"}" title="${(sg.text || "").replace(/"/g, "")}">${sg.label || ""}</span>`;
-  };
-  const tier = TIER_META[u.tier?.key] || TIER_META.neutral;
   const tr = TREND_META[u.trend];
   const dc = u.dayChangePct;
-  const tgtCell = (u.target != null && u.upsidePct != null)
-    ? `<div class="rb-tgt"><b>${fmtUSD(u.target)}</b><span class="rb-up ${cls(u.upsidePct)}">${u.upsidePct >= 0 ? "+" : ""}${u.upsidePct.toFixed(0)}%</span></div>`
-    : "—";
   const badges = `${u.cuma ? `<span class="rb-badge cuma" title="Cuma Hoca listesi">${svgIcon("star","ic-xs")}</span>` : ""}${raActionable(u) ? `<span class="rb-badge sig" title="Taze swing tetiği — bugün girilebilir kurulum">${svgIcon("activity","ic-xs")}</span>` : ""}`;
   const scoreCell = u.score != null
     ? `<div class="rb-scorewrap"><div class="rb-bar"><i style="width:${u.score}%"></i></div><b>${u.score}</b></div>`
     : `<span class="muted rb-noscore">—</span>`;
-  const tierCell = u.tier ? `<span class="rb-tier ${tier.cls}">${tier.label}</span>` : `<span class="muted">—</span>`;
   const su = u.swing ? SETUP_META[u.swing.setup?.type] : null;
+  const KAPI_ETIKET = { oynaklik: "çok oynak", "goreli-guc": "endeksin gerisinde" };
   const swCell = u.swing
     ? `<span class="rb-sw">${su ? `<span class="chip ${su.cls}">${u.swing.setup.label}</span>` : ""}${u.swing.entry != null ? `<span class="rb-sw-lv">gir ${fmtUSD(u.swing.entry)} · <span class="neg">${fmtUSD(u.swing.stop)}</span></span>` : ""}</span>`
-    : `<span class="muted">—</span>`;
+    : u.kapi
+      // Kurulum vardı, kapı düşürdü. Sessiz kırmızı DEĞİL: bu bir uyarı değil,
+      // "neden burada kurulum yok" cevabı. Tam gerekçe title'da.
+      ? `<span class="rb-kapi" title="${(u.kapi.sebep || "").replace(/"/g, "")}">kurulum kapıda elendi · ${KAPI_ETIKET[u.kapi.ad] || u.kapi.ad}</span>`
+      : `<span class="muted">—</span>`;
+  // 14 Ağu: satır 8 sütundu — tema, hedef fiyat, karar çipi ve 4 sinyal noktası
+  // (momentum/analist/bilanço/insider) hep bir aradaydı. Bunların hiçbirinin para
+  // kazandırdığı ÖLÇÜLMEDİ; kurulum + plan ise ölçülmüş kapıdan geçiyor. Ölçülmemiş
+  // olan satırdan detaya indi (satıra tıkla), ölçülmüş olan öne çıktı.
   return `<tr class="rb-main" data-sym="${u.symbol}">
     <td class="l rb-sym">
       <span class="rb-caret">▸</span>
@@ -123,17 +139,78 @@ function unifiedRow(u) {
       ${tr ? `<span class="rb-trend ${tr.cls}" title="${tr.title}">${tr.label}</span>` : ""}
       ${badges}
       <span class="rb-name">${u.name ? u.name.replace(/"/g, "") : ""}</span>
-      ${u.story ? `<span class="rb-story">${u.story.replace(/"/g, "")}</span>` : ""}
     </td>
-    <td class="l"><span class="rb-theme rb-th-${u.theme?.key || "other"}">${u.theme?.title?.split(" · ")[0] || "—"}</span></td>
     <td class="rb-price">${fmtUSD(u.price)}${dc != null ? `<span class="rb-dc ${cls(dc)}">${fmtPct(dc)}</span>` : ""}</td>
-    <td class="rb-tgtcell">${tgtCell}</td>
     <td class="rb-score">${scoreCell}</td>
-    <td>${tierCell}</td>
-    <td class="l rb-sigs">${dotFor("mom")}${dotFor("ana")}${dotFor("fun")}${dotFor("ins")}
-      <button class="btn icon rb-analiz" data-analiz="${u.symbol}" title="Teknik analizi aç / en güncel veriyle yenile">${svgIcon("refresh", "ic-sm")}</button></td>
     <td class="l rb-swcell">${swCell}</td>
   </tr>${radarDetail(u)}`;
+}
+
+/* ===== "Bugün girilebilir" plan kartları — 14 Ağu ============================
+ * Radar sekmesi 8 sütunlu bir tabloydu: skor barı, karar çipi, 4 sinyal noktası,
+ * tema çipi, hedef fiyat… Hiçbiri "bu hisseye şimdi girer miyim, kaç adet?"
+ * sorusunu cevaplamıyordu; cevap için satırı açıp modalı açmak gerekiyordu.
+ *
+ * Bu projenin ÖLÇÜLMÜŞ tek edge'i kapılar (docs/olcumler.md · 12 Ağu). Skor
+ * bileşenlerinin (momentum/analist/bilanço/insider) para kazandırdığı ölçülmedi.
+ * O yüzden sekmenin başı artık kapıdan geçmiş, planı YAZILABİLİR kurulumlar:
+ * giriş · stop · hedef · R/Ö · ADET · risk $ — hepsi kartın üstünde.
+ * Adet hesabı Swing modalıyla AYNI formül (risk sermayesi × risk% ÷ 1R, tek
+ * pozisyon %25 tavanı) — iki yerde iki farklı sayı çıkmasın. */
+function raRiskPct() {
+  const v = Number($("#raRiskPct")?.value);
+  return v > 0 && v <= 10 ? v : (SWINGDECK?.goal?.riskPct || 1);
+}
+function raSermaye() {
+  const portUSD = ALLOC.usdtry && ALLOC.grandTotalTRY ? ALLOC.grandTotalTRY / ALLOC.usdtry : null;
+  const goal = SWINGDECK?.goal || {};
+  return goal.capital > 0 ? goal.capital : portUSD;
+}
+/** Kaç adet? 17 Ağu: formül artık KOPYA DEĞİL — adetHesapla (01-cekirdek) tek yer.
+ * swingSizeCalc de aynı fonksiyonu çağırıyor, iki farklı adet çıkması imkânsız.
+ * Korelasyon çarpanı da orada uygulanıyor (bkz. docs/olcumler.md §16). */
+function raAdet(entry, stop) {
+  const r = adetHesapla({
+    sermaye: raSermaye(), riskPct: raRiskPct(), giris: entry, stop,
+    korelasyonCarpani: KORCARPAN.carpan,
+  });
+  return r && { shares: r.adet, capped: r.tavanDeydi, riskUSD: r.riskUSD, tutarUSD: r.tutarUSD };
+}
+function raPlanKarti(u) {
+  const s = u.swing, su = SETUP_META[s.setup?.type];
+  const sz = raAdet(s.entry, s.stop);
+  const rr = s.rr != null ? s.rr : (s.stop != null && s.target != null && s.entry > s.stop ? (s.target - s.entry) / (s.entry - s.stop) : null);
+  const enc = encodeURIComponent(JSON.stringify({ symbol: u.symbol, entry: s.entry, stop: s.stop ?? null, target: s.target ?? null, note: su ? su.label : "" }));
+  return `<article class="rp-card" data-rp="${u.symbol}">
+    <header class="rp-head">
+      <div class="rp-id">
+        <span class="rp-sym">${u.symbol}</span>
+        ${su ? `<span class="rp-setup">${s.setup.label}</span>` : ""}
+        ${u.cuma ? `<span class="rp-cuma" title="Cuma Hoca — TradingView güçlü yükseliş listesi">${svgIcon("star", "ic-xs")}</span>` : ""}
+      </div>
+      <div class="rp-px">${fmtUSD(u.price)}${u.dayChangePct != null ? `<span class="rp-dc ${cls(u.dayChangePct)}">${fmtPct(u.dayChangePct)}</span>` : ""}</div>
+    </header>
+    <div class="rp-name">${u.name ? u.name.replace(/"/g, "") : ""}</div>
+    <div class="rp-lvls">
+      <div class="rp-lvl"><span>Gir</span><b>${fmtUSD(s.entry)}</b></div>
+      <div class="rp-lvl stop"><span>Stop</span><b>${s.stop != null ? fmtUSD(s.stop) : "—"}</b></div>
+      <div class="rp-lvl tgt"><span>Hedef</span><b>${s.target != null ? fmtUSD(s.target) : "—"}</b></div>
+      <div class="rp-lvl"><span>R/Ö</span><b>${rr != null ? rr.toFixed(1) : "—"}</b></div>
+    </div>
+    ${sz
+      ? `<div class="rp-size">
+           <span class="rp-size-n"><b>${fmtNum(sz.shares, sz.shares >= 10 ? 0 : 2)}</b> adet</span>
+           <span class="rp-size-s">${fmtUSD0(sz.tutarUSD)} tutar · riskin <b>${fmtUSD0(sz.riskUSD)}</b>${sz.capped ? " · %25 tavanı" : ""}</span>
+         </div>`
+      : `<div class="rp-size none">Adet için stop ve risk sermayesi gerek</div>`}
+    <footer class="rp-foot">
+      <span class="rp-score" title="0–100 birleşik skor — ölçülmüş bir edge DEĞİL, başlangıç filtresi">skor ${u.score ?? "—"}</span>
+      <span class="rp-acts">
+        <button class="btn ghost sm" data-rp-chart="${u.symbol}">Grafik</button>
+        <button class="btn primary sm" data-swfrom="${enc}">Swing aç</button>
+      </span>
+    </footer>
+  </article>`;
 }
 
 function renderRadarBoard() {
@@ -144,15 +221,7 @@ function renderRadarBoard() {
 
   const all = buildUnifiedRadar();
 
-  // alt bilgi
-  const sub = $("#radarBoardSub");
-  if (sub) {
-    const when = d?.updated ? new Date(d.updated).toLocaleString("tr-TR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "—";
-    const setups = all.filter((u) => u.swing).length;
-    sub.textContent = (d && d.count < d.total)
-      ? `Taranıyor… ${d.count}/${d.total} hisse hazır`
-      : `${all.length} hisse tek listede · ${setups} swing kurulumu · skor + momentum/analist/bilanço/insider · son tarama ${when}`;
-  }
+  const when = d?.updated ? new Date(d.updated).toLocaleString("tr-TR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "—";
   // tema çubuğu
   const gbar = $("#radarGroups");
   if (gbar && d?.groups) {
@@ -163,15 +232,29 @@ function renderRadarBoard() {
       b.addEventListener("click", () => { RADAR.group = b.dataset.group; renderRadarBoard(); }));
   }
 
-  // Aksiyon şeridi: yüksek skor (≥50) + taze swing tetiği → "şimdi girilebilir" ilk 5
-  const action = all.filter((u) => (u.score ?? 0) >= 50 && raActionable(u)).sort((a, b) => raCombo(b) - raCombo(a)).slice(0, 5);
-  const strip = action.length ? `<div class="ra-strip">
-    <div class="ra-strip-h">Şimdi girilebilir <span>yüksek skor + taze swing tetiği — hem temel hem teknik hazır</span></div>
-    <div class="ra-strip-row">${action.map((u) => `<button class="ra-pill" data-rapill="${u.symbol}">
-      <span class="ra-pill-sym">${u.symbol}</span><span class="ra-pill-score">skor ${u.score}</span>
-      <span class="ra-pill-lv">gir ${fmtUSD(u.swing.entry)} · stop <span class="neg">${fmtUSD(u.swing.stop)}</span></span>
-      ${u.cuma ? `<span class="ra-pill-cuma">${svgIcon("star","ic-xs")}</span>` : ""}</button>`).join("")}</div>
-  </div>` : "";
+  // ── Bölüm 1: planı yazılabilir kurulumlar. Eski "şimdi girilebilir" şeridi
+  // yalnız sembol+giriş yazan 5 pill'di; adet/risk yoktu, karar için yetmiyordu.
+  const girilebilir = all
+    .filter((u) => u.swing && u.swing.entry != null && u.swing.stop != null && u.swing.entry > u.swing.stop)
+    .sort((a, b) => raCombo(b) - raCombo(a))
+    .slice(0, 8);
+  const elenenN = all.filter((u) => u.kapi).length;
+  const sermaye = raSermaye();
+  const planlar = girilebilir.length
+    ? `<div class="rp-grid">${girilebilir.map(raPlanKarti).join("")}</div>`
+    : `<div class="radar-empty">Planı yazılabilir kurulum yok${elenenN ? ` — ${elenenN} kurulum kapıda elendi (oynaklık ya da endeksin gerisinde)` : ""}. Kurulum yoksa zorlamak sistemin dışına çıkmaktır.</div>`;
+  const riskKutu = `<label class="ra-risk" title="Adet hesabında kullanılan risk yüzdesi — Swing modalıyla aynı formül">
+      risk <input id="raRiskPct" type="number" step="0.1" min="0.1" max="10" value="${raRiskPct()}" /> %
+      ${sermaye ? `<i>${fmtUSD0(sermaye)} sermaye</i>` : `<i>sermaye yok</i>`}
+    </label>`;
+  const kanitPlan = girilebilir.length
+    ? `${girilebilir.length} kurulum · kapıdan geçti${elenenN ? ` · ${elenenN} elendi` : ""}`
+    : elenenN ? `0 kurulum · ${elenenN} kapıda elendi` : "kurulum yok";
+  const bolum1 = `<section class="sw2-sec">
+    <header class="sw2-sec-h"><h3>Bugün girilebilir</h3><span class="sw2-sec-rule"></span>
+      <span class="sw2-sec-n">${kanitPlan}</span>${riskKutu}</header>
+    <div class="sw2-sec-body">${planlar}</div>
+  </section>`;
 
   // filtre
   let items = all.slice();
@@ -185,18 +268,38 @@ function renderRadarBoard() {
   const table = items.length
     ? `<div class="tbl-wrap rb-wrap"><table class="rb-table">
         <thead><tr>
-          <th class="l">Hisse</th><th class="l">Tema</th><th>Fiyat</th>
-          <th>Hedef · Potansiyel</th><th>Skor</th><th>Karar</th><th class="l">Sinyaller</th><th class="l">Swing</th>
+          <th class="l">Hisse</th><th>Fiyat</th><th>Skor</th><th class="l">Kurulum · plan</th>
         </tr></thead>
         <tbody>${items.map(unifiedRow).join("")}</tbody>
       </table></div>`
     : `<div class="radar-empty">${(d && d.count < d.total) ? "Tarama sürüyor, birazdan dolacak…" : "Bu filtreye uygun hisse yok."}</div>`;
 
-  el.innerHTML = strip + table;
+  // ── Bölüm 2: tam liste. Tarama sonucunun tamamı burada durur ama artık sekmenin
+  // başı değil sonu — gün içinde bakılan şey plan kartları, bu bir arşiv.
+  const kanitListe = (d && d.count < d.total)
+    ? `taranıyor… ${d.count}/${d.total}`
+    : `${all.length} hisse · ${all.filter((u) => u.swing).length} kurulum${elenenN ? ` · ${elenenN} kapıda elendi` : ""}`;
+  // Plan kartları panelin dışında, üstte; tablo panelin içinde kalır (kancalar bozulmasın)
+  const planEl = $("#radarPlans");
+  if (planEl) planEl.innerHTML = bolum1;
+  el.innerHTML = table;
+  const sub2 = $("#radarBoardSub");
+  if (sub2) sub2.textContent = `${kanitListe} · son tarama ${when} · satıra tıkla: plan + skorun nereden geldiği`;
 
-  // aksiyon şeridi pill → grafik
-  el.querySelectorAll("[data-rapill]").forEach((b) =>
-    b.addEventListener("click", () => openChartModal(b.dataset.rapill)));
+  // plan kartı eylemleri
+  planEl?.querySelectorAll("[data-rp-chart]").forEach((b) =>
+    b.addEventListener("click", (e) => { e.stopPropagation(); openChartModal(b.dataset.rpChart); }));
+  const riskInp = planEl?.querySelector("#raRiskPct");
+  if (riskInp) riskInp.addEventListener("input", () => {
+    // yalnız kartların adet satırını tazele — tüm panoyu yeniden çizmek odağı kaçırır
+    planEl.querySelectorAll(".rp-card").forEach((c) => {
+      const u = all.find((x) => x.symbol === c.dataset.rp); if (!u) return;
+      const sz = raAdet(u.swing.entry, u.swing.stop), box = c.querySelector(".rp-size");
+      if (!box || !sz) return;
+      box.innerHTML = `<span class="rp-size-n"><b>${fmtNum(sz.shares, sz.shares >= 10 ? 0 : 2)}</b> adet</span>
+        <span class="rp-size-s">${fmtUSD0(sz.tutarUSD)} tutar · riskin <b>${fmtUSD0(sz.riskUSD)}</b>${sz.capped ? " · %25 tavanı" : ""}</span>`;
+    });
+  });
   // Satıra tıkla → detayını aç/kapat
   el.querySelectorAll("tr.rb-main").forEach((row) => {
     row.addEventListener("click", (e) => {

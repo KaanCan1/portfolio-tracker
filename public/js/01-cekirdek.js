@@ -128,6 +128,64 @@ let STATE = null;
 let RANGE = "1d";
 let ALLOC = { segs: [], total: 0, usdtry: 0, grandTotalTRY: 0 }; // varlık dağılımı (donut hover)
 
+/* ===== POZİSYON BOYUTLANDIRMA — tek formül, tek yer =============================
+ * 17 Ağu: formül raAdet() (05) ve swingSizeCalc() (08) içinde AYRI AYRI duruyordu.
+ * CLAUDE.md "birebir aynı tutulur" diyordu — yani kural koda değil disipline
+ * yazılmıştı. İkisi de artık buradaki adetHesapla()'yı çağırıyor.
+ * Referans uygulama ve testler: kökteki boyutlandirma.js + test/boyutlandirma.test.mjs.
+ * Buradaki kopya tarayıcı klasik script olduğu için var (bundler yok); İKİSİ BİRLİKTE
+ * değişir, biri değişip diğeri kalırsa iki farklı adet çıkar.
+ *
+ * KORELASYON ÇARPANI: "her pozisyona ayrı %1 risk" altı pozisyonda sessizce
+ * "toplam %6 risk" demeye gelir ve o cümle yalnız pozisyonlar bağımsızsa doğrudur.
+ * Ölçüm (docs/olcumler.md §16) bağımsızlık varsayımının riski 1,32 kat az
+ * gösterdiğini buldu. Çarpan sabit yazılmıyor, /api/risk'ten canlı geliyor. */
+const TAVAN_PCT = 25;
+let KORCARPAN = { carpan: 1, olculdu: false, kucultmePct: 0, durum: "bekliyor" };
+
+function adetHesapla({ sermaye, riskPct, giris, stop, korelasyonCarpani, tavanPct = TAVAN_PCT }) {
+  if (!(sermaye > 0) || !(giris > 0) || !(stop > 0) || giris <= stop) return null;
+  const rp = riskPct > 0 && riskPct <= 10 ? riskPct : 1;
+  // Çarpan yalnız 1'in ÜSTÜNDE anlamlı: korelasyon riski artırır. 1'in altı yok sayılır,
+  // yoksa model pozisyonu BÜYÜTMEYİ önerir ve kesintinin yönü tersine döner.
+  const olculdu = Number.isFinite(korelasyonCarpani) && korelasyonCarpani > 1;
+  const carpan = olculdu ? korelasyonCarpani : 1;
+  const riskAmt = sermaye * (rp / 100);
+  const birimRisk = giris - stop;
+  const carpansizAdet = riskAmt / birimRisk;
+  let adet = carpansizAdet / carpan;
+  const tavanAdet = (sermaye * (tavanPct / 100)) / giris;
+  const tavanDeydi = adet > tavanAdet;
+  if (tavanDeydi) adet = tavanAdet;
+  return { adet, tavanDeydi, riskUSD: adet * birimRisk, tutarUSD: adet * giris, carpan, olculdu, carpansizAdet };
+}
+
+/** /api/risk'ten korelasyon çarpanını bir kez çeker. Hata = kesinti yok. */
+async function korCarpaniYukle(hazirVeri = null) {
+  try {
+    const d = hazirVeri || await (await fetch("/api/risk")).json();
+    const p = d?.portfolio;
+    if (!p || d.error) { KORCARPAN = { carpan: 1, olculdu: false, kucultmePct: 0, durum: "olculmedi" }; return; }
+    KORCARPAN = {
+      carpan: Number(p.korelasyonCarpani) || 1,
+      olculdu: !!p.korelasyonOlculdu,
+      kucultmePct: Number(p.boyutKucultmePct) || 0,
+      durum: p.korelasyonOlculdu ? "olculdu" : "olculmedi",
+    };
+  } catch {
+    KORCARPAN = { carpan: 1, olculdu: false, kucultmePct: 0, durum: "olculmedi" };
+  }
+  // Swing formu açıksa adet satırı taze çarpanla yeniden yazılsın
+  if (typeof swingSizeCalc === "function" && document.querySelector("#swCalcBody")) swingSizeCalc();
+}
+
+/** Adet satırının altına düşen açıklama — ölçülmediyse SUSMAZ. */
+function korCarpanNotu() {
+  if (KORCARPAN.durum === "bekliyor") return `<i>korelasyon ölçülüyor — bu adet henüz kesintisiz</i>`;
+  if (!KORCARPAN.olculdu) return `<i>korelasyon ölçülmedi — kesinti uygulanmadı</i>`;
+  return `<i>korelasyon ×${KORCARPAN.carpan.toFixed(2)} → %${KORCARPAN.kucultmePct} küçültüldü</i>`;
+}
+
 async function load() {
   $("#updated").innerHTML = '<span class="spin">↻</span> yükleniyor…';
   PRORISK = null; // her yüklemede taze risk hesabı
@@ -137,6 +195,11 @@ async function load() {
     STATE = await r.json();
     render();
     renderReports();
+    /* Korelasyon çarpanını ARKA PLANDA çek — boyutlandırmayı bloklamasın.
+     * Gelene kadar kesinti yok ve etiket "korelasyon ölçülüyor" der; geldiğinde
+     * açık swing formu kendini yeniden yazar. Sessizce kesintisiz adet göstermek
+     * yerine bekleme hâlini söylemek, kullanıcının yanlış adede güvenmesini önler. */
+    korCarpaniYukle();
   } catch (e) {
     $("#updated").textContent = "Bağlantı hatası";
   }
@@ -170,13 +233,23 @@ async function renderReports() {
         <td class="l">${s.profitTake ? `<span class="pt-chip pt-${s.profitTake.level}">${s.profitTake.trim}</span>` : ""}</td>
       </tr>`).join("");
     const list = (label, arr, fn) => arr.length ? `<div class="rep-line"><b>${label}:</b> ${arr.map(fn).join(" · ")}</div>` : "";
+    // 15 Ağu: özet satırı beş bilgiyi yan yana aynı ağırlıkta diziyordu (tarih ·
+    // tutar · % · VIX · üç sayaç) — arşivi taramak göz yoruyordu. Artık TARİH ve
+    // GÜNÜN YÜZDESİ birincil, gerisi ikinci satırda susturulmuş bağlam.
+    const alN = rep.stocks.filter((s) => s.signal?.tone === "buy").length;
+    const kaN = rep.stocks.filter((s) => s.profitTake).length;
+    const swN = rep.stocks.filter((s) => s.swing).length;
     return `<details class="rep" ${open ? "open" : ""}>
       <summary>
-        <span class="rep-date">${fmtDate(rep.date)}</span>
-        <span class="rep-total">₺${(rep.totalTRY || 0).toLocaleString("tr-TR")}</span>
-        ${dc != null ? `<span class="chip ${cls(dc)}">${fmtPct(dc)}</span>` : ""}
-        ${rep.regime ? `<span class="chip">VIX ${fmtNum(rep.regime.vix, 1)} · ${rep.regime.band}</span>` : ""}
-        <span class="rep-mini">AL ${rep.stocks.filter((s) => s.signal?.tone === "buy").length} · KÂR-AL ${rep.stocks.filter((s) => s.profitTake).length} · SW ${rep.stocks.filter((s) => s.swing).length}</span>
+        <span class="rep-head">
+          <span class="rep-date">${fmtDate(rep.date)}</span>
+          ${dc != null ? `<span class="rep-dc ${cls(dc)}">${fmtPct(dc)}</span>` : ""}
+        </span>
+        <span class="rep-meta">
+          <span class="rep-total">₺${(rep.totalTRY || 0).toLocaleString("tr-TR")}</span>
+          ${rep.regime ? `<span class="rep-vix">VIX ${fmtNum(rep.regime.vix, 1)} · ${rep.regime.band}</span>` : ""}
+          ${(alN || kaN || swN) ? `<span class="rep-mini">${[alN ? `${alN} al` : "", kaN ? `${kaN} kâr-al` : "", swN ? `${swN} swing` : ""].filter(Boolean).join(" · ")}</span>` : `<span class="rep-mini">sinyal yok</span>`}
+        </span>
       </summary>
       <div class="rep-body">
         ${rep.note ? `<div class="rep-line rep-note">${stripEmoji(rep.note)}</div>` : ""}
@@ -402,7 +475,7 @@ function renderSentiment(data) {
     </div>` : "";
 
   host.innerHTML = (fngCard || regimeCard)
-    ? `<div class="sec-label">Piyasa Nabzı</div><div class="cards-mid">${fngCard}${regimeCard}</div>` : "";
+    ? `<div class="sec-label">Piyasa nabzı<span class="sec-n">korku/açgözlülük · VIX rejimi — pozisyon değil ortam ölçer</span></div><div class="cards-mid">${fngCard}${regimeCard}</div>` : "";
 }
 
 // Duygu kartlarını ağır portföy çağrısını beklemeden hemen yükle
@@ -454,12 +527,25 @@ function feedNewEvents() {
     .filter((e) => !f.seenAt || e.ts > f.seenAt)
     .sort((a, b) => (FEED_SEVR[a.sev] ?? 3) - (FEED_SEVR[b.sev] ?? 3) || (a.ts < b.ts ? 1 : -1));
 }
+/* Uyarı hükmü şeridi — YALNIZ bekçinin mail ettiği bulgularda (e.gid).
+ * Neden burada: uyarıyı okuduğun an, "işe yaradı mı" sorusuna cevabın en taze
+ * olduğu andır. Ayrı bir ekrana koymak cevaplanma oranını düşürürdü, o da
+ * ölçümün en büyük yanlılık kaynağı (docs/olcumler.md §7). */
+function feedVote(e) {
+  if (!e.gid) return "";
+  const h = FEEDDATA?.hukumler?.[e.gid];
+  if (h) return `<span class="fd-vote done">${h === "yaradi" ? "✓ işe yaradı" : "✕ gereksizdi"}</span>`;
+  return `<span class="fd-vote">
+    <button type="button" data-gvote="yaradi" data-gid="${e.gid}" title="Bu uyarı bir işe yaradı">✓ işe yaradı</button>
+    <button type="button" data-gvote="gereksiz" data-gid="${e.gid}" title="Gereksiz uyarıydı — yanlış alarm">✕ gereksizdi</button>
+  </span>`;
+}
 function feedRow(e) {
   const nav = e.sym && e.type === "pos" ? ` data-chsym="${e.sym}" title="Grafiği aç — ${e.sym}"`
     : FEED_NAV[e.type] ? ` data-fdnav="${FEED_NAV[e.type]}" title="${FEED_NAV[e.type] === "radar" ? "Radar'a git" : "Alfa Avı'na git"}"` : "";
   return `<div class="fd-row fd-${e.sev || "info"}"${nav} role="listitem">
     <span class="fd-ic">${svgIcon(FEED_ICON[e.type] || "bell")}</span>
-    <span class="fd-body"><b class="fd-tt">${e.title}</b>${e.detail ? `<span class="fd-dd">${e.detail}</span>` : ""}</span>
+    <span class="fd-body"><b class="fd-tt">${e.title}</b>${e.detail ? `<span class="fd-dd">${e.detail}</span>` : ""}${feedVote(e)}</span>
     <span class="fd-t">${feedAgo(e.ts)}${nav ? '<i class="fd-go">→</i>' : ""}</span>
   </div>`;
 }
@@ -494,6 +580,26 @@ function feedDrawerRender() {
     bg.id = "fdDrawerBg"; bg.className = "fdd-bg"; bg.hidden = true;
     document.body.appendChild(bg);
     bg.addEventListener("click", async (e) => {
+      /* Oy EN ÖNCE — satırın kendisi grafiğe/sekmeye gidiyor, oy tıklaması
+       * oraya sızmamalı. stopPropagation olmadan data-chsym'in global
+       * dinleyicisi grafiği açardı. */
+      const vt = e.target.closest("[data-gvote]");
+      if (vt) {
+        e.stopPropagation();
+        const gid = vt.dataset.gid, hukum = vt.dataset.gvote;
+        FEEDDATA.hukumler = FEEDDATA.hukumler || {};
+        FEEDDATA.hukumler[gid] = hukum;          // iyimser: tık anında yerine otursun
+        feedDrawerRender();
+        try {
+          const r = await fetch("/api/guard/feedback", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: gid, hukum }) });
+          if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.status);
+        } catch (err) {
+          delete FEEDDATA.hukumler[gid];         // yazılamadıysa oyu GERİ AL — yalan gösterme
+          feedDrawerRender();
+          toast("Hüküm kaydedilemedi: " + err.message, "err");
+        }
+        return;
+      }
       if (e.target === bg || e.target.closest("[data-fdclose]")) { feedDrawerClose(); return; }
       const nv = e.target.closest("[data-fdnav]");
       if (nv) { feedDrawerClose(); showView(nv.dataset.fdnav); return; }
@@ -562,12 +668,18 @@ function render() {
     if (mv) totalMarket += mv;
     totalCost += costOf(h);
   });
-  // Swing pozisyonları (Swing Defteri) — ayrı alımlar ama HEPSİ BİR PORTFÖY → toplama dahil
+  // Swing pozisyonları (Swing Defteri) → toplama YALNIZ "sayılan" payıyla girer.
+  // 14 Ağu: Varlıklar'da zaten duran bir pozisyonu Swing Defteri'nde de kaydedince
+  // aynı $607 iki kez sayıldı. Sunucu her kaydın Varlıklar'la örtüşmeyen adedini
+  // sayilanValueUSD olarak veriyor (bkz. swing-kapsam.js) — plan kaydında bu 0'dır.
   let swingMarketTRY = 0, swingCostTRY = 0;
   (STATE.swingPositions || []).forEach((p) => {
-    if (fx.usdtry && p.valueUSD != null) {
-      swingMarketTRY += p.valueUSD * fx.usdtry;
-      swingCostTRY += (p.costUSD || 0) * fx.usdtry;
+    // sayilan* yoksa (eski sunucu) tam değere düş — sessizce sıfırlamaktan iyidir
+    const val = p.sayilanValueUSD !== undefined ? p.sayilanValueUSD : p.valueUSD;
+    const cost = p.sayilanCostUSD !== undefined ? p.sayilanCostUSD : p.costUSD;
+    if (fx.usdtry && val != null) {
+      swingMarketTRY += val * fx.usdtry;
+      swingCostTRY += (cost || 0) * fx.usdtry;
     }
   });
   totalMarket += swingMarketTRY;
@@ -662,21 +774,34 @@ function render() {
     : [];
   $("#cardsTop").innerHTML = `
       <div class="card hero">
-        <button class="privacy-toggle" id="privacyToggle" type="button" title="Tutarları gizle/göster (gizlilik modu)" aria-label="Gizlilik modu">${document.body.classList.contains("privacy") ? "🙈" : "👁"}</button>
+        <button class="privacy-toggle" id="privacyToggle" type="button" title="Tutarları gizle/göster (gizlilik modu)" aria-label="Gizlilik modu">${
+          document.body.classList.contains("privacy")
+            ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M9.9 4.24A9.1 9.1 0 0 1 12 4c7 0 10 8 10 8a18 18 0 0 1-2.16 3.19M6.6 6.6A18 18 0 0 0 2 12s3 8 10 8a9 9 0 0 0 5.4-1.6"/><path d="M1 1l22 22"/></svg>`
+            : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>`}</button>
         <div class="label">Toplam Portföy ${tipIcon("İpucu: Tüm portföy USD'ye endekslidir — getiriler kur etkisinden arındırılmış gerçek performansı gösterir. ₺ karşılığı yalnızca burada, USD'nin altında referans olarak yazılır.")}</div>
         <div class="value">${fx.usdtry ? fmtUSD(heroTotal / fx.usdtry) : fmtTRY(heroTotal)}</div>
         ${fx.usdtry ? `<div class="hero-usd">≈ ${fmtTRY(heroTotal)} · ₺ karşılığı</div>` : ""}
         ${(() => {
+          // 15 Ağu: dört dönem çipi de aynı ağırlıkta ve hepsi renkliydi — YIL BAŞI'nın
+          // yeşili her gün bağırıyordu ama o sayı bugün bir şey yapmanı gerektirmiyor.
+          // BUGÜN karar dönemi: renkli ve büyük. Diğerleri bağlam: nötr, tek satır.
           const segs = buildCompare(STATE.history, grandTotal, STATE.dayOpen?.total);
-          return segs.length ? `<div class="hero-compare">${segs.map((s) =>
-            `<div class="hc-seg ${s.pct >= 0 ? "up" : "down"}"><span class="hc-k">${s.label}</span><span class="hc-v">${s.pct >= 0 ? "▲" : "▼"} ${fmtPct(s.pct)}</span></div>`
-          ).join("")}</div>` : "";
+          if (!segs.length) return "";
+          const [bugun, ...gerisi] = segs;
+          return `<div class="hero-compare">
+            <div class="hc-lead ${bugun.pct >= 0 ? "up" : "down"}">
+              <span class="hc-k">${bugun.label}</span>
+              <span class="hc-v">${fmtPct(bugun.pct)}</span>
+            </div>
+            ${gerisi.length ? `<div class="hc-rest">${gerisi.map((s) =>
+              `<span class="hc-r ${s.pct >= 0 ? "up" : "down"}"><i>${s.label}</i>${fmtPct(s.pct)}</span>`).join("")}</div>` : ""}
+          </div>`;
         })()}
         <div class="meta">${healthy ? (fx.usdtry ? `Varlık ${fmtUSD0(totalMarket / fx.usdtry)} + Nakit ${fmtUSD0(cashTL / fx.usdtry)}${optMarket ? ` · içinde Opsiyon ${fmtUSD0(optMarket / fx.usdtry)}` : ""}` : `Varlık ${fmtTRY0(totalMarket)} + Nakit ${fmtTRY0(cashTL)}`) : "↻ Veriler yenileniyor · son bilinen değer"}</div>
-        ${meta?.summaryText ? `<div class="hero-note"><b class="hn-l">Günün özeti</b>${meta.summaryText}</div>` : ""}
         ${healthIssues.length ? `<div class="hero-health">${healthIssues.join("<br>")}</div>` : ""}
       </div>
-      ${allocCard}`;
+      ${allocCard}
+      ${meta?.summaryText ? `<div class="hero-note"><b class="hn-l">Günün özeti</b>${meta.summaryText}</div>` : ""}`;
 
   // ---- Günün en çok yükselen / düşen pozisyonu ----
   const movers = holdings.filter((h) => h.live?.dayChangePct != null && isFinite(h.live.dayChangePct));
@@ -700,7 +825,7 @@ function render() {
   // Okunabilirlik dili: köşede sessiz çizgi-ikon, yüzdeler renkli pill (chip) —
   // renk yalnız anlam taşıyan yerde, kart yüzeyi nötr kalır.
   const pctChip = (p) => p != null && isFinite(p) ? `<span class="chip ${cls(p)}">${fmtPct(p)}</span>` : "";
-  $("#cardsMetrics").innerHTML = `<div class="sec-label sl-grid">Portföyün Özeti</div>` + `${moverCard}`+ `
+  $("#cardsMetrics").innerHTML = `<div class="sec-label sl-grid">Portföyün özeti<span class="sec-n">${holdings.length} pozisyon · gün · toplam · realize · kur</span></div>` + `${moverCard}`+ `
       <div class="card">
         <span class="mc-ic">${svgIcon("trendUp")}</span>
         <div class="label">Toplam Getiri ${tipIcon("İpucu: Açık pozisyonların kâğıt üzerindeki kâr/zararı, USD bazında. Maliyetler işlemlerle otomatik senkrondur. Kâğıt kârı gerçek kâr değildir — realize edene kadar piyasanındır.")}</div>
@@ -746,6 +871,8 @@ function render() {
   renderEarningsWatch();
   renderAlerts();
   renderHuntStrip();
+  // Paneller doldu → boş kalan bölüm rayları gizlensin (bkz. sw2BosBolumleriGizle)
+  if (typeof sw2BosBolumleriGizle === "function") sw2BosBolumleriGizle();
   // Home "Swing Nöbeti" şeridi için swing verisini bir kez yükle (yüklenince board yeniden çizilir)
   if (!SWINGDECK._loaded) loadSwingDeck();
 
@@ -753,7 +880,7 @@ function render() {
   if ($("#view-buyume")?.classList.contains("active")) renderGrowth();
   // ---- Analiz açıksa STATE türevli panelleri tazele (ilk yüklemede hash #analiz olsa bile dolsun; fetch'li paneller view geçişinde yüklenir) ----
   if ($("#view-analiz")?.classList.contains("active")) {
-    renderAnalizSummary(); renderProRisk(); renderRealizeSummary(); renderRisk(); renderPosTech(); renderHeatmap(); renderSector(); renderAiDesk();
+    renderAnalizSummary(); renderProRisk(); renderKiyas(); renderRealizeSummary(); renderRisk(); renderPosTech(); renderHeatmap(); renderSector(); renderAiDesk();
   }
 
   // ---- Grafik ----

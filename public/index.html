@@ -86,6 +86,11 @@
           <span class="view-sub">Alım/satım fikirlerini etiketle ve kaydet · sadece sana özel, kalıcı</span>
         </div>
 
+        <!-- 15 Ağu: bu görünüm ray dilinin dışında kalan son ikisinden biriydi.
+             İki bölüm: yazma eylemi ve arşiv. -->
+        <header class="sw2-sec-h"><h3>Yeni not</h3><span class="sw2-sec-rule"></span>
+          <span class="sw2-sec-n">fikri yaz — sonra ne düşündüğünü hatırlamak için</span></header>
+
         <form id="noteForm" class="note-composer" autocomplete="off">
           <div class="note-fields">
             <input id="noteSymbol" class="note-sym" type="text" maxlength="12" placeholder="Sembol · örn. MU" />
@@ -116,6 +121,9 @@
           </div>
         </form>
 
+        <header class="sw2-sec-h notes-sec"><h3>Notların</h3><span class="sw2-sec-rule"></span>
+          <span class="sw2-sec-n" id="notesSecN">yükleniyor…</span></header>
+
         <div class="notes-toolbar">
           <input id="noteSearch" class="note-search" type="search" placeholder="Notlarda ara — metin, başlık veya sembol" />
         </div>
@@ -133,6 +141,12 @@
         <section class="cards-top" id="cardsTop"></section>
         <section id="sentimentRow"></section>
         <section class="cards-metrics" id="cardsMetrics"></section>
+        <!-- 14 Ağu: üstteki şerit/kart katmanı giriş noktası, ray almaz. Ondan sonrası
+             iki bölüm: önce EYLEM (uyarılar, öneriler, bütçe, nöbet), sonra PORTFÖY. -->
+        <section class="sw2-sec">
+          <header class="sw2-sec-h"><h3>Ne yapmalıyım</h3><span class="sw2-sec-rule"></span>
+            <span class="sw2-sec-n">Kural 1 · öneriler · risk bütçesi · bugünün nöbeti</span></header>
+          <div class="sw2-sec-body">
         <!-- Geniş ekranda panel çiftleri yan yana → sayfa yarı yarıya kısalır (≤1240 tek kolon) -->
         <div class="duo-grid">
           <section id="rule1Panel"></section>
@@ -143,6 +157,12 @@
           <section id="dailyBoard"></section>
           <section id="earningsWatch"></section>
         </div>
+        </div></section>
+
+        <section class="sw2-sec">
+          <header class="sw2-sec-h"><h3>Portföyüm</h3><span class="sw2-sec-rule"></span>
+            <span class="sw2-sec-n" id="genelSecPort">değer eğrisi · varlık dökümü</span></header>
+          <div class="sw2-sec-body">
 
         <section class="panel chart-panel">
           <div class="panel-head">
@@ -173,13 +193,14 @@
           </div>
           <div id="tables"></div>
         </section>
+        </div></section>
 
         <div class="home-drawer" id="homeDrawer">
         <section class="panel collapsible" id="cashPanel">
           <div class="panel-head">
             <div class="panel-toggle" data-collapse role="button" tabindex="0" aria-label="Nakit &amp; Döviz'i aç/kapat">
               <span class="collapse-chev" aria-hidden="true">▸</span>
-              <div><h2>Nakit &amp; Döviz <span class="tip" data-tip="İpucu: Nakit senin sigortan. Fırsat Radarı'ndaki VIX rejimi hedef nakit bandı verir — piyasa gerginken nakit oranını bilinçli yüksek tut; düşüşte alım gücü = Kural 1'in ödülü.">?</span></h2></div>
+              <div><h2>Nakit &amp; döviz <span class="tip" data-tip="İpucu: Nakit senin sigortan. Fırsat Radarı'ndaki VIX rejimi hedef nakit bandı verir — piyasa gerginken nakit oranını bilinçli yüksek tut; düşüşte alım gücü = Kural 1'in ödülü.">?</span></h2></div>
             </div>
             <div class="head-actions">
               <button class="btn ghost sm" id="editCashBtn">Düzenle</button>
@@ -193,7 +214,7 @@
             <div class="panel-toggle" data-collapse role="button" tabindex="0" aria-label="Sermaye'yi aç/kapat">
               <span class="collapse-chev" aria-hidden="true">▸</span>
               <div>
-                <h2>Sermaye (Para Giriş / Çıkış) <span class="tip" data-tip="İpucu: Gerçek getiri = bugünkü değer − net yatırdığın para. Piyasa kazancıyla cebinden eklediğin parayı ayırır; kendini kandırmanın panzehiri budur.">?</span></h2>
+                <h2>Sermaye — para giriş / çıkış <span class="tip" data-tip="İpucu: Gerçek getiri = bugünkü değer − net yatırdığın para. Piyasa kazancıyla cebinden eklediğin parayı ayırır; kendini kandırmanın panzehiri budur.">?</span></h2>
                 <span class="chart-sub" id="flowsSub">—</span>
               </div>
             </div>
@@ -210,7 +231,7 @@
             <div class="panel-toggle" data-collapse role="button" tabindex="0" aria-label="Fiyat Alarmları'nı aç/kapat">
               <span class="collapse-chev" aria-hidden="true">▸</span>
               <div>
-                <h2>Fiyat Alarmları <span class="tip" data-tip="Sembol + koşul (altına/üstüne/günlük %) gir; canlı fiyat eşiği geçince ana sayfada uyarı çıkar. Uygulama-içi; e-posta yok.">?</span></h2>
+                <h2>Fiyat alarmları <span class="tip" data-tip="Sembol + koşul (altına/üstüne/günlük %) gir; canlı fiyat eşiği geçince ana sayfada uyarı çıkar. Uygulama-içi; e-posta yok.">?</span></h2>
                 <span class="chart-sub" id="alertsSub">—</span>
               </div>
             </div>
@@ -272,7 +293,9 @@
           <button class="seg" data-swseg="swingdefteri" role="tab">Defter</button>
           <button class="seg" data-swseg="buyume" role="tab">Büyüme</button>
         </div>
-        <section id="weeklyPlanBox"></section>
+        <!-- Haftalık plan kutusu deck'in İÇİNDE çiziliyor (14 Ağu): burada durunca
+             sayfanın ilk öğesi oluyor ve hero'nun (ölçüm kartı) giriş noktası olmasını
+             engelliyordu. Artık "Bu hafta" bölümünün başında. -->
         <div id="swingDeck"></div>
       </section>
 
@@ -292,15 +315,20 @@
       <!-- ===== Görünüm: Radar (Sinyaller · Tarama · Swing tek çatı) ===== -->
       <section class="view" id="view-radar">
         <div class="view-head">
-          <h2 class="view-title">Radar <span class="tip" data-tip="İpucu: Skor bir başlangıç filtresi, alım emri değil. En iyi fırsat, stop planı yazılabilen fırsattır — 'Şimdi girilebilir' şeridi hem yüksek skorlu hem taze swing tetiği olanları toplar.">?</span></h2>
-          <span class="view-sub">Tüm hisseler tek skorlu listede — tarama · swing kurulumları · Cuma Hoca · sinyaller birleşik</span>
+          <h2 class="view-title">Radar <span class="tip" data-tip="İpucu: Skor bir başlangıç filtresi, alım emri değil — ölçülmüş tek edge kapılar (oynaklık tavanı + göreli güç). En iyi fırsat, stop planı yazılabilen fırsattır; 'Bugün girilebilir' kartları kapıdan geçmiş, planı hazır kurulumlardır.">?</span></h2>
+          <span class="view-sub">Kapıdan geçen kurulumlar önce — giriş · stop · hedef · adet elinin altında</span>
         </div>
+
+        <!-- Plan kartları panelin ÜSTÜNDE (14 Ağu): gün içinde bakılan şey bu,
+             tam tarama listesi arşiv. Kancalar panelde kaldığı için olay
+             bağlamaları bozulmuyor. -->
+        <div id="radarPlans"></div>
 
         <section class="panel" id="radarBoardPanel">
           <div class="panel-head">
             <div>
-              <h2>Birleşik Hisse Radarı <span class="tip" data-tip="İpucu: Tek liste — 0–100 skor omurga, üstüne swing kurulumu, Cuma Hoca üyeliği ve taze tetik rozetleri. Satıra tıkla: swing planı (giriş/stop/hedef) + skorun nereden geldiği açılır.">?</span></h2>
-              <span class="chart-sub" id="radarBoardSub">Skor · momentum · analist · bilanço · insider · swing kurulumu — tek birleşik liste</span>
+              <h2>Tüm tarama</h2>
+              <span class="chart-sub" id="radarBoardSub">Skor · momentum · analist · bilanço · insider — satıra tıkla, planı ve skorun nereden geldiği açılır</span>
             </div>
             <div class="head-actions">
               <div class="range-tabs" id="radarTiers">
@@ -345,7 +373,7 @@
         <section class="panel" id="oppsPanel">
           <div class="panel-head">
             <div>
-              <h2>Haftalık Fırsatlar <span class="tip" data-tip="İpucu: Fırsat radarı tüm evreni tarayıp girilebilir kurulumları (yükseliş trendi + makul risk/ödül + aşırı alım değil) 0-100 skorla sıralar. Skor bir filtre, alım emri değil — planı (giriş/stop) yazılamayan fırsata girilmez. Geçmiş seçimlerin gerçek sonucu alttaki blokta dürüstçe ölçülür; garanti yok.">?</span> <span class="muted" id="oppSub"></span></h2>
+              <h2>Haftalık fırsatlar <span class="tip" data-tip="İpucu: Fırsat radarı tüm evreni tarayıp girilebilir kurulumları (yükseliş trendi + makul risk/ödül + aşırı alım değil) 0-100 skorla sıralar. Skor bir filtre, alım emri değil — planı (giriş/stop) yazılamayan fırsata girilmez. Geçmiş seçimlerin gerçek sonucu alttaki blokta dürüstçe ölçülür; garanti yok.">?</span> <span class="muted" id="oppSub"></span></h2>
               <span class="chart-sub">Girilebilir kurulumların skorlu Top-10'u · haftanın seçimi · geçmiş seçimlerin gerçek sonucu</span>
             </div>
             <button class="btn ghost sm" id="oppRefreshBtn">↻ Tara</button>
@@ -361,21 +389,42 @@
       <!-- ===== Görünüm: Analiz ===== -->
       <section class="view" id="view-analiz">
         <div class="view-head"><h2 class="view-title">Analiz</h2>
-          <span class="view-sub">Risk & performans karnesi · getiri dökümü · ileri tahmin · ısı haritası · sektör · vergi</span></div>
+          <span class="view-sub">Önce sermaye ayakta mı, sonra ne ürettiği — Kural 1 sırası</span></div>
 
         <section class="analiz-summary" id="analizSummary"></section>
 
-        <section class="panel" id="aiDeskPanel">
-          <div class="panel-head">
-            <div><h2>Claude Tez Masası <span class="tip" data-tip="Seçtiğin pozisyon için Claude, panonun kendi verisiyle (fiyat, QM teknik analizi, notların, bilanço takvimi, haberler) çekişmeli bir yatırım tezi üretir: boğa + ayı tezi, karar, güven, kırmızı çizgiler. 24 saat önbelleklenir. Yatırım tavsiyesi değildir.">?</span></h2>
-              <span class="chart-sub">boğa/ayı tezi · karar · kırmızı çizgiler · seviyeler — kendi verinle</span></div>
+        <!-- Kıyas EN ÜSTTE (16 Ağu): CLAUDE.md'nin dört ölçüm tuzağından biri
+             TEMEL ÇİZGİ YOKLUĞU. "%44 getirdim" cümlesi tek başına iyi mi kötü mü
+             söylemiyor; sayfanın ilk söylediği şey artık "endekse göre nerede
+             duruyorsun". Eskiden aynı soruya iki panel ayrı ayrı cevap veriyordu
+             (risk karnesinin altındaki Benchmark bloğu + Temel çizgi) ve iki farklı
+             sayı söylüyorlardı — biri para girişini getiri sayıyordu. Tek panel. -->
+        <section class="sw2-sec">
+          <header class="sw2-sec-h"><h3>Piyasayı yendin mi</h3><span class="sw2-sec-rule"></span>
+            <span class="sw2-sec-n" id="analizSecKiyas">ölçülüyor…</span></header>
+          <div class="sw2-sec-body">
+            <section class="panel panel-kiyas">
+              <div class="panel-head">
+                <div><h2>Kıyas <span class="tip" data-tip="Aynı parayı hiç uğraşmadan QQQ ya da SPY'da tutsaydın ne olurdu? Getiri tek başına bir şey söylemez — endeksi yenmeyen bir portföy, uğraşmaya değmeyen bir portföydür. Düşüş, volatilite ve yakalama sütunları da önemli: endeksten fazla getiri, endeksten fazla sarsıntıyla alındıysa bedava değildir. Getiri zaman ağırlıklı (TWR) — yatırdığın para kazanç sayılmaz.">?</span></h2>
+                  <span class="chart-sub">Portföy vs Nasdaq-100 ve S&amp;P 500 · aynı pencere · zaman ağırlıklı</span></div>
+              </div>
+              <div id="kiyasBox"></div>
+            </section>
           </div>
-          <div id="aiDeskBox"></div>
         </section>
+
+        <!-- Üç katman (14 Ağu): sekiz panel eşit ağırlıkta alt altaydı ve sıra
+             keyfiydi. Sıra artık Kural 1'in sırası: önce "batırır mı", sonra
+             "kazandırdı mı", en sonda yorum. Claude Tez Masası bilerek EN SONDA:
+             ölçüm değil yorum, ölçümün önüne geçmemeli. -->
+        <section class="sw2-sec">
+          <header class="sw2-sec-h"><h3>Sermaye ayakta mı</h3><span class="sw2-sec-rule"></span>
+            <span class="sw2-sec-n" id="analizSecRisk">korelasyon · VaR · beta · son 90 işlem günü</span></header>
+          <div class="sw2-sec-body">
 
         <section class="panel panel-prorisk">
           <div class="panel-head">
-            <div><h2>Profesyonel Risk Masası <span class="tip" data-tip="Kurumsal portföy yöneticilerinin kullandığı araçlar: pozisyonlar arası korelasyon (gerçek çeşitlendirme), VaR (Value at Risk — istatistiksel max kayıp), beta (piyasa duyarlılığı), her pozisyonun toplam riske katkısı, risk-bazlı pozisyon boyutu ve faktör maruziyeti. Son 90 işlem gününün getiri serisinden hesaplanır.">?</span></h2>
+            <div><h2>Profesyonel risk masası <span class="tip" data-tip="Kurumsal portföy yöneticilerinin kullandığı araçlar: pozisyonlar arası korelasyon (gerçek çeşitlendirme), VaR (Value at Risk — istatistiksel max kayıp), beta (piyasa duyarlılığı), her pozisyonun toplam riske katkısı, risk-bazlı pozisyon boyutu ve faktör maruziyeti. Son 90 işlem gününün getiri serisinden hesaplanır.">?</span></h2>
               <span class="chart-sub">Korelasyon · VaR · beta · risk katkısı · pozisyon boyutlama · tahsis · faktör</span></div>
           </div>
           <div id="proRiskBox"></div>
@@ -383,53 +432,81 @@
 
         <section class="panel">
           <div class="panel-head">
-            <div><h2>Risk &amp; Performans Karnesi <span class="tip" data-tip="İpucu: Getiri tek başına yanıltır — onu aldığın riskle birlikte oku. Sharpe &gt; 1 sağlıklı, &lt; 0 kötü. Maksimum düşüş, geçmişte en kötü anda ne kadar zarara katlandığını gösterir; konsantrasyon düşükse tek hisse seni batıramaz (Kural 1). Günlük net-değer kayıtlarından hesaplanır, ek API yok.">?</span></h2>
-              <span class="chart-sub">Sharpe · volatilite · maksimum düşüş · CAGR · konsantrasyon — günlük net değerden</span></div>
+            <div><h2>Isı haritası</h2>
+              <span class="chart-sub">Kutu boyutu = pozisyon büyüklüğü · renk = günlük değişim — büyük ve kırmızı olan günün asıl riski</span></div>
+          </div>
+          <div id="heatmap" class="heatmap"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <div><h2>Sektör / tema yoğunlaşması <span class="tip" data-tip="İpucu: Aynı temadaki hisseler aynı haberle birlikte düşer. Tek tema %40'ı aşarsa Kural 1 Bekçisi uyarır — çeşitlendirme bedava sigortadır.">?</span></h2>
+              <span class="chart-sub">Tek tema %40'ı aşarsa çeşitlendirme kalmamış demektir</span></div>
+          </div>
+          <div id="sectorBox"></div>
+        </section>
+        </div></section>
+
+        <section class="sw2-sec">
+          <header class="sw2-sec-h"><h3>Ne ürettim</h3><span class="sw2-sec-rule"></span>
+            <span class="sw2-sec-n" id="analizSecUretim">günlük net değer kaydından · ek API yok</span></header>
+          <div class="sw2-sec-body">
+
+        <section class="panel">
+          <div class="panel-head">
+            <div><h2>Sermaye sağlığı <span class="tip" data-tip="Bu panel portföyün İÇ durumunu ölçer: sağlık skoru (Sharpe + düşüş + çeşitlendirme), şu an zirveden ne kadar aşağıda olduğun, getirinin nereden geldiği (kilitli realize mi kâğıt kâr mı) ve net değerin 6 ay ileri olasılık aralığı. Getiri, Sharpe, volatilite ve en kötü gün burada DEĞİL — onlar endeksle birlikte okunmalı, Kıyas panelinde. Günlük net-değer kayıtlarından hesaplanır, ek API yok.">?</span></h2>
+              <span class="chart-sub">Sağlık skoru · şu anki düşüş · zirve altında süre · yoğunlaşma · getiri kaynağı · 6 ay tahmin</span></div>
           </div>
           <div id="riskBox"></div>
         </section>
 
         <section class="panel">
           <div class="panel-head">
-            <div><h2>Pozisyon Teknikleri <span class="tip" data-tip="İpucu: Tuttuğun her hissenin trader gözüyle anlık durumu. RSI &gt; 70 ısınmış (geri çekilme riski), &lt; 30 aşırı satım. Trend, fiyatın 50/200 günlük ortalamalara göre yeri. Açık R = açık kârın kaç 'risk birimi' — stopuna göre ne kadar önde olduğun. Teknikler günlük taramadan gelir.">?</span></h2>
-              <span class="chart-sub">RSI · trend · 52h zirveye uzaklık · analist hedef · açık R — pozisyon bazında</span></div>
-          </div>
-          <div id="posTechBox"></div>
-        </section>
-
-        <section class="panel">
-          <div class="panel-head">
-            <div><h2>Portföy Isı Haritası <span class="tip" data-tip="İpucu: Büyük ve koyu kırmızı kutu = günün asıl riski. Küçük kutulardaki sert düşüş toplamı az etkiler; önce büyük kutuların rengine bak.">?</span></h2>
-              <span class="chart-sub">Kutu boyutu = pozisyon büyüklüğü · renk = günlük değişim</span></div>
-          </div>
-          <div id="heatmap" class="heatmap"></div>
-        </section>
-
-        <div class="analiz-grid">
-          <section class="panel">
-            <div class="panel-head">
-              <div><h2>Sektör / Tema Dağılımı <span class="tip" data-tip="İpucu: Aynı temadaki hisseler aynı haberle birlikte düşer. Tek tema %40'ı aşarsa Kural 1 Bekçisi uyarır — çeşitlendirme bedava sigortadır.">?</span></h2>
-                <span class="chart-sub">Yoğunlaşma riski</span></div>
-            </div>
-            <div id="sectorBox"></div>
-          </section>
-
-          <section class="panel">
-            <div class="panel-head">
-              <div><h2>Haftalık Özet <span class="tip" data-tip="İpucu: Günlük gürültüyü atlayıp haftalık eğilime bak — bir hisse 3 haftadır her hafta düşüyorsa bu 'fırsat' değil trend olabilir.">?</span></h2>
-                <span class="chart-sub">Son 5 işlem günü</span></div>
-            </div>
-            <div id="weeklyBox"></div>
-          </section>
-        </div>
-
-        <section class="panel">
-          <div class="panel-head">
-            <div><h2>💵 Realize Özeti — sembol başına <span class="tip" data-tip="Her sembolün tüm kapanmış işlemlerinin net kâr/zararı (hisse + opsiyon dahil). Ground-truth: aracı kurumun 'Yatırım geliri' ekranı. Halen elinde olmayan kapanmış semboller de listede.">?</span></h2>
+            <div><h2>Realize özeti — sembol başına <span class="tip" data-tip="Her sembolün tüm kapanmış işlemlerinin net kâr/zararı (hisse + opsiyon dahil). Ground-truth: aracı kurumun 'Yatırım geliri' ekranı. Halen elinde olmayan kapanmış semboller de listede.">?</span></h2>
               <span class="chart-sub">Aracı kurum 'Yatırım geliri' ile birebir · kapanmış semboller dahil</span></div>
           </div>
           <div id="realizeSummary" class="panel-body"></div>
         </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <div><h2>Haftalık özet <span class="tip" data-tip="İpucu: Günlük gürültüyü atlayıp haftalık eğilime bak — bir hisse 3 haftadır her hafta düşüyorsa bu 'fırsat' değil trend olabilir.">?</span></h2>
+              <span class="chart-sub">Son 5 işlem günü — günlük gürültü yerine eğilim</span></div>
+          </div>
+          <div id="weeklyBox"></div>
+        </section>
+        </div></section>
+
+        <section class="sw2-sec">
+          <header class="sw2-sec-h"><h3>Pozisyon pozisyon</h3><span class="sw2-sec-rule"></span>
+            <span class="sw2-sec-n" id="analizSecPoz">tek tek durum</span></header>
+          <div class="sw2-sec-body">
+
+        <section class="panel">
+          <div class="panel-head">
+            <div><h2>Pozisyon teknikleri <span class="tip" data-tip="İpucu: Tuttuğun her hissenin trader gözüyle anlık durumu. RSI &gt; 70 ısınmış (geri çekilme riski), &lt; 30 aşırı satım. Trend, fiyatın 50/200 günlük ortalamalara göre yeri. Açık R = açık kârın kaç 'risk birimi' — stopuna göre ne kadar önde olduğun. Teknikler günlük taramadan gelir.">?</span></h2>
+              <span class="chart-sub">RSI · trend · 52h zirveye uzaklık · açık R — pozisyon bazında</span></div>
+          </div>
+          <div id="posTechBox"></div>
+        </section>
+        </div></section>
+
+        <!-- Claude Tez Masası bilerek EN SONDA (14 Ağu): bu bir ÖLÇÜM değil YORUM.
+             Sayfanın başında dururken, altındaki ölçülmüş panellerden daha önemli
+             görünüyordu. Rayı da ne olduğunu açıkça yazıyor. -->
+        <section class="sw2-sec">
+          <header class="sw2-sec-h"><h3>Yorum</h3><span class="sw2-sec-rule"></span>
+            <span class="sw2-sec-n">ölçüm değil — Claude'un tezi, 24 saat önbellekli</span></header>
+          <div class="sw2-sec-body">
+
+        <section class="panel" id="aiDeskPanel">
+          <div class="panel-head">
+            <div><h2>Claude tez masası <span class="tip" data-tip="Seçtiğin pozisyon için Claude, panonun kendi verisiyle (fiyat, QM teknik analizi, notların, bilanço takvimi, haberler) çekişmeli bir yatırım tezi üretir: boğa + ayı tezi, karar, güven, kırmızı çizgiler. 24 saat önbelleklenir. Yatırım tavsiyesi değildir.">?</span></h2>
+              <span class="chart-sub">boğa/ayı tezi · karar · kırmızı çizgiler — kendi verinle · yatırım tavsiyesi değildir</span></div>
+          </div>
+          <div id="aiDeskBox"></div>
+        </section>
+        </div></section>
 
       </section>
 
@@ -441,7 +518,7 @@
         <section class="panel"><div id="challengeBox"><div class="rk-empty">Alfa Avı yükleniyor…</div></div></section>
         <section class="panel" id="labPanel">
           <div class="panel-head">
-            <div><h2>Strateji Laboratuvarı <span class="tip" data-tip="Alfa kurallarının parametreli backtest'i — deftere ASLA yazmaz. Aynı geçmiş pencerede canlı kurallar (baseline) ile senin varyantın yan yana koşulur: kuralı canlıya almadan önce burada test et. Not: evren bugünün evrenidir (hafif survivorship), sonuçlar geçmiştir — garanti değildir.">?</span></h2>
+            <div><h2>Strateji laboratuvarı <span class="tip" data-tip="Alfa kurallarının parametreli backtest'i — deftere ASLA yazmaz. Aynı geçmiş pencerede canlı kurallar (baseline) ile senin varyantın yan yana koşulur: kuralı canlıya almadan önce burada test et. Not: evren bugünün evrenidir (hafif survivorship), sonuçlar geçmiştir — garanti değildir.">?</span></h2>
             <span class="chart-sub">kuralı canlıya almadan test et — baseline vs varyant</span></div>
           </div>
           <div id="labBox"></div>
@@ -450,9 +527,19 @@
 
       <!-- ===== Görünüm: Günlük Raporlar ===== -->
       <section class="view" id="view-raporlar">
+        <div class="view-head"><h2 class="view-title">Günlük Raporlar</h2>
+          <span class="view-sub">Kararların karnesi, sonra sinyal arşivi</span></div>
+
+        <!-- 14 Ağu: bu görünümün view-head'i hiç yoktu, üç panel doğrudan başlıyordu.
+             Karar karnesi ile sinyal arşivi ayrıldı — biri seni ölçer, öteki sistemi. -->
+        <section class="sw2-sec">
+          <header class="sw2-sec-h"><h3>Kararlarım</h3><span class="sw2-sec-rule"></span>
+            <span class="sw2-sec-n">işlem işlem · kendi verisiyle</span></header>
+          <div class="sw2-sec-body">
+
         <section class="panel" id="dayAnalysisPanel">
           <div class="panel-head">
-            <div><h2>Günlük İşlem Analizi <span class="tip" data-tip="O gün yaptığın her alım/satım tek tek, o işlemin KENDİ verisiyle değerlendirilir (EMA konumu, ADR, satış sonrası fiyat, plan uyumu, boyut). Şablon nasihat değil — sayılarla dürüst karne. Swing ve uzun vade satışları ayrı etiketlenir.">?</span></h2>
+            <div><h2>Günlük işlem analizi <span class="tip" data-tip="O gün yaptığın her alım/satım tek tek, o işlemin KENDİ verisiyle değerlendirilir (EMA konumu, ADR, satış sonrası fiyat, plan uyumu, boyut). Şablon nasihat değil — sayılarla dürüst karne. Swing ve uzun vade satışları ayrı etiketlenir.">?</span></h2>
             <span class="chart-sub">bugün doğru mu yaptın? — işlem işlem, veriyle</span></div>
             <input type="date" id="daDate" class="da-date" />
           </div>
@@ -460,19 +547,27 @@
         </section>
         <section class="panel" id="edgePanel">
           <div class="panel-head">
-            <div><h2>Aylık Edge Raporu <span class="tip" data-tip="Ay kapanınca otomatik: swing kapanışların + karar defteri kaliten + Alfa sicili tek karnede. Önce deterministik istatistik, üstüne (varsa) Claude'un süreç yorumu. Amaç sonucu övmek değil: hangi setup para kazandırıyor, güvenin kalibre mi, en pahalı hatan ne — onu göstermek.">?</span></h2>
+            <div><h2>Aylık edge raporu <span class="tip" data-tip="Ay kapanınca otomatik: swing kapanışların + karar defteri kaliten + Alfa sicili tek karnede. Önce deterministik istatistik, üstüne (varsa) Claude'un süreç yorumu. Amaç sonucu övmek değil: hangi setup para kazandırıyor, güvenin kalibre mi, en pahalı hatan ne — onu göstermek.">?</span></h2>
             <span class="chart-sub">ay biter, karne çıkar — edge ölçülür</span></div>
             <select id="edgeMonthSel" class="da-date" hidden></select>
           </div>
           <div id="edgeBox"><div class="rk-empty">Rapor yükleniyor…</div></div>
         </section>
+        </div></section>
+
+        <section class="sw2-sec">
+          <header class="sw2-sec-h"><h3>Sinyal arşivi</h3><span class="sw2-sec-rule"></span>
+            <span class="sw2-sec-n">geriye doğru oku — dünkü sinyal bugün ne yaptı</span></header>
+          <div class="sw2-sec-body">
+
         <section class="panel" id="reportsPanel">
           <div class="panel-head">
-            <h2>Günlük Raporlar <span class="tip" data-tip="İpucu: Raporları geriye doğru oku — dünkü sinyal bugün ne yaptı? Sistemin dünden bugüne tutarlılığı, yarınki karara güven verir.">?</span></h2>
-            <span class="chart-sub">Sinyaller · rejim · kâr-al · swing</span>
+            <div><h2>Günlük raporlar <span class="tip" data-tip="İpucu: Raporları geriye doğru oku — dünkü sinyal bugün ne yaptı? Sistemin dünden bugüne tutarlılığı, yarınki karara güven verir.">?</span></h2>
+            <span class="chart-sub">Sinyaller · rejim · kâr-al · swing</span></div>
           </div>
           <div id="reports"></div>
         </section>
+        </div></section>
       </section>
 
       <footer class="foot">
@@ -622,6 +717,8 @@
             <span class="sw-avail" id="swAvail"></span>
           </label>
         </div>
+        <!-- Bu kayıt portföy toplamına ne yapacak? (14 Ağu: aynı hisse iki kez sayılıyordu) -->
+        <div class="sw-kapsam" id="swKapsam" hidden></div>
         <div class="sw-costmode">
           <span class="sw-costmode-lbl">Maliyet girişi</span>
           <div class="seg-mini" id="swCostMode" role="tablist">

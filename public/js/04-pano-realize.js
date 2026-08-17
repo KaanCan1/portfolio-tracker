@@ -160,9 +160,20 @@ function renderDailyBoard() {
     if (chgUSD !== 0 && (!topC || Math.abs(chgUSD) > Math.abs(topC.chg))) topC = { sym: h.symbol.toUpperCase(), chg: chgUSD };
   }
   const fxTRY = usdtryPrev ? prevUsdVal * (usdtry - usdtryPrev) : null;
-  const dayTRY = assetTRY + (fxTRY || 0);
+  /* GÜNLÜK DEĞİŞİM TEK KAYNAKTAN (16 Ağu). Bu KPI günlük yüzdeyi kendi hesaplıyordu:
+   * yalnız HİSSELERİN prevClose'undan, altın ve fon gün içi hareketi dışarıda. Kenar
+   * çubuğu ve hero ise sunucunun dayOpen'ını kullanıyor. Aynı ekranda %+4,0 ve %+4,14
+   * okunuyordu — aynı sabah düzelttiğimiz $4.593/$5.207 hatasının küçük kardeşi.
+   * Artık üçü de dayOpen'dan gelir; sunucu vermezse eski hesaba düşer (tüm varlıklar
+   * yerine yalnız hisse — eksik ama tutarsız değil).
+   * assetTRY/fxTRY aşağıdaki "hisse hareketi vs kur etkisi" dökümünde kalmaya devam
+   * ediyor: orada sorulan soru "gün ne kadar" değil "günü ne yaptı". */
+  const dayOpenTRY = S.meta?.totals?.dayOpenTRY ?? null;
+  const dayTRY = (dayOpenTRY != null && grandTRY != null) ? grandTRY - dayOpenTRY : assetTRY + (fxTRY || 0);
   const dayUSD = usdtry ? dayTRY / usdtry : null;
-  const dayPct = (totalUSD != null && dayUSD != null && (totalUSD - dayUSD) !== 0) ? (dayUSD / (totalUSD - dayUSD)) * 100 : null;
+  const dayPct = (dayOpenTRY != null && dayOpenTRY > 0 && grandTRY != null)
+    ? ((grandTRY - dayOpenTRY) / dayOpenTRY) * 100
+    : (totalUSD != null && dayUSD != null && (totalUSD - dayUSD) !== 0) ? (dayUSD / (totalUSD - dayUSD)) * 100 : null;
 
   /* ---------- free-roll / house-money toplamları ---------- */
   const frList = stocks.map((h) => ({ h, fr: freeRollOf(h) })).filter((x) => x.fr.costBasis != null);

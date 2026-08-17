@@ -155,11 +155,16 @@ body {
 .duo-grid > * { min-width: 0; }
 @media (max-width: 1240px) { .duo-grid { grid-template-columns: 1fr; } }
 /* Editoryal bölüm etiketi — kart akışını bölümlere ayırır (okunabilirlik) */
+/* 15 Ağu: Genel Bakış'ta zaten bir bölüm etiketi vardı ("Piyasa Nabzı",
+   "Portföyün Özeti") ama diğer sekmelerin .sw2-sec-h rayına benzemiyordu —
+   solgun, ince, kanıtsız. Aynı tipografiye getirildi ve kanıt yazabilsin diye
+   .sec-n eklendi. İki farklı bölüm dili yerine tek dil. */
 .sec-label {
-  display: flex; align-items: center; gap: 10px; margin: 4px 2px 10px;
-  font-size: 10.5px; font-weight: 800; letter-spacing: 1.3px; text-transform: uppercase; color: var(--muted);
+  display: flex; align-items: center; gap: 12px; margin: 26px 2px 12px;
+  font-size: 12px; font-weight: 800; letter-spacing: 1.1px; text-transform: uppercase; color: var(--ink);
 }
-.sec-label::after { content: ""; flex: 1; border-top: 1px solid var(--line-strong); opacity: .8; }
+.sec-label::after { content: ""; flex: 1 1 40px; min-width: 20px; border-top: 1px solid var(--line-strong); order: 1; }
+.sec-label .sec-n { order: 2; flex: none; font-size: 11.5px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--muted); font-variant-numeric: tabular-nums; }
 .cards-metrics .sec-label.sl-grid { grid-column: 1 / -1; margin: 0 2px -3px; }
 
 /* ---- Piyasa rejimi (VIX) ---- */
@@ -230,13 +235,19 @@ tr:hover .sig-dot { box-shadow: 0 0 0 4px var(--bg2); }
 
 /* ---- Günlük raporlar ---- */
 details.rep { border: 1px solid var(--line); border-radius: 12px; margin-bottom: 10px; background: var(--card); overflow: hidden; }
-details.rep > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 13px 16px; font-size: 13px; }
+/* 15 Ağu: özet satırı beş bilgiyi yan yana aynı ağırlıkta diziyordu; arşivi
+   taramak göz yoruyordu. İki satır oldu — üstte TARİH + GÜNÜN YÜZDESİ (arşivde
+   aradığın şey bunlar), altta tutar/VIX/sayaçlar susturulmuş bağlam. */
+details.rep > summary { list-style: none; cursor: pointer; display: flex; flex-direction: column; gap: 3px; padding: 12px 16px 13px; font-size: 13px; }
 details.rep > summary::-webkit-details-marker { display: none; }
 details.rep > summary:hover { background: var(--bg2); }
 details.rep[open] > summary { border-bottom: 1px solid var(--line); }
-.rep-date { font-weight: 700; min-width: 96px; }
-.rep-total { font-weight: 600; font-variant-numeric: tabular-nums; }
-.rep-mini { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; }
+.rep-head { display: flex; align-items: baseline; gap: 10px; }
+.rep-date { font-weight: 700; font-size: 14px; color: var(--ink); }
+.rep-dc { font-weight: 800; font-size: 15px; font-variant-numeric: tabular-nums; letter-spacing: -.3px; }
+.rep-meta { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.rep-total { font-weight: 600; }
+.rep-vix, .rep-mini { color: var(--ink-soft); }
 .rep-body { padding: 14px 16px; }
 .rep-line { font-size: 13px; margin-bottom: 8px; color: var(--ink); }
 .rep-line.rep-regime { background: var(--bg2); border-radius: 8px; padding: 8px 11px; }
@@ -428,7 +439,12 @@ body.privacy [data-pm="1"] { user-select: none; }
 
 /* ---- Grafik ---- */
 .chart-panel .panel-head { align-items: flex-start; }
-.chart-sub { display: block; font-family: var(--mono); font-size: 13.5px; font-weight: 500; color: var(--muted); line-height: 1.55; margin-top: 6px; }
+/* 15 Ağu: alt başlıklar daktilo fontundaydı. Kısa etikette ("Son 5 işlem günü")
+   iyi duruyor ama bunlar çoğu yerde CÜMLE — "Her ay kapattığın kâr · yeşil bant =
+   hedef ($600–700) · kesikli çizgi = kanıtlanmış katkı" gibi. Mono, cümlede satır
+   uzunluğunu şişiriyor ve okuma hızını düşürüyor. Metin gövde fontuna geçti;
+   RAKAM hizası tabular-nums ile korunuyor (satır 82). */
+.chart-sub { display: block; font-size: 12.5px; font-weight: 500; color: var(--muted); line-height: 1.5; margin-top: 5px; max-width: 78ch; }
 .chart-chg { font-size: 13px; font-weight: 700; margin-left: 6px; }
 .chart-chg.pos { color: var(--green-d); }
 .chart-chg.neg { color: var(--red); }
@@ -504,7 +520,10 @@ body.privacy [data-pm="1"] { user-select: none; }
   box-shadow: var(--shadow-md); border: 1px solid var(--line); margin-bottom: 15px;
 }
 .panel-head { display: flex; justify-content: space-between; align-items: center; gap: 14px; margin-bottom: 12px; flex-wrap: wrap; }
-.panel-head h2 { font-size: 15.5px; font-weight: 700; letter-spacing: -.25px; }
+/* 15 Ağu: başlık 15.5/700, alt başlık 12.5/500 — iki kademe arası zayıftı ve
+   panel başlıkları alt başlıklarıyla karışıyordu. Ağırlık SIÇRAMALI olsun (700→800,
+   renk ink→muted), yoksa "kademeli ağırlık merdiveni" olur ve hiyerarşi düzleşir. */
+.panel-head h2 { font-size: 15.5px; font-weight: 800; letter-spacing: -.3px; color: var(--ink); }
 
 /* Açılır-kapanır panel (İşlem Geçmişi · Realize Kazançları) */
 .panel-toggle { display: flex; align-items: center; gap: 10px; cursor: pointer; user-select: none; border-radius: 8px; margin: -4px -6px; padding: 4px 6px; transition: background .15s; }
@@ -659,18 +678,44 @@ tfoot td.l { text-align: left; }
 .modal-bg { position: fixed; inset: 0; background: rgba(14,24,18,.5); display: grid; place-items: center; z-index: var(--z-modal); padding: 20px; animation: modalFade .18s ease; }
 .modal-bg[hidden] { display: none; }
 @keyframes modalFade { from { opacity: 0; } to { opacity: 1; } }
-.modal { background: #fff; border-radius: var(--radius-lg); padding: 20px; width: 100%; max-width: 440px; box-shadow: var(--shadow-lg); max-height: 92vh; overflow-y: auto; animation: modalPop .26s cubic-bezier(.22,1,.36,1); }
+/* ═══ Modal — 14 Ağu revizyon ════════════════════════════════════════════════
+   Swing formu 1200px'e yakın: başlık yukarıda, "Kaydet" en altta kayboluyordu.
+   Formu doldurup kaydetmek için kaydırmak zorunda kalmak buton renginden daha
+   büyük bir problem. Başlık ve eylem çubuğu artık YAPIŞKAN — ikisi de her an
+   ekranda. Alanlar beyaz zemin + kalın kenarlık: gri-üstüne-gri "hazır form"
+   hissi yerine dokunulacak yüzey gibi duruyorlar. */
+.modal { background: #fff; border-radius: var(--radius-lg); padding: 0 22px 0; width: 100%; max-width: 468px; box-shadow: var(--shadow-lg); max-height: 92vh; overflow-y: auto; animation: modalPop .26s cubic-bezier(.22,1,.36,1); }
 @keyframes modalPop { from { opacity: 0; transform: translateY(12px) scale(.98); } to { opacity: 1; transform: none; } }
-.modal h3 { font-size: 17px; margin-bottom: 16px; font-weight: 800; letter-spacing: -.3px; }
-.modal label { display: block; font-size: 13px; font-weight: 600; color: var(--ink2); margin-bottom: 14px; }
-.modal input, .modal select {
-  width: 100%; margin-top: 6px; padding: 11px 13px; border: 1px solid var(--line-strong);
-  border-radius: var(--radius-sm); font-family: inherit; font-size: 14px; color: var(--ink); background: var(--bg3);
-  transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+.modal h3 {
+  position: sticky; top: 0; z-index: 3; margin: 0 -22px 16px; padding: 17px 22px 13px;
+  background: #fff; border-bottom: 1px solid var(--line);
+  font-size: 17px; font-weight: 800; letter-spacing: -.3px; color: var(--ink);
 }
-.modal input:focus, .modal select:focus { outline: none; border-color: var(--green-l); box-shadow: var(--ring); background: #fff; }
-.modal input::placeholder { color: #97a09a; }
-.modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 8px; }
+.modal label { display: block; font-size: 12.5px; font-weight: 700; color: var(--ink2); margin-bottom: 14px; letter-spacing: -.05px; }
+.modal label i { font-weight: 500; color: var(--muted); font-style: normal; }
+.modal input, .modal select {
+  width: 100%; margin-top: 6px; padding: 12px 13px; border: 1.5px solid var(--line-strong);
+  border-radius: 10px; font-family: inherit; font-size: 15px; font-weight: 600; color: var(--ink); background: #fff;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.modal input:hover:not(:focus), .modal select:hover:not(:focus) { border-color: var(--muted); }
+.modal input:focus, .modal select:focus { outline: none; border-color: var(--green-d); box-shadow: var(--ring); }
+.modal input::placeholder { color: #9aa397; font-weight: 500; }
+/* Eylem çubuğu her an ekranda; üstünde ince bir gölge var ki içerik altına kaydığı belli olsun */
+.modal-actions {
+  position: sticky; bottom: 0; z-index: 3; display: flex; gap: 10px; justify-content: flex-end;
+  margin: 18px -22px 0; padding: 14px 22px 17px; background: #fff; border-top: 1px solid var(--line);
+  box-shadow: 0 -10px 18px -14px rgba(18,20,15,.35);
+}
+/* Butonlar solid ve dokunulabilir: birincil koyu yeşil dolgu, ikincil belirgin kenarlık */
+.modal-actions .btn { padding: 11px 20px; font-size: 14px; font-weight: 700; border-radius: 10px; }
+.modal-actions .btn.primary { background: var(--brand); border-color: var(--brand); color: #fff; box-shadow: 0 1px 2px rgba(18,20,15,.18); }
+.modal-actions .btn.primary:hover { background: var(--green-d); border-color: var(--green-d); transform: translateY(-1px); }
+.modal-actions .btn.ghost { border: 1.5px solid var(--line-strong); color: var(--ink2); }
+.modal-actions .btn.ghost:hover { border-color: var(--muted); background: var(--bg3); }
+/* Segment düğmesi: aktif durum dolu, seçili olduğu tartışmasız olsun */
+.modal .seg-mini { background: var(--bg2); border-color: var(--line-strong); }
+.modal .seg-mini .segm.active { background: var(--brand); color: #fff; box-shadow: none; }
 
 .loading { text-align: center; padding: 30px; color: var(--muted); }
 .spin { display: inline-block; animation: sp 1s linear infinite; }
@@ -713,6 +758,14 @@ svg.ic-xs { width: 13px; height: 13px; display: inline-block; vertical-align: -2
 .rb-swcell { min-width: 150px; }
 .rb-sw { display: inline-flex; flex-direction: column; gap: 2px; line-height: 1.3; }
 .rb-sw-lv { font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+/* Kapıda elenen kurulum: bir UYARI değil, "neden burada kurulum yok" cevabı.
+   Bu yüzden kırmızı/amber semantik renk YOK — kesik çerçeve + susturulmuş metin;
+   göz listede tararken takılmaz, arayan bulur. Tam gerekçe title'da. */
+.rb-kapi {
+  display: inline-block; font-size: 10.5px; line-height: 1.3;
+  color: var(--ink-soft); border: 1px dashed var(--line);
+  border-radius: 6px; padding: 2px 6px; cursor: help;
+}
 .rd-swing { font-size: 12.5px; line-height: 1.6; color: var(--ink2); background: var(--bg3); border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; margin-bottom: 10px; }
 .rd-swing b { font-variant-numeric: tabular-nums; color: var(--ink); }
 
@@ -1123,24 +1176,8 @@ svg.ic-xs { width: 13px; height: 13px; display: inline-block; vertical-align: -2
 .rk-uw-lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); }
 .rk-uw { width: 100%; height: 38px; display: block; margin-top: 4px; }
 .rk-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 10px; }
-.rk-stat { background: var(--bg2); border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.rk-stat span { font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.rk-stat b { font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; }
-.rk-stat b.pos { color: var(--green-d); } .rk-stat b.neg { color: var(--red-d); }
 .rk-note { margin-top: 12px; font-size: 12px; line-height: 1.6; color: var(--ink2); background: var(--bg2); border-radius: 10px; padding: 10px 13px; }
 /* Benchmark kıyası (Risk Karnesi) */
-.rk-bench { margin-top: 14px; background: var(--bg2); border: 1px solid var(--line); border-radius: 11px; padding: 12px 14px; }
-.bm-head { font-size: 12.5px; font-weight: 800; margin-bottom: 9px; }
-.bm-rows { display: flex; flex-direction: column; gap: 6px; }
-.bm-row { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 12px; font-size: 13px; padding: 7px 11px; background: var(--card); border: 1px solid var(--line); border-radius: 8px; }
-/* Senin satırın: tam yeşil wash yerine nötr yüzey + ince sol-kenar yeşil şerit (kıyas satırından ayrışsın) */
-.bm-row.bm-port { background: var(--card); border-color: var(--line-strong); box-shadow: inset 3px 0 0 var(--green); }
-.bm-lbl { font-weight: 600; color: var(--ink2); }
-.bm-row > b { font-variant-numeric: tabular-nums; text-align: right; }
-.bm-row > b.pos { color: var(--green-d); } .bm-row > b.neg { color: var(--red-d); }
-.bm-alpha { font-size: 11.5px; font-weight: 800; font-variant-numeric: tabular-nums; min-width: 66px; text-align: right; color: var(--muted); }
-.bm-alpha.pos { color: var(--green-d); } .bm-alpha.neg { color: var(--red-d); }
-.bm-note { font-size: 11px; color: var(--muted); margin-top: 8px; line-height: 1.5; }
 .rk-note b { font-variant-numeric: tabular-nums; } .rk-note b.pos { color: var(--green-d); } .rk-note b.neg { color: var(--red-d); }
 .rk-empty { font-size: 12.5px; color: var(--muted); line-height: 1.6; padding: 6px 0; }
 .rk-empty b { color: var(--ink2); }
@@ -1493,6 +1530,17 @@ svg.ic-xs { width: 13px; height: 13px; display: inline-block; vertical-align: -2
 .fd-body { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .fd-tt { font-size: 13px; font-weight: 700; color: var(--ink); line-height: 1.35; }
 .fd-dd { font-size: 11.5px; color: var(--muted); line-height: 1.4; }
+/* Uyarı hükmü — satırın içinde, sessiz. Bu bir eylem değil bir ölçüm girdisi;
+ * dikkat çekmemeli, ama tıklanabilir olduğu belli olmalı. */
+.fd-vote { display: inline-flex; gap: 6px; margin-top: 6px; }
+.fd-vote button {
+  font: inherit; font-size: 11px; font-weight: 600; line-height: 1;
+  padding: 5px 9px; border-radius: 999px; cursor: pointer;
+  background: var(--bg2); border: 1px solid var(--line); color: var(--muted);
+  transition: border-color .15s ease, color .15s ease, background .15s ease;
+}
+.fd-vote button:hover { border-color: var(--line-strong); color: var(--ink); background: var(--card); }
+.fd-vote.done { font-size: 11px; font-weight: 600; color: var(--ink2); margin-top: 6px; }
 .fd-t { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; display: inline-flex; align-items: center; gap: 7px; align-self: start; margin-top: 2px; }
 .fd-go { font-style: normal; color: var(--ink2); font-weight: 700; }
 @media (max-width: 640px) {
@@ -1639,6 +1687,22 @@ svg.ic-xs { width: 13px; height: 13px; display: inline-block; vertical-align: -2
 .opp-hero-scorebox { display: inline-flex; align-items: baseline; gap: 8px; background: #eef7f1; border: 1px solid #cfe9d8; border-radius: 12px; padding: 8px 14px; align-self: flex-start; }
 .opp-hero-score { font-size: 28px; font-weight: 800; line-height: 1; color: var(--green-d); font-variant-numeric: tabular-nums; }
 .opp-hero-scorelbl { font-size: 10.5px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); font-weight: 700; }
+/* Skorun KANIT durumu (score-calibration.js). Sayının yanında küçük ama okunur:
+   kart eskiden 100 yazıp altında "%14 isabet" gösteriyordu — çelişkiyi bir
+   rozetle kapatıyoruz. Yeşil YOK: ölçüm olumluyken bile bu bir vaat değil,
+   yalnızca "kanıt var" bilgisi. */
+.opp-hero-scorebox { flex-wrap: wrap; }
+.opp-kalibre {
+  flex-basis: 100%; font-size: 10px; font-weight: 600; letter-spacing: .2px;
+  font-variant-numeric: tabular-nums; color: var(--muted);
+}
+.opp-kalibre.kb-kotu { color: var(--red-d); }
+.opp-kalibre.kb-zayif { color: var(--amber-d); }
+.opp-kalibre.kb-iyi { color: var(--ink2); }
+/* Kompakt satırdaki skor: durum rengini ince bir alt çizgiyle taşır — satır
+   yoğun, ikinci bir rozet gürültü olurdu. */
+.orh-score.kb-kotu { box-shadow: inset 0 -2px 0 var(--red-line); }
+.orh-score.kb-zayif { box-shadow: inset 0 -2px 0 var(--amber-line); }
 .opp-hero-right { padding-top: 2px; }
 
 /* ===== Top 2-N kompakt tablo ===== */
@@ -1796,12 +1860,38 @@ tbody tr:hover .row-actions .btn.icon { color: var(--ink2); }
 .spark-na { color: var(--line-strong); }
 
 /* Hero: gün/hafta/ay kıyas şeridi */
-.hero-compare { display: flex; gap: 8px; margin: 12px 0 4px; flex-wrap: wrap; }
-.hc-seg { display: flex; flex-direction: column; gap: 1px; background: rgba(255,255,255,.06); border-radius: 10px; padding: 7px 12px; min-width: 78px; }
-.hc-k { font-size: 10.5px; text-transform: uppercase; letter-spacing: .5px; color: rgba(255,255,255,.55); }
-.hc-v { font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; }
-.hc-seg.up .hc-v { color: #4ad07f; }
-.hc-seg.down .hc-v { color: #ff7a6b; }
+/* 15 Ağu: dört dönem çipi de aynı ağırlıkta ve hepsi renkliydi. YIL BAŞI'nın yeşili
+   her gün bağırıyordu ama o sayı bugün bir şey yapmanı gerektirmiyor — renk yalnız
+   eylem gerektiren yerde kuralı burada da geçerli. BUGÜN büyük ve renkli, gerisi
+   nötr tek satır bağlam. */
+.hero-compare { display: flex; align-items: baseline; gap: 16px; margin: 13px 0 4px; flex-wrap: wrap; }
+.hc-lead { display: flex; align-items: baseline; gap: 8px; flex: none; }
+.hc-k { font-size: 10.5px; text-transform: uppercase; letter-spacing: .6px; color: rgba(255,255,255,.55); }
+.hc-v { font-size: 22px; font-weight: 800; letter-spacing: -.5px; font-variant-numeric: tabular-nums; }
+.hc-lead.up .hc-v { color: #4ad07f; }
+.hc-lead.down .hc-v { color: #ff7a6b; }
+.hc-rest { display: flex; gap: 14px; flex-wrap: wrap; }
+/* Kaan'ın kararı (15 Ağu): her dönem yönünü renkle söylesin. Nötr basılıyorlardı
+   ("renk yalnız eylem gerektiren yerde") ama tek bakışta yön okumak burada daha
+   değerli — dört sayı da aynı şeyi ölçüyor, farkları yalnız pencere. */
+.hc-r { font-size: 12.5px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.hc-r.up { color: #4ad07f; } .hc-r.down { color: #ff7a6b; }
+.hc-r i { font-style: normal; font-weight: 500; font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: rgba(255,255,255,.45); margin-right: 5px; }
+
+/* Günün özeti hero'nun İÇİNDEYDİ; bir paragraf, rakamların hemen altında, kartın
+   yarısını yiyordu. Artık kartların altında tam genişlikte kendi notu — okunur,
+   ama sayının hiyerarşisini bozmuyor. */
+.cards-top > .hero-note {
+  grid-column: 1 / -1; margin: 0; padding: 12px 16px 13px;
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+  color: var(--ink2); font-size: 12.5px; line-height: 1.6; font-weight: 500; max-width: 92ch;
+}
+.cards-top > .hero-note .hn-l {
+  display: block; font-size: 10px; font-weight: 800; letter-spacing: 1.1px;
+  text-transform: uppercase; color: var(--muted); margin-bottom: 4px;
+}
+/* Gizlilik düğmesi emoji değil monoline ikon (tasarım dili: başlık/butonda emoji yok) */
+.privacy-toggle svg { width: 17px; height: 17px; }
 
 /* Günün hareketi kartı */
 .mover-card .mv-body { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
@@ -2067,13 +2157,249 @@ tbody tr:hover .row-actions .btn.icon { color: var(--ink2); }
 .sw-chip { font-size: 11px; font-weight: 700; color: var(--green-d); background: #e9f5ee; border: 1px solid var(--green-line); border-radius: 999px; padding: 1px 9px; vertical-align: middle; }
 .sw-merge { font-size: 10px; font-weight: 800; color: var(--amber-d); background: var(--amber-bg); border: 1px solid var(--amber-line); border-radius: 6px; padding: 1px 6px; vertical-align: middle; }
 
-/* Swing Karnesi — derin istatistik */
-.sx-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 9px; }
-.sx-stat { background: var(--bg2); border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; display: flex; flex-direction: column; gap: 2px; }
-.sx-lbl { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px; color: var(--muted); }
-.sx-stat b { font-size: 19px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -.3px; }
-.sx-stat b.pos { color: var(--green-d); } .sx-stat b.neg { color: var(--red-d); }
-.sx-sub { font-size: 10.5px; color: var(--muted); }
+/* Swing kaydının parası portföy toplamına nereden giriyor (14 Ağu çift sayım düzeltmesi).
+   Nötr yüzey + renkli nokta — pastel yıkama yok, satır rengini bozmasın. */
+.sw-src { font-size: 9.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .3px; padding: 2px 7px 2px 6px; border-radius: 999px; background: var(--bg2); color: var(--muted); border: 1px solid var(--line); vertical-align: middle; cursor: help; white-space: nowrap; }
+.sw-src::before { content: ""; display: inline-block; width: 5px; height: 5px; border-radius: 50%; margin-right: 4px; vertical-align: 1px; background: currentColor; }
+.sw-src.plan { color: var(--muted); }
+.sw-src.ayri { color: var(--green-d); border-color: var(--green-line); }
+.sw-src.karma { color: var(--amber-d); border-color: var(--amber-line); }
+.sw-grp-note { font-weight: 600; color: var(--muted); cursor: help; }
+.sw-grp-note b { color: var(--ink); font-variant-numeric: tabular-nums; }
+
+/* 14 Ağu: setSwCostMode gizli alanı .hidden ile kapatıyordu ama `.modal label{display:block}`
+   [hidden]'ı eziyordu → "Giriş maliyeti" ve "Toplam maliyet" AYNI ANDA görünüyordu; hangisinin
+   geçerli olduğu belirsizdi. Modal içindeki gizlenmiş alanlar gerçekten gizlensin. */
+.modal label[hidden], .modal [hidden] { display: none; }
+
+/* Modal: "bu kayıt toplama ne yapacak" satırı — kaydetmeden ÖNCE cevap verir */
+.sw-kapsam { font-size: 12.5px; line-height: 1.5; padding: 9px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg2); color: var(--muted); margin: -2px 0 10px; }
+.sw-kapsam b { color: var(--ink); font-weight: 700; }
+.sw-kapsam.plan { border-color: var(--line); }
+.sw-kapsam.ayri { border-color: var(--green-line); background: var(--green-bg); }
+.sw-kapsam.karma { border-color: var(--amber-line); background: var(--amber-bg); }
+
+/* ═══ Swing Defteri yerleşimi — 14 Ağu tasarım geçişi ═══════════════════════
+   Önce: on panel alt alta, hepsi aynı ağırlıkta. Göz nereden başlayacağını
+   bilmiyordu ve aynı sayı (toplam K/Z) dört ayrı yerde tekrarlıyordu.
+   Sonra: tek giriş noktası (ölçüm + belirsizliği) → nöbet şeridi → üç bölüm.
+   Bölümler sırayı taşır: önce EYLEM, sonra ÜRETİM, sonra MUHASEBE.
+
+   Renk disiplini: bu sayfa baştan aşağı kırmızı-yeşil çipten geçilmiyordu, o
+   yüzden hiçbir renk bir şey söylemiyordu. Artık semantik renk yalnız EYLEM
+   gerektiren yerde: açık pozisyonun K/Z'si, hüküm cümlesi, delinen stop.
+   Kapanmış ayların istatistiği nötr — okunur, bağırmaz. */
+
+/* ── Giriş noktası: ölçüm, kendi belirsizliğiyle ── */
+.sw2-hero { background: var(--bg2); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 22px 26px 20px; margin-bottom: 14px; }
+.sw2-hero-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+.sw2-eyebrow { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .7px; color: var(--muted); }
+.sw2-eyebrow i { font-style: normal; font-weight: 600; text-transform: none; letter-spacing: 0; color: var(--ink-soft); margin-left: 6px; }
+/* Sayı NÖTR kalır. "+$12/ay" yeşil basılırsa aralık 0'ı içerirken bile zafer gibi
+   okunur — kartın tüm meselesi bunun tersini söylemek. Renk hükümde, sayıda değil.
+   Zarar istisna: gerçek kayıp eylem gerektirir, o kırmızı kalır. */
+.sw2-hero-val { font-size: 46px; font-weight: 800; letter-spacing: -1.4px; line-height: 1.05; font-variant-numeric: tabular-nums; margin: 5px 0 3px; }
+.sw2-hero-val, .sw2-hero-val.pos { color: var(--ink); } /* global `.pos{color:green}` bu satırdan sonra geliyor — açıkça ez */
+.sw2-hero-val.neg { color: var(--red-d); }
+.sw2-hero-unit { font-size: 19px; font-weight: 600; color: var(--muted); letter-spacing: -.2px; margin-left: 3px; }
+.sw2-hero-meta { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.sw2-goal { flex: none; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 9px 13px; text-align: right; cursor: pointer; line-height: 1.35; transition: border-color .15s, transform .15s; }
+.sw2-goal:hover { border-color: var(--line-strong); transform: translateY(-1px); }
+.sw2-goal .sw2-goal-k { display: block; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); }
+.sw2-goal b { display: block; font-size: 15px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+.sw2-goal .sw2-goal-u { font-size: 11px; color: var(--muted); }
+
+/* İmza öğesi: %90 güven aralığı şeridi. Sıfır sayfadaki EN SERT kenar —
+   aralık onu kesiyorsa ölçüm gürültüden ayrışmıyor demektir ve bunu gizlemiyoruz. */
+.sw2-rail { margin: 22px 0 15px; }
+.sw2-rail-track { position: relative; height: 38px; }
+.sw2-rail-track::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: var(--line-strong); }
+/* Bant KUMPAS gibi okunmalı: dolgu + iki uçta dikey çene. Ölçüm aleti dili, süs değil. */
+.sw2-rail-band { position: absolute; top: 50%; transform: translateY(-50%); height: 15px; border-radius: 3px; background: var(--line); border: 1px solid var(--line-strong); }
+.sw2-rail-cap { position: absolute; top: -5px; bottom: -5px; width: 2px; background: var(--line-strong); border-radius: 1px; }
+.sw2-rail-cap.sol { left: -1px; } .sw2-rail-cap.sag { right: -1px; }
+.sw2-rail-band.ok { background: var(--green-soft); border-color: var(--green); }
+.sw2-rail-band.ok .sw2-rail-cap { background: var(--green); }
+.sw2-rail-band.warn { background: var(--amber-bg); border-color: var(--amber); }
+.sw2-rail-band.warn .sw2-rail-cap { background: var(--amber); }
+.sw2-rail-band.bad { background: var(--red-bg); border-color: var(--red); }
+.sw2-rail-band.bad .sw2-rail-cap { background: var(--red); }
+/* Sıfır sayfadaki EN SERT kenar — bant onu kesiyorsa ölçüm gürültüden ayrışmıyor. */
+.sw2-rail-zero { position: absolute; top: 2px; bottom: 2px; width: 2px; background: var(--ink); border-radius: 1px; z-index: 1; }
+.sw2-rail-zero i { position: absolute; top: -13px; left: 50%; transform: translateX(-50%); font-style: normal; font-size: 10px; font-weight: 800; color: var(--ink); background: var(--bg2); padding: 0 4px; letter-spacing: 0; }
+.sw2-rail-zero.sol i { left: 0; transform: none; } /* kenara taşmasın */
+.sw2-rail-zero.sag i { left: auto; right: 0; transform: none; }
+.sw2-rail-dot { position: absolute; top: 50%; width: 15px; height: 15px; margin: -7.5px 0 0 -7.5px; border-radius: 50%; background: var(--ink); box-shadow: 0 0 0 3.5px var(--bg2), 0 1px 3px rgba(18,20,15,.28); z-index: 2; }
+.sw2-rail-dot.neg { background: var(--red-d); }
+.sw2-rail-ax { display: flex; justify-content: space-between; align-items: baseline; margin-top: 7px; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.sw2-rail-ax-c { font-size: 10.5px; color: var(--ink-soft); font-variant-numeric: normal; }
+
+/* Hüküm cümlesi — sayfanın ikinci sesi. Renk BURADA. */
+.sw2-verdict { font-size: 14px; font-weight: 600; line-height: 1.5; margin: 0 0 4px; padding-left: 15px; position: relative; color: var(--ink2); }
+.sw2-verdict::before { content: ""; position: absolute; left: 0; top: .55em; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+.sw2-verdict.ok::before { background: var(--green); }
+.sw2-verdict.warn::before { background: var(--amber); }
+.sw2-verdict.bad::before { background: var(--red); }
+.sw2-advice { font-size: 12.5px; line-height: 1.55; color: var(--muted); margin: 0; padding-left: 15px; }
+.sw2-advice b { color: var(--ink2); font-weight: 700; }
+
+/* ── Nöbet şeridi: üç hızlı sayı. Kart değil — hero ile yarışmasın. ── */
+.sw2-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); overflow: hidden; margin-bottom: 12px; }
+.sw2-strip-i { padding: 12px 16px; display: flex; flex-direction: column; gap: 2px; border-left: 1px solid var(--line); }
+.sw2-strip-i:first-child { border-left: 0; }
+.sw2-strip-k { font-size: 11px; font-weight: 600; color: var(--muted); }
+.sw2-strip-v { font-size: 21px; font-weight: 700; letter-spacing: -.4px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.sw2-strip-v.pos { color: var(--green-d); } .sw2-strip-v.neg { color: var(--red-d); }
+.sw2-strip-s { font-size: 11px; color: var(--ink-soft); }
+
+/* ── Bölüm rayı: başlık · hairline · KANIT MİKTARI · eylem ──
+   Kanıt metni rayın parçası; kanıtı olmayan bölüm "ölçülmedi" der. Bu,
+   score-calibration.js'in "kanıt yoksa etiket ölçülmedi der" kuralının
+   yerleşime uygulanmış hâli — sayfa ölçmediği şeyi vaat etmiyor. */
+.sw2-sec { margin-top: 30px; }
+.sw2-sec:first-of-type { margin-top: 24px; }
+.sw2-sec-h { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+.sw2-sec-h h3 { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.1px; color: var(--ink); margin: 0; flex: none; }
+.sw2-sec-rule { flex: 1 1 40px; height: 1px; background: var(--line-strong); min-width: 20px; }
+.sw2-sec-n { flex: none; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.sw2-sec-n b.sw2-acil { color: var(--red-d); font-weight: 700; }
+.sw2-sec-btn { flex: none; }
+.sw2-sec-body { display: flex; flex-direction: column; gap: 12px; }
+/* Bölüm artık görsel birim — içindeki paneller kendi kartlığını bırakır, yoksa
+   kart-içinde-kart olur ve hiyerarşi yine düzleşir. */
+.sw2-sec-body > .panel { box-shadow: none; margin: 0; }
+.sw2-sec-body > .panel > .panel-head h2 { font-size: 14px; letter-spacing: -.1px; }
+
+@media (max-width: 720px) {
+  .sw2-hero { padding: 18px 16px 16px; }
+  .sw2-hero-val { font-size: 36px; }
+  .sw2-eyebrow i { display: block; margin: 2px 0 0; } /* "son 3 / ay · ölçüm" diye bölünmesin */
+  .sw2-strip { grid-template-columns: 1fr; }
+  .sw2-strip-i { border-left: 0; border-top: 1px solid var(--line); }
+  .sw2-strip-i:first-child { border-top: 0; }
+  .sw2-sec-h { gap: 8px; }
+  .sw2-sec-rule { display: none; }
+}
+
+/* ═══ Radar: "Bugün girilebilir" plan kartları — 14 Ağu ══════════════════════
+   Sekme 8 sütunlu bir tabloydu; "bu hisseye girer miyim, kaç adet?" sorusunun
+   cevabı satırı açıp modalı açmayı gerektiriyordu. Artık her şey kartın üstünde:
+   giriş · stop · hedef · R/Ö · ADET · risk $. Kart tıklanabilir bir karar birimi.
+   Renk disiplini: kart nötr yüzey. Kırmızı yalnız STOP'ta (gerçekten kaybedeceğin
+   sayı), yeşil yalnız hedefte. Skor gri — ölçülmüş bir edge değil, öyle görünmesin. */
+.rp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(296px, 1fr)); gap: 11px; }
+.rp-card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 13px 15px 11px; display: flex; flex-direction: column; gap: 9px; transition: border-color .16s, box-shadow .16s, transform .16s; }
+.rp-card:hover { border-color: var(--line-strong); box-shadow: var(--shadow-md); transform: translateY(-1px); }
+.rp-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.rp-id { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.rp-sym { font-size: 17px; font-weight: 800; letter-spacing: -.3px; color: var(--ink); }
+.rp-setup { font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--bg2); color: var(--ink2); border: 1px solid var(--line); white-space: nowrap; }
+.rp-cuma { color: var(--amber-d); display: inline-flex; }
+.rp-px { font-size: 14px; font-weight: 700; color: var(--ink2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.rp-dc { font-size: 11.5px; font-weight: 700; margin-left: 5px; }
+.rp-name { font-size: 11.5px; color: var(--muted); margin-top: -5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Dört seviye tek satırda — trader'ın gözü hep aynı yerde arar */
+/* R/Ö tek haneli — fiyat sütunlarından dar olsun, yoksa "$1,306.92" kırpılıyor */
+.rp-lvls { display: grid; grid-template-columns: 1fr 1fr 1fr .62fr; gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
+.rp-lvl { background: var(--bg3); padding: 7px 8px; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.rp-lvl span { font-size: 10px; font-weight: 600; color: var(--muted); }
+.rp-lvl b { font-size: 13px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; letter-spacing: -.3px; white-space: nowrap; }
+.rp-lvl.stop b { color: var(--red-d); }
+.rp-lvl.tgt b { color: var(--green-d); }
+/* Adet satırı — kartın var oluş sebebi. Sıcak kağıt zeminde, ayrı bir materyal. */
+.rp-size { background: var(--bg2); border-radius: 9px; padding: 8px 11px; display: flex; flex-direction: column; gap: 1px; }
+.rp-size-n { font-size: 15px; color: var(--ink2); font-variant-numeric: tabular-nums; }
+.rp-size-n b { font-size: 20px; font-weight: 800; color: var(--ink); letter-spacing: -.4px; }
+.rp-size-s { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.rp-size-s b { color: var(--ink2); font-weight: 700; }
+.rp-size.none { font-size: 11.5px; color: var(--muted); }
+.rp-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.rp-score { font-size: 11px; color: var(--ink-soft); cursor: help; font-variant-numeric: tabular-nums; }
+.rp-acts { display: flex; gap: 6px; }
+/* Risk% kutusu bölüm rayında — kartlar canlı güncellenir */
+.ra-risk { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600; color: var(--muted); background: var(--card); border: 1px solid var(--line); border-radius: 999px; padding: 3px 11px 3px 12px; white-space: nowrap; }
+.ra-risk input { width: 46px; padding: 2px 4px; font-size: 12px; font-weight: 700; text-align: right; border: 1px solid var(--line); border-radius: 6px; background: var(--bg3); color: var(--ink); font-variant-numeric: tabular-nums; }
+.ra-risk i { font-style: normal; color: var(--ink-soft); font-weight: 500; }
+/* Detaya inen ölçülmemiş katman */
+.rd-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+.rd-sigs { display: inline-flex; gap: 4px; }
+/* Alfa Avı da aynı rayı kullanır — üç sekme tek dil konuşsun */
+.ch-sec { margin: 22px 0 11px; }
+.ch-sec:first-of-type { margin-top: 18px; }
+/* Kural metni artık kapalı gelir: kurallar sabit, sayılar değişken */
+.ch-strat-wrap { margin-bottom: 12px; }
+.ch-strat-wrap > summary { cursor: pointer; font-size: 12.5px; font-weight: 700; color: var(--ink2); padding: 8px 12px; background: var(--bg2); border: 1px solid var(--line); border-radius: var(--radius-sm); list-style: none; }
+.ch-strat-wrap > summary::-webkit-details-marker { display: none; }
+.ch-strat-wrap > summary::before { content: "▸ "; color: var(--muted); }
+.ch-strat-wrap[open] > summary::before { content: "▾ "; }
+.ch-strat-wrap > summary i { font-style: normal; font-weight: 500; color: var(--muted); margin-left: 6px; }
+.ch-strat-wrap > summary:hover { border-color: var(--line-strong); }
+/* Varlıklar tablosu 12 → 8 sütun (15 Ağu). Kimlik tek hücrede toplandı, adet ile
+   birim maliyet tek cümle oldu, K/Z ile % tek hücrede. */
+.hl-id-top { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.hl-id-nm { font-size: 11px; color: var(--ink-soft); margin-top: 2px; max-width: 30ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hl-qty b { font-weight: 700; font-variant-numeric: tabular-nums; }
+.hl-qty span { display: block; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; margin-top: 1px; }
+.hl-pnl b { font-weight: 700; font-variant-numeric: tabular-nums; }
+.hl-pnl span { display: block; font-size: 11.5px; font-weight: 700; opacity: .8; font-variant-numeric: tabular-nums; margin-top: 1px; }
+
+/* Alfa Avı hero — swing'in ölçüm kartıyla aynı materyal (sıcak kağıt), aynı rol:
+   sayfanın TEK giriş noktası. Sayı nötr, yalnız zarardayken kırmızı. */
+.ch-hero { background: var(--bg2); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 18px 22px 16px; margin-bottom: 12px; }
+.ch-hero-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.ch-hero-val { font-size: 38px; font-weight: 800; letter-spacing: -1.1px; line-height: 1.05; color: var(--ink); font-variant-numeric: tabular-nums; margin: 4px 0 2px; }
+.ch-hero-val.neg { color: var(--red-d); }
+.ch-hero-meta { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
+@media (max-width: 720px) { .ch-hero { padding: 15px 16px; } .ch-hero-val { font-size: 31px; } }
+
+/* İzleme listesi kartı — Radar plan kartının kardeşi. Fark: burada plan MOTORUN,
+   sen açmıyorsun; o yüzden "adet" yerine "pozisyon" ve eylem butonu yok. */
+.wl-card { cursor: pointer; }
+.wl-card .rp-lvls { grid-template-columns: repeat(3, 1fr); }
+.wl-dist { display: flex; flex-direction: column; gap: 4px; }
+.wl-dist-h { display: flex; align-items: baseline; justify-content: space-between; font-size: 11px; color: var(--muted); }
+.wl-dist-h b { font-size: 12.5px; font-weight: 700; color: var(--ink2); font-variant-numeric: tabular-nums; }
+.wl-dist-h b.pos { color: var(--green-d); }
+/* Tetiğe uzaklık şeridi: dolu = tetiğe yakın. Sayıyı gözle kıyaslanabilir yapar. */
+.wl-dist-bar { height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
+.wl-dist-bar i { display: block; height: 100%; border-radius: 2px; background: var(--line-strong); transition: width .35s; }
+.wl-card.wl-ready .wl-dist-bar i { background: var(--green); }
+.wl-card.wl-forming .wl-dist-bar i { background: var(--amber); }
+.wl-card.wl-ready { border-color: var(--green-line); }
+.wl-neden { font-size: 11.5px; line-height: 1.45; color: var(--muted); border-top: 1px solid var(--line); padding-top: 8px; }
+/* Tetiğe uzak olanlar tek satırlık çipler — kart okunaklı ama 40 kart kaydırma cezası */
+.wl-more { margin-top: 11px; }
+.wl-more > summary { cursor: pointer; font-size: 12px; font-weight: 700; color: var(--ink2); padding: 8px 12px; background: var(--bg2); border: 1px solid var(--line); border-radius: var(--radius-sm); list-style: none; }
+.wl-more > summary::-webkit-details-marker { display: none; }
+.wl-more > summary::before { content: "▸ "; color: var(--muted); }
+.wl-more[open] > summary::before { content: "▾ "; }
+.wl-more > summary i { font-style: normal; font-weight: 500; color: var(--muted); margin-left: 5px; }
+.wl-more-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+.wl-mini { display: inline-flex; align-items: baseline; gap: 6px; background: var(--card); border: 1px solid var(--line); border-radius: 999px; padding: 4px 11px; cursor: pointer; font: inherit; transition: border-color .14s; }
+.wl-mini:hover { border-color: var(--line-strong); }
+.wl-mini b { font-size: 12px; font-weight: 700; color: var(--ink); }
+.wl-mini span { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+@media (max-width: 600px) { .rp-grid { grid-template-columns: 1fr; } }
+
+/* Swing Karnesi — derin istatistik.
+   14 Ağu: on iki karo aynı ağırlıktaydı → duvar. Artık karar değiştiren üç sayı
+   (beklenti · isabet · stop disiplini) birincil, gerisi ikincil bağlam. */
+.sx-leads { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 11px; overflow: hidden; margin-bottom: 12px; }
+.sx-lead { background: var(--card); padding: 13px 16px; display: flex; flex-direction: column; gap: 3px; }
+.sx-lead-k { font-size: 11px; font-weight: 600; color: var(--muted); }
+.sx-lead-v { font-size: 28px; font-weight: 800; letter-spacing: -.7px; line-height: 1.05; color: var(--ink); font-variant-numeric: tabular-nums; }
+.sx-lead-v.pos { color: var(--green-d); } .sx-lead-v.neg { color: var(--red-d); }
+.sx-lead-s { font-size: 11px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+
+.sx-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+.sx-stat { background: var(--bg2); border: 1px solid var(--line); border-radius: 9px; padding: 8px 11px; display: flex; flex-direction: column; gap: 1px; }
+.sx-lbl { font-size: 10.5px; font-weight: 600; color: var(--muted); }
+/* İkincil karolar NÖTR. Eskiden her karo kendi rengini basıyordu ve ekran alarm
+   panosuna dönüyordu; kırmızı ancak bir şey yapman gerektiğinde bir şey söyler. */
+.sx-stat b { font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.2px; color: var(--ink2); }
+.sx-stat b.neg { color: var(--red-d); }
+.sx-sub { font-size: 10.5px; color: var(--ink-soft); }
+@media (max-width: 900px) { .sx-leads { grid-template-columns: 1fr; } .sx-grid { grid-template-columns: repeat(2, 1fr); } }
 .sx-histo-wrap { margin-top: 14px; }
 .sx-histo-h { font-size: 12px; font-weight: 700; color: var(--ink2); margin-bottom: 8px; }
 .sx-histo { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; align-items: end; height: 120px; }
@@ -2193,20 +2519,25 @@ tbody tr:hover .row-actions .btn.icon { color: var(--ink2); }
 
 /* 12 ay bar grafik */
 .sw-chart-panel .panel-head { align-items: flex-start; }
-.sw-chart { position: relative; height: 230px; margin-top: 14px; padding-top: 8px; }
+/* Çizim alanı ile eksen satırı AYRI (14 Ağu). Bandın/çizginin yüzdesi yalnız
+   .sw-plot'a göre çözülür; eksen yazıları artık üstlerine binemez. */
+.sw-chart { height: 236px; margin-top: 14px; padding-top: 20px; display: flex; flex-direction: column; }
+.sw-plot { position: relative; flex: 1; min-height: 0; }
+.sw-xaxis { flex: none; display: grid; grid-template-columns: repeat(12, 1fr); gap: 6px; padding-top: 8px; border-top: 1px solid var(--line); margin-top: 2px; }
 .sw-goalband { position: absolute; left: 0; right: 0; background: rgba(47,143,87,.10); border-top: 1px dashed rgba(47,143,87,.55); border-bottom: 1px dashed rgba(47,143,87,.55); pointer-events: none; z-index: 0; }
 .sw-goalband-lbl { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); font-size: 10.5px; font-weight: 700; color: var(--green-d); background: rgba(244,250,246,.85); padding: 1px 6px; border-radius: 5px; }
 .sw-bars { position: relative; z-index: 1; display: grid; grid-template-columns: repeat(12, 1fr); gap: 6px; height: 100%; align-items: end; }
-.sw-bar-col { display: flex; flex-direction: column; height: 100%; }
-.sw-bar-track { flex: 1; display: flex; align-items: flex-end; justify-content: center; min-height: 0; }
+.sw-bar-col { display: flex; align-items: flex-end; justify-content: center; height: 100%; }
 .sw-bar { width: 62%; max-width: 30px; min-height: 2px; border-radius: 6px 6px 3px 3px; position: relative; transition: height .5s cubic-bezier(.22,1,.36,1); background: var(--line-strong); }
 .sw-bar.pos { background: var(--green); }
 .sw-bar.hit { background: var(--green-d); }
 .sw-bar.neg { background: var(--down); border-radius: 3px 3px 6px 6px; }
 .sw-bar.empty { background: var(--bg2); border: 1px dashed var(--line-strong); }
-.sw-bar-tag { position: absolute; top: -17px; left: 50%; transform: translateX(-50%); font-size: 10px; font-weight: 800; white-space: nowrap; color: var(--ink2); font-variant-numeric: tabular-nums; }
-.sw-bar.neg .sw-bar-tag { top: auto; bottom: -17px; color: var(--red-d); }
-.sw-bar-x { text-align: center; font-size: 11px; font-weight: 600; color: var(--muted); padding-top: 7px; }
+/* Tutar etiketi her zaman barın ÜSTÜNDE: barlar zeminden yukarı çiziliyor, negatifi
+   aşağı koymak etiketi eksen satırına düşürüyordu. */
+.sw-bar-tag { position: absolute; top: -16px; left: 50%; transform: translateX(-50%); font-size: 10px; font-weight: 800; white-space: nowrap; color: var(--ink2); font-variant-numeric: tabular-nums; }
+.sw-bar.neg .sw-bar-tag { color: var(--red-d); }
+.sw-bar-x { text-align: center; font-size: 11px; font-weight: 600; color: var(--muted); }
 .sw-bar-col.cur .sw-bar { outline: 2px solid var(--green-l); outline-offset: 1px; }
 .sw-bar-x.cur { color: var(--green-d); font-weight: 800; }
 
@@ -2283,6 +2614,11 @@ button.sw-goal-target:hover { background: var(--bg2); border-color: var(--line);
 .sw-calc-row { display: flex; justify-content: space-between; gap: 12px; font-size: 12.5px; color: var(--ink2); }
 .sw-calc-row b { font-variant-numeric: tabular-nums; }
 .sw-calc-row.hi { font-size: 14px; padding: 5px 0; border-top: 1px dashed var(--line-strong); border-bottom: 1px dashed var(--line-strong); }
+/* Korelasyon kesintisinin gerekçesi — adedin ALTINDA, sessizce değil.
+ * "Ölçülmedi" hâli de burada yazar: kesinti yoksa bunu söylemek, kesinti varmış
+ * gibi göstermekten dürüst (score-calibration deseni). */
+.sw-calc-note { margin-top: 6px; font-size: 11px; line-height: 1.45; color: var(--ink-soft); }
+.sw-calc-note i { font-style: normal; }
 .sw-calc-row.hi b { color: var(--green-d); font-weight: 800; }
 .sw-calc-row.hi i { font-size: 10.5px; font-weight: 600; color: #9a6a12; font-style: normal; }
 .sw-calc-hint, .sw-calc-warn { font-size: 12px; color: var(--muted); }
@@ -2834,7 +3170,6 @@ ul.sw-qm-list li b { font-weight: 700; color: var(--ink); }
 .rk-legend .lg-mile { border-top: 1.5px dashed var(--ink2); }
 .rk-fc-eta { margin-top: 11px; font-size: 13px; color: var(--ink2); background: var(--bg3); border-radius: 10px; padding: 9px 12px; line-height: 1.5; }
 .rk-fc-eta b { color: var(--ink); }
-.rk-grid-sm { grid-template-columns: repeat(4, 1fr); }
 .rk-disc { display: block; margin-top: 4px; font-size: 11px; color: var(--muted); }
 
 /* Getiri kaynak dökümü */
@@ -2855,7 +3190,7 @@ ul.sw-qm-list li b { font-weight: 700; color: var(--ink); }
 @media (max-width: 720px) { .rk-src-row { grid-template-columns: 130px 1fr auto; } }
 .rk-empty-bar { height: 6px; border-radius: 4px; background: var(--bg2); margin: 8px 0; overflow: hidden; max-width: 320px; }
 .rk-empty-fill { height: 100%; background: var(--green); border-radius: 4px; }
-@media (max-width: 720px) { .rk-top { grid-template-columns: 1fr; } .rk-grid-sm { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 720px) { .rk-top { grid-template-columns: 1fr; } }
 
 /* ===== Meydan Okuma (challenge) ===== */
 .view-sub { font-size: 13px; color: var(--muted); margin-top: 3px; max-width: 780px; }
@@ -3059,6 +3394,14 @@ ul.sw-qm-list li b { font-weight: 700; color: var(--ink); }
 .hunt-pill.reg-warn::before { background: var(--amber); }
 /* İzleme listesi "Neden bekliyor?" sütunu */
 .wl-table td.wl-why { white-space: normal; font-size: 11.5px; color: var(--ink2); line-height: 1.45; min-width: 220px; max-width: 340px; }
+/* Kurulum kapısı rozeti — radar tarafındaki .rb-kapi ile aynı görsel dil.
+   Uyarı rengi YOK: bu bir risk bildirimi değil, "neden girilmiyor" cevabı. */
+.wl-kapi {
+  display: inline-block; font-size: 10px; font-weight: 600; line-height: 1.3;
+  color: var(--ink-soft); border: 1px dashed var(--line);
+  border-radius: 6px; padding: 1px 6px; margin-right: 4px; cursor: help;
+  white-space: nowrap;
+}
 
 /* Risk İştahı Endeksi (RAI) paneli — Alfa Avı */
 .rai-panel { display: flex; gap: 16px; align-items: flex-start; border: 1px solid var(--line-strong); border-radius: 14px; padding: 14px 16px; margin-bottom: 13px; background: var(--bg3); box-shadow: var(--sh1, 0 1px 2px rgba(23, 32, 41, .05)); }
@@ -3463,7 +3806,7 @@ svg.fx-pop { animation: fxPop .7s cubic-bezier(.22,1,.36,1) both; transform-orig
   .cards-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
   .cards-metrics .card { padding: 12px 13px; }
   .card .value { font-size: 19px; }
-  .trade-summary, .rk-hero, .rk-grid, .rk-grid-sm, .pr-kpis, .ch-kpis, .rz-head,
+  .trade-summary, .rk-hero, .rk-grid, .pr-kpis, .ch-kpis, .rz-head,
   .gr-hero, .dj-matrix, .sx-grid, .opp-bt-stats { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
   .cards-top, .cards-mid, .db-grid, .analiz-grid, .dj-tbls, .tp-grid, .cuma-grid,
   .analiz-summary, .cash-grid, .r26-summary { grid-template-columns: 1fr !important; }
@@ -3760,3 +4103,97 @@ svg.fx-pop { animation: fxPop .7s cubic-bezier(.22,1,.36,1) both; transform-orig
 .wf-table th.l, .wf-table td.l { text-align: left; }
 .wf-table td { padding: 9px 11px; text-align: right; border-top: 1px solid var(--line); }
 .wf-n { display: block; font-size: 10.5px; color: var(--muted); font-weight: 500; }
+
+/* Notlar: bölüm rayları form/liste akışının içinde durduğu için kendi boşluğunu
+   taşır (.sw2-sec sarmalayıcısı yok — form ve liste zaten kendi bloklarını kurar). */
+.notes-sec { margin-top: 28px; }
+.gr-mini-lbl i { font-style: normal; font-weight: 500; color: var(--ink-soft); }
+
+/* ===== KIYAS — "piyasayı yendin mi?" (16 Ağu) ==============================
+   Sekmenin ilk paneli. İki eski panel (Benchmark bloğu + Temel çizgi) buraya
+   birleşti; ikisi de aynı soruya farklı sayı veriyordu.
+   Renk disiplini: hüküm cümlesi renk taşır, sayı taşımaz. Alfa pozitif olsa da
+   düşüş bedeli ağırsa (hüküm 'warn') sayı NÖTR basılır — swing hero'sundaki
+   "+$12/ay nötr" kuralının aynısı: zafer rengi hak edilmeden verilmez. */
+.panel-kiyas .panel-head { margin-bottom: 4px; }
+
+.ky-hero { display: grid; grid-template-columns: minmax(150px, 200px) 1fr; gap: 18px; align-items: center;
+  padding: 14px 16px; background: var(--bg2); border: 1px solid var(--line); border-radius: 12px; }
+.ky-hero-n { display: flex; flex-direction: column; gap: 2px; border-right: 1px solid var(--line); padding-right: 18px; }
+.ky-hero-lbl { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); }
+.ky-hero-v { font-size: 31px; font-weight: 800; letter-spacing: -.5px; font-variant-numeric: tabular-nums; line-height: 1.05; color: var(--ink); }
+.ky-hero-v.pos { color: var(--green-d); } .ky-hero-v.neg { color: var(--red-d); }
+.ky-hero-sub { font-size: 11px; color: var(--muted); line-height: 1.45; }
+.ky-hukum { margin: 0; font-size: 13.5px; line-height: 1.55; color: var(--ink2); padding-left: 16px; position: relative; }
+.ky-hukum b { color: var(--ink); }
+.ky-hukum::before { content: ""; position: absolute; left: 0; top: .52em; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+.ky-hukum.ok::before { background: var(--green); }
+.ky-hukum.warn::before { background: var(--amber); }
+.ky-hukum.bad::before { background: var(--red); }
+
+/* Yarış grafiği: portföy dolu ve accent, endeksler susturulmuş referans çizgisi */
+.ky-grafik { position: relative; margin: 16px 0 6px; padding-right: 4px; }
+.ky-grafik svg { display: block; width: 100%; height: 170px; }
+.ky-p { stroke: var(--green); }
+.ky-x1 { stroke: var(--ink2); stroke-dasharray: 5 4; }
+.ky-x2 { stroke: var(--muted); stroke-dasharray: 2 4; }
+.ky-uc { position: absolute; right: 0; transform: translateY(-50%); font-size: 11px; font-weight: 800;
+  font-variant-numeric: tabular-nums; background: var(--card); padding: 1px 4px; border-radius: 4px; }
+.ky-uc.ky-p { color: var(--green-d); } .ky-uc.ky-x1 { color: var(--ink2); } .ky-uc.ky-x2 { color: var(--muted); }
+.ky-lejant { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 6px; font-size: 11px; color: var(--muted); }
+.ky-lejant span { display: inline-flex; align-items: center; gap: 5px; }
+.ky-lejant i { width: 14px; height: 0; border-top-width: 2px; border-top-style: solid; }
+.ky-lejant .ky-p i { border-color: var(--green); }
+.ky-lejant .ky-x1 i { border-color: var(--ink2); border-top-style: dashed; }
+.ky-lejant .ky-x2 i { border-color: var(--muted); border-top-style: dotted; }
+.ky-lejant-not { margin-left: auto; }
+
+/* Tablo: "Sen" sütunu karar, endeks sütunları referans (susturulmuş) */
+.ky-tablo { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.ky-tablo th { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px;
+  color: var(--muted); padding: 10px 10px 7px; text-align: right; }
+.ky-tablo th.l { text-align: left; }
+.ky-tablo td { padding: 9px 10px; border-top: 1px solid var(--line); text-align: right; }
+.ky-t-k { text-align: left; font-size: 13px; color: var(--ink2); font-weight: 600; }
+.ky-t-sen { font-size: 15px; font-weight: 700; color: var(--ink); }
+.ky-t-sen.kazandi { color: var(--green-d); }
+.ky-t-x { font-size: 13.5px; color: var(--muted); font-weight: 600; }
+
+/* Alt şerit: endeks başına karakter kartı + son dönem alfası */
+.ky-alt { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin-top: 16px; }
+.ky-kart { background: var(--bg2); border: 1px solid var(--line); border-radius: 11px; padding: 12px 14px; }
+.ky-kart-h { font-size: 12px; font-weight: 800; color: var(--ink); margin-bottom: 9px; }
+.ky-kart-g { display: grid; grid-template-columns: 1fr 1fr; gap: 7px 12px; }
+.ky-kart-g > div { display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
+  font-size: 11.5px; color: var(--muted); }
+.ky-kart-g b { font-size: 14px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+.ky-kart-g b.ky-zayif { color: var(--amber-d); }
+.ky-kart-y { font-size: 11.5px; line-height: 1.55; color: var(--muted); margin: 10px 0 0; }
+.ky-kart-y b { color: var(--ink2); }
+.ky-kart-y i { display: block; font-style: normal; margin-top: 5px; }
+
+.ky-son { background: var(--bg2); border: 1px solid var(--line); border-radius: 11px; padding: 12px 14px; }
+.ky-son-h { font-size: 12px; font-weight: 800; color: var(--ink); margin-bottom: 8px; }
+.ky-son-r { display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
+  font-size: 12px; color: var(--ink2); padding: 4px 0; border-bottom: 1px solid var(--line); }
+.ky-son-r:last-of-type { border-bottom: 0; }
+.ky-son-r b { font-size: 14px; font-variant-numeric: tabular-nums; }
+.ky-son-r b.pos { color: var(--green-d); } .ky-son-r b.neg { color: var(--red-d); }
+.ky-son-n { font-size: 11.5px; line-height: 1.55; color: var(--muted); margin: 9px 0 0; }
+.ky-son-n b { color: var(--ink2); }
+
+.ky-not { font-size: 11.5px; line-height: 1.6; color: var(--muted); margin: 14px 0 0; }
+.ky-not b { color: var(--ink2); }
+
+@media (max-width: 640px) {
+  .ky-hero { grid-template-columns: 1fr; gap: 12px; }
+  .ky-hero-n { border-right: 0; border-bottom: 1px solid var(--line); padding: 0 0 10px; }
+  .ky-grafik svg { height: 150px; }
+}
+
+/* Kıyas'a çapraz gönderme (16 Ağu). Risk karnesindeki Sharpe/volatilite/en kötü gün
+   şeridi kaldırıldı — hepsi Kıyas karnesinde, endeksin aynı sayılarıyla yan yana.
+   Kullanıcı sayının kaybolduğunu değil TAŞINDIĞINI görmeli, yoksa panel eksik sanılır. */
+.rk-cross { margin-top: 12px; padding: 9px 12px; background: var(--bg2); border: 1px solid var(--line);
+  border-radius: 10px; font-size: 11.5px; line-height: 1.55; color: var(--muted); }
+.rk-cross b { color: var(--ink2); }

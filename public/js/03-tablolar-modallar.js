@@ -6,23 +6,26 @@
 const sortState = {};
 
 // Sıralanabilir sütunlar ve karşılaştırılacak değerleri
+/* 15 Ağu: tablo 12 sütundu ve üçü aynı şeyi üç kez söylüyordu — "Ad" sembolün
+ * tekrarıydı (Kaan MU'nun ne olduğunu biliyor), "Getiri" ile "%" aynı sayının iki
+ * yazımıydı, "Adet" ile "Maliyet" tek bir cümleydi ("0,34 × $939,52"). Radar'da
+ * 8 sütunu 4'e indiren mantık burada da: sütun ancak KARAR DEĞİŞTİRİYORSA kalır.
+ * 12 → 8. Ad, sembolün altına altyazı olarak indi; rozetler orada kaldı. */
 const SORT_COLS = [
   { key: "symbol", label: "Sembol", cls: "l", get: (h) => h.symbol || "" },
-  { key: "name",   label: "Ad",     cls: "l", get: (h) => h.name || "" },
   { key: "price",  label: "Fiyat",  cls: "",  get: (h) => (h.type === "stock" ? h.live?.priceUSD : h.live?.priceTRY) },
   { key: "spark",  label: "30 Gün", cls: "spark-col", get: (h) => { const s = h.spark; return s && s.length > 1 && s[0] ? ((s[s.length - 1] - s[0]) / s[0]) * 100 : null; } },
-  { key: "qty",    label: "Adet",   cls: "",  get: (h) => h.quantity },
-  { key: "cost",   label: "Maliyet", cls: "", get: (h) => costOf(h) },
-  { key: "mv",     label: "Piyasa Değeri", cls: "", get: (h) => h.live?.marketValueTRY },
-  { key: "profit", label: "Getiri", cls: "",  get: (h) => { const mv = h.live?.marketValueTRY; return mv != null ? mv - costOf(h) : null; } },
-  { key: "pct",    label: "%",      cls: "",  get: (h) => {
+  { key: "qty",    label: "Adet × maliyet", cls: "", get: (h) => costOf(h) },
+  { key: "mv",     label: "Değer", cls: "", get: (h) => h.live?.marketValueTRY },
+  // K/Z hücresi $ ve % birlikte gösterir; sıralama % üzerinden (büyüklükten bağımsız kıyas)
+  { key: "profit", label: "K/Z",   cls: "",  get: (h) => {
     // Hisse → dolar getirisi (tabloda gösterilen %'yle aynı); fon → TRY
     if (h.type === "stock" && h.costUSD != null && h.live?.marketValueUSD != null) {
       const c = h.costUSD * h.quantity; return c ? ((h.live.marketValueUSD - c) / c) * 100 : null;
     }
     const mv = h.live?.marketValueTRY; if (mv == null) return null; const c = costOf(h); return c ? ((mv - c) / c) * 100 : null;
   } },
-  { key: "realized", label: "Realize K/Z", cls: "", get: (h) => totalRealizedOf(h.symbol) },
+  { key: "realized", label: "Realize", cls: "", get: (h) => totalRealizedOf(h.symbol) },
 ];
 
 function sortRows(rows, groupKey) {
@@ -162,16 +165,21 @@ function renderGroup(title, rows, groupKey, horizon = "long") {
         : fr.costBasis
           ? `<div class="zc-cell"${zcTip}><div class="zc-bar"><div class="zc-fill" style="width:${Math.min(100, fr.recovered || 0).toFixed(0)}%"></div></div><span class="zc-tag">%${(fr.recovered || 0).toFixed(0)}${fr.sellShares != null ? ` · ${fmtNum(fr.sellShares, 1)} adet` : ""}</span></div>`
           : `<span class="muted">—</span>`;
+    // Sembol hücresi kimliğin tamamını taşır: kod + sinyal + rozetler + ad (altyazı).
+    // Rozetler asıl bilgi, ad ikincil — o yüzden ad küçük ve solgun, rozetler üstte.
+    const rozetler = `${ptChip}${guardChip}${earnChip}${swingChip}${freeChip}${optChip}`;
     return `<tr>
-      <td class="l">${symCell} ${sigBadge}</td>
-      <td class="l nm">${h.name || ""} ${ptChip}${guardChip}${earnChip}${swingChip}${freeChip}${optChip}</td>
+      <td class="l hl-id">
+        <div class="hl-id-top">${symCell} ${sigBadge}${rozetler}</div>
+        ${h.name ? `<div class="hl-id-nm">${h.name}</div>` : ""}
+      </td>
       <td>${h.error ? `<span class="err">veri yok</span>` : priceCell}</td>
       <td class="spark-col">${h.type === "stock" ? sparklineSVG(h.spark) : `<span class="spark-na">—</span>`}</td>
-      <td>${fmtNum(h.quantity, 6)}</td>
-      <td>${money(costShow)}</td>
+      <td class="hl-qty"><b>${fmtNum(h.quantity, h.quantity >= 100 ? 2 : 4)}</b><span>× ${money(costShow != null && h.quantity ? costShow / h.quantity : null)}</span></td>
       <td>${mvShow != null ? money(mvShow) : "—"}</td>
-      <td class="${profitShow != null ? cls(profitShow) : ""}">${profitShow != null ? money(profitShow) : "—"}</td>
-      <td class="${profitPct != null ? cls(profitPct) : ""}">${fmtPct(profitPct)}</td>
+      <td class="hl-pnl ${profitShow != null ? cls(profitShow) : ""}">
+        <b>${profitShow != null ? money(profitShow) : "—"}</b>${profitPct != null ? `<span>${fmtPct(profitPct)}</span>` : ""}
+      </td>
       <td>${realCell}</td>
       ${isStockGroup ? `<td class="zc-col">${frCell}</td>` : ""}
       <td><div class="row-actions">
@@ -189,10 +197,10 @@ function renderGroup(title, rows, groupKey, horizon = "long") {
       <thead><tr>${sortableHead(groupKey)}</tr></thead>
       <tbody>${body}</tbody>
       <tfoot><tr>
-        <td class="l" colspan="5">Toplam</td>
-        <td>${money(sumCost)}</td><td>${money(sumMv)}</td>
-        <td class="${cls(tProfit)}">${money(tProfit)}</td>
-        <td class="${cls(tProfit)}">${fmtPct(sumCost ? (tProfit / sumCost) * 100 : 0)}</td>
+        <td class="l" colspan="3">Toplam</td>
+        <td>${money(sumCost)}</td>
+        <td>${money(sumMv)}</td>
+        <td class="hl-pnl ${cls(tProfit)}"><b>${money(tProfit)}</b><span>${fmtPct(sumCost ? (tProfit / sumCost) * 100 : 0)}</span></td>
         <td>${sumReal ? `<span class="${cls(sumReal)}">${fmtUSD(sumReal)}</span>` : ""}</td>
         ${isStockGroup ? "<td></td>" : ""}<td></td>
       </tr></tfoot>
@@ -241,9 +249,11 @@ function renderSwingGroup(positions) {
       price: p.price, dayChangePct: p.dayChangePct,
       guard: null, currentR: p.currentR, mfeR: p.mfeR, maeR: p.maeR,
       timeStop: false, belowMa10: false, belowMa20: false, daysOpen: p.daysOpen,
+      sayilanValueUSD: 0, hasSayilan: false,
     });
     g.ids.push(p.id); g.count++;
     g.qty += p.qty; g.entryW += p.entry * p.qty;
+    if (p.sayilanValueUSD != null) { g.sayilanValueUSD += p.sayilanValueUSD; g.hasSayilan = true; }
     if (p.stop != null) { g.stopW += p.stop * p.qty; g.stopQty += p.qty; }
     if (p.target != null) { g.tgtW += p.target * p.qty; g.tgtQty += p.qty; }
     g.costUSD += p.costUSD || 0;
@@ -269,19 +279,32 @@ function renderSwingGroup(positions) {
     plUSD: g.hasVal ? g.plUSD : null, plPct: g.hasVal && g.costUSD ? (g.plUSD / g.costUSD) * 100 : null,
     guard: g.guard, currentR: g.currentR, mfeR: g.mfeR, maeR: g.maeR,
     timeStop: g.timeStop, belowMa10: g.belowMa10, belowMa20: g.belowMa20, daysOpen: g.daysOpen,
+    // Toplama giren pay: Varlıklar'da da duran adet 0'dır (çift sayım yok)
+    sayilanValueUSD: g.hasSayilan ? g.sayilanValueUSD : null,
+    kaynak: !g.hasSayilan ? null : g.sayilanValueUSD <= 0.005 ? "portfoy" : (g.valueUSD != null && g.sayilanValueUSD >= g.valueUSD - 0.005) ? "ayri" : "karma",
   })).sort((a, b) => (b.valueUSD ?? b.costUSD) - (a.valueUSD ?? a.costUSD));
-  let sCost = 0, sVal = 0;
+  let sCost = 0, sVal = 0, sEk = 0, planN = 0;
   const body = merged.map((p) => {
     if (p.valueUSD != null) { sCost += p.costUSD || 0; sVal += p.valueUSD; } // canlı fiyatı olanlar (apples-to-apples)
+    if (p.sayilanValueUSD != null) sEk += p.sayilanValueUSD;
+    if (p.kaynak === "portfoy") planN++;
     const priceCell = p.price != null
       ? `${fmtUSD(p.price)}${p.dayChangePct != null ? ` <span class="chip ${cls(p.dayChangePct)}">${fmtPct(p.dayChangePct)}</span>` : ""}`
       : `<span class="muted">—</span>`;
     const mergeBadge = p.count > 1 ? ` <span class="sw-merge" title="${p.count} swing birleşik · ağırlıklı ort.">×${p.count}</span>` : "";
+    // Bu satırın parası portföy toplamına nereden giriyor? (14 Ağu çift sayım düzeltmesi)
+    const kaynakBadge = p.kaynak === "portfoy"
+      ? ` <span class="sw-src plan" title="Bu adet Varlıklar tablosunda zaten var. Swing Defteri burada yalnız PLANI (stop/hedef/tez) takip eder — portföy toplamına ikinci kez eklenmez.">plan</span>`
+      : p.kaynak === "karma"
+        ? ` <span class="sw-src karma" title="Adedin bir kısmı Varlıklar'da var (plan), fazlası yalnız defterde duruyor ve toplama ekleniyor.">kısmen ayrı</span>`
+        : p.kaynak === "ayri"
+          ? ` <span class="sw-src ayri" title="Varlıklar'da yok — ayrı bir swing alımı olarak portföy toplamına ekleniyor.">ayrı alım</span>`
+          : "";
     const editBtn = p.count > 1
       ? `<button class="btn icon" data-swdeck="1" title="${p.count} swing — Swing Defteri'nde gör">✎</button>`
       : `<button class="btn icon" data-swedit="${p.ids[0]}" title="Swing Defteri'nde düzenle">✎</button>`;
     return `<tr>
-      <td class="l"><span class="sym sym-link" data-swpos="${p.symbol}" title="Grafik + analiz">${p.symbol}</span>${mergeBadge}</td>
+      <td class="l"><span class="sym sym-link" data-swpos="${p.symbol}" title="Grafik + analiz">${p.symbol}</span>${mergeBadge}${kaynakBadge}</td>
       <td class="l nm">${p.name || ""}</td>
       <td>${priceCell}</td>
       <td>${fmtUSD(p.entry)}</td>
@@ -297,8 +320,17 @@ function renderSwingGroup(positions) {
     </tr>`;
   }).join("");
   const tPl = sVal - sCost;
+  // Bu tablo bir VARLIK listesi değil, PLAN listesidir: satırların çoğu Varlıklar'da da
+  // duran pozisyonlardır. Toplam satırı "portföye eklenen tutar" sanılmasın diye ne kadarının
+  // gerçekten eklendiği ayrıca yazılır (14 Ağu: LITE+ONDS iki kez sayılıyordu).
+  const hepsiPlan = planN === merged.length && merged.length > 0;
+  const kapsamNot = hepsiPlan
+    ? `<span class="sw-grp-note" title="Bu semboller Varlıklar tablosunda zaten sayılıyor. Burası yalnız stop/hedef planını ve çıkış disiplinini gösterir.">· toplama dahil değil — Varlıklar'da sayılıyor</span>`
+    : sEk > 0.005
+      ? `<span class="sw-grp-note" title="Yalnız Varlıklar'da olmayan adetler portföy toplamına eklenir.">· toplama eklenen: <b>${fmtUSD(sEk)}</b></span>`
+      : "";
   return `<div class="group group-swing">
-    <div class="group-title"><span class="dot"></span>⚡ ABD — Swing (stop / hedef) <span class="cnt">· ${merged.length} sembol${positions.length !== merged.length ? ` (${positions.length} işlem)` : ""} · Swing Defteri</span></div>
+    <div class="group-title"><span class="dot"></span>⚡ ABD — Swing planları <span class="cnt">· ${merged.length} sembol${positions.length !== merged.length ? ` (${positions.length} işlem)` : ""} · Swing Defteri ${kapsamNot}</span></div>
     <div class="tbl-wrap"><table>
       <thead><tr>
         <th class="l">Sembol</th><th class="l">Ad</th><th>Fiyat</th><th>Giriş</th><th>Stop</th><th>Hedef</th>
@@ -306,7 +338,7 @@ function renderSwingGroup(positions) {
       </tr></thead>
       <tbody>${body}</tbody>
       <tfoot><tr>
-        <td class="l" colspan="7">Toplam</td>
+        <td class="l" colspan="7">Swing'de yönetilen</td>
         <td>${fmtUSD(sCost)}</td><td>${fmtUSD(sVal)}</td>
         <td class="${cls(tPl)}">${fmtUSD(tPl)}</td>
         <td class="${cls(sCost ? (tPl / sCost) * 100 : 0)}">${fmtPct(sCost ? (tPl / sCost) * 100 : 0)}</td><td></td><td></td>

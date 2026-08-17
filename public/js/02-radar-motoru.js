@@ -166,10 +166,13 @@ function renderRadar() {
 
 /* ---------------- Swing Tarayıcı (radar evreni + izleme) ---------------- */
 let SWING = { data: null, filter: "all" };
+/* Üretilen kurulumlar. "oversold" 11 Ağu 2026'da kaldırıldı — ham mumlarda,
+ * kapılardan sonra ölçüldüğünde kurulum ARAMAMAKTAN 2.68 puan kötüydü
+ * (bkz. server.js buildPlan ve scripts/olcum-kurulum.mjs). Sunucu artık bu tipi
+ * üretmiyor; burada da yer tutmuyor. Geçmiş defter kayıtları korunuyor. */
 const SETUP_META = {
   breakout: { label: "Breakout", cls: "sw-breakout" },
   pullback: { label: "Pullback", cls: "sw-pullback" },
-  oversold: { label: "Aşırı satım", cls: "sw-oversold" },
 };
 const GRADE_CLS = { A: "g-a", B: "g-b", C: "g-c", D: "g-d" };
 
@@ -480,10 +483,13 @@ function oppPositionWindow(o) {
   if (ps.unknown) return `<div class="opp-pos muted">💰 Pozisyon penceresi “Genel Bakış” yüklenince hesaplanır.</div>`;
   const L = ps.levels[0]; // %1 temkinli
   if (!L) return "";
-  const rewardTRY = L.shares * (o.target - o.entry) * ps.usdtry;
+  // İşlem $ cinsinden yapılıyor (ABD hissesi) → risk/ödül de ÖNCE $ okunur;
+  // ₺ karşılığı parantezde kalır (kur oynayınca kafa karıştırmasın).
+  const rewardUSD = L.shares * (o.target - o.entry);
+  const rewardTRY = rewardUSD * ps.usdtry;
   return `<div class="opp-pos">
     <div class="opp-pos-main">Gir: <b>%${L.posPct.toFixed(1)}</b> portföy · <b>${fmtTRY0(L.posValTRY)}</b> <span class="muted">(≈${fmtUSD0(L.posVal)} · ${fmtNum(L.shares, 2)} adet${L.capped ? " · %25 sınırı" : ""})</span></div>
-    <div class="opp-pos-rr"><span class="neg">stopta −${fmtTRY0(L.riskTRY)}</span> &nbsp;→&nbsp; <span class="pos">hedefte +${fmtTRY0(rewardTRY)}</span> &nbsp;<b>${o.rr != null ? o.rr.toFixed(1) + "R" : ""}</b></div>
+    <div class="opp-pos-rr"><span class="neg">stopta −${fmtUSD0(L.riskUSD)}</span> <span class="muted">(−${fmtTRY0(L.riskTRY)})</span> &nbsp;→&nbsp; <span class="pos">hedefte +${fmtUSD0(rewardUSD)}</span> <span class="muted">(+${fmtTRY0(rewardTRY)})</span> &nbsp;<b>${o.rr != null ? o.rr.toFixed(1) + "R" : ""}</b></div>
   </div>`;
 }
 
@@ -616,8 +622,9 @@ function oppHeroCard(o) {
           ${tags}
         </div>
         ${oppHeroSpark(o)}
-        <div class="opp-hero-scorebox" title="Fırsat skoru — kalite + R/R + momentum + formasyon">
+        <div class="opp-hero-scorebox" title="${oppSkorIpucu(o)}">
           <span class="opp-hero-score">${o.score}</span><span class="opp-hero-scorelbl">fırsat skoru</span>
+          ${oppKalibreEtiket(o)}
         </div>
       </div>
       <div class="opp-hero-right opp-body">
@@ -625,6 +632,30 @@ function oppHeroCard(o) {
       </div>
     </div>
   </div>`;
+}
+
+/* ---- Skorun ölçümle hizası (score-calibration.js) -------------------------
+ * Kart eskiden "100 FIRSAT SKORU" yazarken hemen altında "geçmiş isabet %14"
+ * yazıyordu; iki sayı birbirini görmüyordu. Skor artık ölçülmüş beklentiyle
+ * düzeltiliyor ve DURUMU görünür: ölçülmedi / yetersiz / kanıtlı / olumsuz.
+ * Rozet, sayının kendisinden daha önemli — 100 yazan bir sayı kanıta
+ * dayanmıyorsa bunu söylemek zorundayız. */
+const KALIBRE_META = {
+  olculmedi: { kisa: "ölçülmedi", cls: "kb-yok" },
+  "zayif-kanit": { kisa: "kanıt zayıf", cls: "kb-zayif" },
+  kanitli: { kisa: "ölçümle teyitli", cls: "kb-iyi" },
+  "olumsuz-kanit": { kisa: "ölçüm olumsuz", cls: "kb-kotu" },
+};
+function oppKalibreEtiket(o) {
+  const k = o.kalibre;
+  if (!k) return "";
+  const m = KALIBRE_META[k.durum] || KALIBRE_META.olculmedi;
+  const dusus = o.hamSkor != null && o.hamSkor !== o.score ? ` ${o.hamSkor}→${o.score}` : "";
+  return `<span class="opp-kalibre ${m.cls}">${m.kisa}${dusus}</span>`;
+}
+function oppSkorIpucu(o) {
+  const temel = "Fırsat skoru — kalite + R/R + momentum + formasyon";
+  return o.kalibre ? `${temel}\n${o.kalibre.aciklama}`.replace(/"/g, "") : temel;
 }
 
 // 2-N: kompakt, tıkla→genişle tablo satırı
@@ -638,7 +669,7 @@ function oppTableRow(o, i) {
     <button class="opp-row-head" aria-expanded="false">
       <span class="orh-rank">#${i + 1}</span>
       <span class="orh-id"><b>${o.symbol}</b>${flag ? ` <span class="orh-flag">${flag}</span>` : ""} ${tags}<span class="orh-name">${o.name ? o.name.replace(/"/g, "") : ""}</span></span>
-      <span class="orh-score" title="Fırsat skoru">${o.score}</span>
+      <span class="orh-score ${o.kalibre ? (KALIBRE_META[o.kalibre.durum] || {}).cls || "" : ""}" title="${oppSkorIpucu(o)}">${o.score}</span>
       <span class="orh-rr">${o.rr != null ? o.rr.toFixed(1) + "R" : "—"}</span>
       <span class="orh-setup">${su ? `<span class="chip ${su.cls}">${o.setup.label}</span>` : ""}<span class="sw-vb v-${v.tone}">${v.label}</span></span>
       <span class="orh-arrow">▾</span>

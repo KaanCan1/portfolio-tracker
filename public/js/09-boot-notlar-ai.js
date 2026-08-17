@@ -58,22 +58,22 @@ function renderGrowth() {
   const hero = `
     <div class="gr-hero">
       <div class="gr-mini gr-accent">
-        <div class="gr-mini-lbl">🎁 Bedava Pozisyon Değeri</div>
+        <div class="gr-mini-lbl">Bedava pozisyon değeri</div>
         <div class="gr-mini-val pos">${fmtUSD0(freeValue)}</div>
         <div class="gr-mini-sub">${freeCount} pozisyon riskini sıfırladı</div>
       </div>
       <div class="gr-mini">
-        <div class="gr-mini-lbl">Riskteki Ana Para</div>
+        <div class="gr-mini-lbl">Riskteki ana para</div>
         <div class="gr-mini-val">${fmtUSD0(totalAtRisk)}</div>
         <div class="gr-mini-sub">hâlâ geri alınmamış sermaye</div>
       </div>
       <div class="gr-mini">
-        <div class="gr-mini-lbl">Kilitli Kâr (toplam realize)</div>
+        <div class="gr-mini-lbl">Kilitli kâr <i>toplam realize</i></div>
         <div class="gr-mini-val ${pos(totalLocked)}">${fmtUSD0(totalLocked)}</div>
         <div class="gr-mini-sub">cebe giren, kaybedilemez</div>
       </div>
       <div class="gr-mini">
-        <div class="gr-mini-lbl">Bedava Oran</div>
+        <div class="gr-mini-lbl">Bedava oran</div>
         <div class="gr-mini-val">${freePct.toFixed(0)}<span class="gr-pctsign">%</span></div>
         <div class="gr-mini-sub">hisse değerinin risksiz kısmı</div>
       </div>
@@ -84,7 +84,7 @@ function renderGrowth() {
   const decomp = `
     <section class="panel">
       <div class="panel-head">
-        <div><h2>Sermaye Ayrışması</h2>
+        <div><h2>Sermaye ayrışması</h2>
         <span class="chart-sub">Toplam hisse değerinin ne kadarı hâlâ riskte, ne kadarı bedava (kâr yastığı)</span></div>
       </div>
       <div class="gr-split">
@@ -133,7 +133,7 @@ function renderGrowth() {
   const engine = `
     <section class="panel">
       <div class="panel-head">
-        <div><h2>Sıfır-Maliyet Motoru <span class="gr-chip">${freeCount} bedava · ${nearCount} yakın</span></h2>
+        <div><h2>Sıfır-maliyet motoru <span class="gr-chip">${freeCount} bedava · ${nearCount} yakın</span></h2>
         <span class="chart-sub">Her pozisyonun ana para geri alım durumu + "ne zaman/ne kadar sat" önerisi</span></div>
       </div>
       <div class="gr-pos-grid">${cards || `<div class="sw-empty">Portföyde maliyetli hisse pozisyonu yok. Genel Bakış'tan pozisyon ekleyince burada free-roll takibi başlar.</div>`}</div>
@@ -156,14 +156,25 @@ function renderGrowth() {
   const growth = `
     <section class="panel gr-growth-panel">
       <div class="panel-head">
-        <div><h2>Büyüme Eğrisi <span class="gr-chip">12 ay</span></h2>
+        <div><h2>Büyüme eğrisi <span class="gr-chip">12 ay</span></h2>
         <span class="chart-sub">Ay ay biriken kilitli kâr — tezin: kârı cebe koy, ana parayı büyüt</span></div>
         <div class="gr-growth-tot ${pos(totalCum)}">${totalCum >= 0 ? "+" : ""}${fmtUSD0(totalCum)}<span>toplam realize</span></div>
       </div>
       ${growthCurve(cumPts, curKey2)}
     </section>`;
 
-  el.innerHTML = hero + decomp + growth + engine;
+  // 15 Ağu: dört blok alt altaydı, hepsi aynı ağırlıkta. Diğer sekmelerdeki ray
+  // dili buraya da geldi — hero giriş noktası (ray almaz), gerisi kanıtıyla bölüm.
+  const bedavaN = rows.filter((x) => x.fr.free).length;
+  // fmtUSD0 negatifi "$-268" basar; işaret rakamın önüne gelmeli (tasarım dili)
+  const s$ = (n) => (n < 0 ? "−" : "+") + fmtUSD0(Math.abs(n));
+  // "bedava" iki rayda iki farklı şey demek olurdu: houseMoney = riskte OLMAYAN değer,
+  // fr.free = ana parası tamamen çıkmış pozisyon. İlkinin adı değişti.
+  el.innerHTML = hero
+    + swSection("Sermaye nerede", `${rows.length} pozisyon · riskte ${fmtUSD0(totalAtRisk)} · riskte değil ${fmtUSD0(houseMoney)}`, decomp)
+    + swSection("Ne biriktirdim", `${s$(totalCum)} toplam realize · ay ay`, growth)
+    + swSection("Sıfır maliyete giden pozisyonlar",
+        bedavaN ? `${bedavaN}/${rows.length} pozisyon bedava biniyor` : `${rows.length} pozisyon · henüz bedava binen yok`, engine);
 }
 // Kümülatif büyüme eğrisi (SVG alan+çizgi) — aylar x, biriken realize y
 function growthCurve(pts, curKey) {
@@ -260,6 +271,23 @@ const SWING_SEGS = ["swingdefteri", "buyume"]; // ⚡ Swing hub segmentleri (tek
 // Eski hash'ler (yer imi/paylaşılan link) → birleşik Radar + ilgili filtre
 let pendingRadarFilter = null;
 const RADAR_ALIASES = { firsat: "swing", hisse: "all", swing: "swing", tarama: "all", cuma: "cuma", sinyal: "swing", leopold: null };
+/* Boş bölüm rayını gizle — 14 Ağu.
+ * Bölüm rayları index.html'de STATİK duruyor ama içindeki panellerin çoğunu JS
+ * dolduruyor (rule1Panel, topInsights, riskBudgetPanel…). Veri gelmediğinde ya da
+ * o gün uyarı yoksa ray boş bir alanı etiketliyor — "kanıtı olmayan bölüm var gibi
+ * davranmaz" kuralının tam tersi. Gövdesi boşsa bölümün tamamı gizlenir.
+ * Yalnız görünürlük; DOM'a dokunmaz, veri gelince kendiliğinden geri açılır. */
+function sw2BosBolumleriGizle(kok = document) {
+  kok.querySelectorAll(".sw2-sec").forEach((sec) => {
+    const govde = sec.querySelector(".sw2-sec-body");
+    if (!govde) return;
+    // "Dolu" ölçütü metin ya da çizilmiş bir öğe (svg/canvas/tablo da sayılır)
+    const dolu = govde.textContent.trim().length > 0
+      || govde.querySelector("svg, canvas, img, input, button, table");
+    sec.hidden = !dolu;
+  });
+}
+
 function showView(name) {
   // Eski sekme adresi geldiyse Radar'a çevir, ilgili filtreyi hatırla
   if (name in RADAR_ALIASES) {
@@ -278,6 +306,7 @@ function showView(name) {
     try { localStorage.setItem("swingSeg", name); } catch {}
   }
   if (("#" + name) !== location.hash) history.replaceState(null, "", "#" + name);
+  sw2BosBolumleriGizle(document.querySelector("#view-" + name) || document);
   window.scrollTo(0, 0);
   $("#sidebar")?.classList.remove("open"); const _bd = $("#navBackdrop"); if (_bd) _bd.hidden = true; // mobilde menüyü kapat
   if (name === "notlar") loadNotes();
@@ -505,6 +534,13 @@ function renderNotes() {
   if (q) items = items.filter((n) =>
     (n.text || "").toLowerCase().includes(q) || (n.title || "").toLowerCase().includes(q) || (n.symbol || "").toLowerCase().includes(q));
   items = items.slice().sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0)); // pinli üste (tarih sırası korunur)
+  // Bölüm rayının kanıt metni (15 Ağu): kaç not var, kaçı süzülmüş, kaçı sabit
+  const sayac = $("#notesSecN");
+  if (sayac) {
+    const pinli = NOTES.filter((n) => n.pinned).length;
+    sayac.textContent = !NOTES.length ? "henüz not yok"
+      : `${items.length === NOTES.length ? `${NOTES.length} not` : `${items.length}/${NOTES.length} not`}${pinli ? ` · ${pinli} sabit` : ""}`;
+  }
   if (!items.length) {
     list.innerHTML = `<div class="notes-empty">${q ? "Aramayla eşleşen not yok." : NOTES.length ? "Bu etikette not yok." : "Henüz not yok — yukarıdan ilk fikrini ekle."}</div>`;
     return;

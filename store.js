@@ -15,6 +15,26 @@
  * server.js'te yazılı.
  */
 
+/* ── jsonb yazma sözleşmesi ────────────────────────────────────────────────
+ * NEDEN VAR (10 Ağu 2026 — bir haftadır sessizce veri kaybettiren hata):
+ * node-postgres bir JS DİZİSİNİ parametre olarak alınca onu POSTGRES DİZİSİ
+ * sanar ve `{...}` sözdizimine çevirir. Hedef sütun jsonb olduğu için sorgu
+ * "invalid input syntax for type json" ile patlar. NESNELER sorunsuz geçtiği
+ * için hata yalnız DİZİ şeklindeki anahtarlarda görünür — pratikte tek kurban
+ * signal_ledger'dı (o bir dizi; challenge_ledger nesne olduğu için yazıyordu).
+ *
+ * Sonuç 3 Ağu'da kapatıldığı sanılan yaranın aynısıydı: dbYaz false dönüyor,
+ * depo sessizce dosyaya düşüyor, Render'ın geçici diski deploy'da siliniyor.
+ * Üstelik hata `catch {}` ile yutulduğu için loglarda tek satır iz yoktu.
+ *
+ * Çözüm: değeri HER ZAMAN JSON metnine çevir ve sütuna ::jsonb ile cast et.
+ * Böylece dizi/nesne/sayı ayrımı ortadan kalkar. */
+export const jsonMetin = (v) => JSON.stringify(v ?? null);
+
+export const appDataYaz = (yalnizYoksa = false) => (yalnizYoksa
+  ? "INSERT INTO app_data(key,value) VALUES($1,$2::jsonb) ON CONFLICT(key) DO NOTHING"
+  : "INSERT INTO app_data(key,value,updated_at) VALUES($1,$2::jsonb,now()) ON CONFLICT(key) DO UPDATE SET value=$2::jsonb, updated_at=now()");
+
 export function depoOlustur({ dbOku, dbYaz, dosyaOku, dosyaYaz, log = console }) {
   if (typeof dbOku !== "function" || typeof dbYaz !== "function") throw new Error("depoOlustur: dbOku/dbYaz zorunlu");
   if (typeof dosyaOku !== "function" || typeof dosyaYaz !== "function") throw new Error("depoOlustur: dosyaOku/dosyaYaz zorunlu");

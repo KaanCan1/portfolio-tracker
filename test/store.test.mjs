@@ -1,7 +1,7 @@
 /* GERÇEK modülü import eder. */
 import test from "node:test";
 import assert from "node:assert/strict";
-import { depoOlustur } from "../store.js";
+import { depoOlustur, appDataYaz, jsonMetin } from "../store.js";
 
 const sessiz = { log() {} };
 
@@ -128,4 +128,28 @@ test("normalize: eksik/bozuk kaydı beklenen şekle sokar", async () => {
 test("depoOlustur eksik bağımlılıkla kurulamaz", () => {
   assert.throws(() => depoOlustur({ dbOku: async () => null, dbYaz: async () => true }), /dosyaOku/);
   assert.throws(() => depoOlustur({ dosyaOku: async () => "", dosyaYaz: async () => {} }), /dbOku/);
+});
+
+/* ── jsonb yazma sözleşmesi ────────────────────────────────────────────────
+ * 10 Ağu 2026: signal_ledger bir DİZİ olduğu için node-postgres onu Postgres
+ * dizisine çeviriyor, jsonb sütun reddediyor, hata catch ile yutuluyor ve
+ * depo sessizce geçici diske düşüyordu. Bir haftadır her deploy'da sinyal
+ * kaydı kayboluyordu. Bu testler o sözleşmeyi kilitler. */
+test("jsonMetin: dizi de nesne de METİN olarak gider (pg dizi sanmasın)", () => {
+  assert.equal(typeof jsonMetin([{ a: 1 }]), "string");
+  assert.equal(typeof jsonMetin({ a: 1 }), "string");
+  assert.deepEqual(JSON.parse(jsonMetin([1, 2])), [1, 2]);
+  assert.equal(jsonMetin(undefined), "null");   // param eksikse sorgu patlamasın
+});
+
+test("appDataYaz: değer parametresi jsonb'ye cast edilir", () => {
+  const normal = appDataYaz();
+  assert.match(normal, /\$2::jsonb/);
+  assert.match(normal, /ON CONFLICT\(key\) DO UPDATE/);
+  // cast HER İKİ kullanımda da olmalı — biri unutulursa yazma yine patlar
+  assert.equal((normal.match(/\$2::jsonb/g) || []).length, 2);
+
+  const yalnizYoksa = appDataYaz(true);
+  assert.match(yalnizYoksa, /\$2::jsonb/);
+  assert.match(yalnizYoksa, /DO NOTHING/);
 });

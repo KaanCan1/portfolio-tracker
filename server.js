@@ -7,16 +7,39 @@ import { readFile, writeFile } from "node:fs/promises";
 import { readFileSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { qmAnalyze } from "./qm.js";
+// qmADR eksikti → /api/risk her çağrıda 500 ("qmADR is not defined") atıyor,
+// Profesyonel Risk Masası "Risk verisi alınamadı" gösteriyordu (15 Ağu).
+// `node --check` bunu görmez: tanımsız değişken sözdizimi hatası değil, çalışma
+// anı hatasıdır — CLAUDE.md'deki tuzağın aynısı, bu kez sunucu tarafında.
+import { qmAnalyze, qmADR } from "./qm.js";
+import { signalFeatures } from "./signal-features.js";
+import { KAPI, oynaklikPct, goreliGuc, kurulumKapisi } from "./signal-gates.js";
+import { kanitOzeti, kalibreSkor } from "./score-calibration.js";
 import { bootCI, mulberry32, swingProven } from "./swing-proven.js";
 import { deriveCashTarget } from "./cash-target.js";
 import { digestHtml, digestSubject } from "./guard-mail.js";
 import { kaynak, kaynakDefteri } from "./sources.js";
 import { adrAt as chAdrAt, seansIciGirisSinyali } from "./entry-modes.js";
-import { depoOlustur } from "./store.js";
+import { depoOlustur, appDataYaz, jsonMetin } from "./store.js";
+import { swingKapsam, sayilanPay } from "./swing-kapsam.js";
+import { kiyasHesapla, kiyasHukum } from "./kiyas.js";
+import { korelasyonCarpaniHesapla } from "./boyutlandirma.js";
+
+/* ÖLÇÜM TABANI (16 Ağu 2026). Defterdeki 2 Mart – 30 Mayıs arası 24 kayıt GERİYE
+ * DOLDURULMUŞ: hepsi tek bir kuru (45,9267) taşıyor ve aralarında 30 güne varan
+ * boşluklar var. Kaan doğruladı. Seviye olarak yaklaşık doğru olabilirler ama
+ * GÜNLÜK ADIM olarak sahtedirler; Sharpe, volatilite, beta, maks düşüş ve alfa
+ * hepsi günlük adımdan türer. İlk gerçek kayıt 2 Haziran.
+ *
+ * Grafiklerden silinmez (kullanıcının kendi kaydı, seviye olarak anlamlı) — yalnız
+ * ÖLÇÜM panelleri bu tarihten başlar. Tek yerden gelir ki kıyas ve risk karnesi
+ * aynı pencereyi konuşsun; iki panelin iki pencere konuşması bu projede zaten bir
+ * kez yaşandı (bkz. kiyas.js başlığı). */
+const OLCUM_BASLANGIC = "2026-06-01";
 import { rateLimiter } from "./rate-limit.js";
 import { kuyrukKarari } from "./guard-queue.js";
 import { pozisyonBulgulari, bayatKaynakBulgusu, usd0 } from "./guard-alerts.js";
+import { kayitEkle as gdKayitEkle, hukumYaz as gdHukumYaz, isabetOlc as gdIsabetOlc, HUKUMLER as GD_HUKUMLER } from "./guard-ledger.js";
 import { canliBarBindir } from "./live-bar.js";
 
 // Dış veri kaynaklarının tek kaydı — sağlık ucu buradan okur
@@ -277,11 +300,9 @@ async function kvLoad(key) {
 async function kvSave(key, value) {
   if (!dbPool) return;
   try {
-    await dbPool.query(
-      "INSERT INTO app_data(key,value,updated_at) VALUES($1,$2,now()) ON CONFLICT(key) DO UPDATE SET value=$2, updated_at=now()",
-      [key, value]);
+    await dbPool.query(appDataYaz(), [key, jsonMetin(value)]);
     return true;
-  } catch { return false; }
+  } catch (e) { console.error(`kalıcılık: ${key} yazılamadı —`, e.message); return false; }
 }
 
 /* Ortak kalıcılık — 13 anahtarın elle yazılmış load/save çiftleri yerine.
@@ -293,12 +314,9 @@ const depo = depoOlustur({
   dbYaz: async (k, v, o = {}) => {
     if (!dbPool) return false;
     try {
-      const sql = o.yalnizYoksa
-        ? "INSERT INTO app_data(key,value) VALUES($1,$2) ON CONFLICT(key) DO NOTHING"
-        : "INSERT INTO app_data(key,value,updated_at) VALUES($1,$2,now()) ON CONFLICT(key) DO UPDATE SET value=$2, updated_at=now()";
-      await dbPool.query(sql, [k, v]);
+      await dbPool.query(appDataYaz(o.yalnizYoksa), [k, jsonMetin(v)]);
       return true;
-    } catch { return false; }
+    } catch (e) { console.error(`kalıcılık: ${k} yazılamadı —`, e.message); return false; }
   },
   dosyaOku: (yol) => readFile(yol, "utf8"),
   dosyaYaz: (yol, metin) => writeFile(yol, metin, "utf8"),
@@ -309,6 +327,12 @@ const depo = depoOlustur({
  * DEĞİŞMEZ. Böylece Radar/Swing evreni değişse de geçmiş kararlar kaymaz
  * (%100 dürüst kayıt). Çıkışlar frozen parametrelerden deterministik hesaplanır. */
 const CH_KEY = "challenge_ledger";
+/* Alfa Avı giriş kuralının sürümü. 12 Ağu 2026'da kurulum kapıları (oynaklık
+ * tavanı + göreli güç, EP muaf) eklendi. İşleme yazılır ki kapı ÖNCESİ ve
+ * SONRASI sonuçlar aynı karnede karışmasın — oversold'da öğrendiğimiz ders:
+ * kural değişince ölçüm sıfırlanır, yoksa artık üretilmeyen kararların zararı
+ * yeni kuralı cezalandırır. */
+const CH_KURAL = "kapi-v1";
 const CH_FILE = join(__dirname, "challenge_ledger.json");
 const chDepo = depo(CH_KEY, { dosya: CH_FILE, varsayilan: { trades: [] } });
 async function chLoadLedger() { return chDepo.oku(); }
@@ -572,7 +596,47 @@ function chRegimeTodaySrv(Q, raiToday) {
   return { state: st, txt, qqq: c, rai, emaState: emaSt };
 }
 // İzleme listesi (server) — client chWatch ile birebir mantık + "neden bekliyor?" gerekçesi
-function chWatchSrv(S, watch, held, reg, startDate) {
+/* ── Alfa Avı kurulum kapıları (12 Ağu 2026) ───────────────────────────────
+ * Radar/swing tarafındaki iki kapı (oynaklık tavanı + göreli güç) Alfa Avı'na da
+ * uygulanır: ölçülmüş tek edge bunlar (152 gün, 6452 bar — kapıdan geçen herhangi
+ * bir bar 10 günde endeksi 2.35 puan yeniyor). Aynı dil iki motorda da geçerli.
+ *
+ * TEK İSTİSNA — EP (katalizör) şeridi göreli güç kapısından MUAF. Motorun kendi
+ * kuralı zaten böyle ("EP muaf: katalizör yeni lider doğurur") ve gerekçesi
+ * sağlam: katalizör günü tanımı gereği YENİ liderlik doğurur, geriye dönük 60
+ * günlük RS ise henüz eski hikâyeyi ölçer. Defterdeki 7 işlemde bunun izi var —
+ * kapının eleyeceği 3 işlemin 2'si EP'ydi ve RS'leri kıl payı eksiydi
+ * (SMCI −1.2, AMZN −1.7). Oynaklık tavanı ise HER şeride uygulanır.
+ *
+ * NOT: buradaki RS, motorun mevcut rsPct'sinden FARKLI bir ölçü. rsPct evren
+ * içi yüzdeliktir ve kapı değil YARIM BOYUT tetikler (kodda gerekçesi yazılı:
+ * sert yüzdelik kapısı dipten dönen kazananları eliyordu). Buradaki kapı ise
+ * endekse karşı 60 günlük getiri farkı — farklı soru, farklı eşik. */
+function chKapiFor(S, Q, sym, d, lane) {
+  const s = S[sym];
+  if (!s?.v?.length) return { gecti: true, kapi: null, sebep: null };   // veri yoksa fail-open
+  const i = chNear(s, d);
+  if (i == null || i < 20) return { gecti: true, kapi: null, sebep: null };
+  const v = s.v, fiyat = v[i].close;
+  let atr = null;
+  if (i >= 14) {
+    let t = 0;
+    for (let j = i - 13; j <= i; j++)
+      t += Math.max(v[j].high - v[j].low, Math.abs(v[j].high - v[j - 1].close), Math.abs(v[j].low - v[j - 1].close));
+    atr = t / 14;
+  }
+  // EP şeridinde rsFark null geçilir → kurulumKapisi göreli güç kapısını uygulamaz
+  let rsFark = null;
+  if (lane !== "ep" && Q) {
+    const qi = chNear(Q, d), g = KAPI.rsUfukGun;
+    if (qi != null && qi > g && i > g)
+      rsFark = +(((fiyat - v[i - g].close) / v[i - g].close * 100) -
+        ((Q.v[qi].close - Q.v[qi - g].close) / Q.v[qi - g].close * 100)).toFixed(2);
+  }
+  return kurulumKapisi({ atrPct: oynaklikPct(atr, fiyat), rsFark });
+}
+
+function chWatchSrv(S, watch, held, reg, startDate, Q = null) {
   const out = [], today = new Date().toISOString().slice(0, 10);
   for (const sym of watch) {
     const s = S[sym]; if (!s) continue;
@@ -623,7 +687,14 @@ function chWatchSrv(S, watch, held, reg, startDate) {
       else { const sct = CH_SECT.map[sym]; const clash = sct && [...held].find((h) => CH_SECT.map[h] === sct); if (clash) why = `sektör tavanı: ${clash} aynı sektörde açık (${sct}) — sektör başına 1 pozisyon` + (why ? ` · ${why}` : ""); }
     }
     if (reg.state === "off" && !held.has(sym) && status !== "off") why = `REJİM KAPALI: ${reg.txt}` + (why ? ` · ayrıca: ${why}` : "");
-    out.push({ sym, status, close: c.close, trig, distPct, adr, nearHigh, up, entry, stop, tp2: entry * (1 + CH_ENG.tp2 / 100), notional, riskUSD: notional * (entry - stop) / entry, why });
+    /* Kurulum kapısı gerekçesi EN BAŞA yazılır: diğer sebepler "henüz tetik yok"
+     * gibi geçici durumlarken kapı KESİN bir engeldir — koşullar tutsa bile
+     * pozisyon açılmaz. Kullanıcı önce bunu görmeli. Şerit "tech" varsayılır;
+     * nöbet listesindeki aday henüz EP sinyali üretmiş değildir. */
+    const kapi = held.has(sym) ? { gecti: true } : chKapiFor(S, Q, sym, today, "tech");
+    if (!kapi.gecti) why = `KAPI — ${kapi.sebep}` + (why ? ` · ayrıca: ${why}` : "");
+    out.push({ sym, status, close: c.close, trig, distPct, adr, nearHigh, up, entry, stop, tp2: entry * (1 + CH_ENG.tp2 / 100), notional, riskUSD: notional * (entry - stop) / entry, why,
+      kapi: kapi.gecti ? null : { ad: kapi.kapi, sebep: kapi.sebep } });
   }
   const rank = { ready: 0, forming: 1, watch: 2, off: 3 };
   return out.sort((a, b) => rank[a.status] - rank[b.status] || a.distPct - b.distPct);
@@ -850,9 +921,15 @@ async function chEngineTick(trigger = "timer") {
         const rsPctV = chRsPct(S, watch, d, sig.sym);
         const weakRs = sig.lane !== "ep" && d >= CH_ENG.rsStart && rsPctV != null && rsPctV < CH_ENG.rsMin;
         if (weakRs) notional = Math.max(280, +(notional / 2).toFixed(0));
+        /* KURULUM KAPILARI (12 Ağu 2026) — oynaklık tavanı her şeride, göreli güç
+         * kapısı EP hariç. Yarım boyut değil KAPI: geçemeyen pozisyon açılmaz.
+         * Kural sürümü işleme yazılır ki kapı öncesi/sonrası sonuçlar ayrı
+         * ölçülebilsin (oversold'da öğrendik: kural değişince karne sıfırlanır). */
+        const kapi = chKapiFor(S, Q, sig.sym, d, sig.lane);
+        if (!kapi.gecti) continue;
         if (cash < notional + FEE) continue;
         cash -= notional + FEE;
-        const t = { id, sym: sig.sym, date: sig.date, entry: +sig.entry.toFixed(4), stop: +sig.stop.toFixed(4), tp1: +(sig.entry * (1 + CH_ENG.tp1 / 100)).toFixed(4), tp2: +(sig.entry * (1 + CH_ENG.tp2 / 100)).toFixed(4), notional: +notional.toFixed(2), shares: +(notional / sig.entry).toFixed(6), rai: raiD ? raiD.score : null, lane: sig.lane, gapPct: sig.gapPct ?? null, epVolR: sig.lane === "ep" ? sig.volRatio : null, rsPct: rsPctV, weakRs, news: null, frozenAt: new Date().toISOString(), by: "server" };
+        const t = { id, sym: sig.sym, date: sig.date, entry: +sig.entry.toFixed(4), stop: +sig.stop.toFixed(4), tp1: +(sig.entry * (1 + CH_ENG.tp1 / 100)).toFixed(4), tp2: +(sig.entry * (1 + CH_ENG.tp2 / 100)).toFixed(4), notional: +notional.toFixed(2), shares: +(notional / sig.entry).toFixed(6), rai: raiD ? raiD.score : null, lane: sig.lane, gapPct: sig.gapPct ?? null, epVolR: sig.lane === "ep" ? sig.volRatio : null, rsPct: rsPctV, weakRs, news: null, kural: CH_KURAL, frozenAt: new Date().toISOString(), by: "server" };
         if (t.lane === "ep") t.news = await chNewsFor(t.sym, t.date).catch(() => null); // katalizör başlığı (yalnız yeni EP girişleri — nadir, kota dostu)
         led.trades.push(t); (frozenByDate[t.date] ||= []).push(t);
         positions.push({ ...t, rem: 1, tp1hit: false, tp2hit: false, realized: -FEE, fees: FEE, open: true, events: [] });
@@ -990,7 +1067,7 @@ async function chEngineTick(trigger = "timer") {
       regime: regTodayObj,
       rai: raiToday ? { score: raiToday.score, comps: raiToday.comps } : null,
       vixReal: !!VIXSER,
-      watch: chWatchSrv(S, watch, heldNow, regTodayObj, CH_ENG.startDate),
+      watch: chWatchSrv(S, watch, heldNow, regTodayObj, CH_ENG.startDate, Q),
     };
     // "Sen Yokken": Alfa olayları — replay her turda yeniden üretir, feed key'i tekilleştirir.
     // ts = keşif anı; olayın gerçek günü detail'de (dünkü mum bugün ölçülse de "yeni" düşer).
@@ -1105,7 +1182,15 @@ function feedCheckRule1(score, violations) {
 }
 app.get("/api/feed", async (_req, res) => {
   const f = await feedGet();
-  res.json({ events: f.events.slice(0, 60), seenAt: f.seenAt });
+  const events = f.events.slice(0, 60);
+  // Verilmiş hükümler: satır yeniden çizildiğinde oy kaybolmasın (drawer
+  // "gördüm" denene kadar açılıp kapanabilir).
+  let hukumler = {};
+  try {
+    const gid = new Set(events.map((e) => e.gid).filter(Boolean));
+    if (gid.size) for (const k of await gLedgerDepo.oku()) if (k.hukum && gid.has(k.id)) hukumler[k.id] = k.hukum;
+  } catch {}
+  res.json({ events, seenAt: f.seenAt, hukumler });
 });
 app.post("/api/feed/seen", async (_req, res) => {
   const f = await feedGet();
@@ -1217,6 +1302,18 @@ const pendingDepo = depo(GUARD_PENDING_KEY, {
 async function pendingLoad() { return pendingDepo.oku(); }
 async function pendingSave(state) { return pendingDepo.yaz(state); }
 
+/* ── Uyarı defteri: bekçi neyi iddia etti + işe yaradı mı ───────────────────
+ * Hesap mantığı ./guard-ledger.js'te (saf). Burada yalnız kalıcılık ve uçlar.
+ * guard_notified'dan AYRI durur: o 12 günde budanan bir imleç, bu kalıcı bir
+ * defter. Precision'ın paydası budanamaz — budanırsa ölçüm eski uyarıları
+ * unutur ve kendini iyi gösterir. */
+const GUARD_LEDGER_KEY = "guard_ledger";
+const GUARD_LEDGER_FILE = join(__dirname, "guard_ledger.json");
+const gLedgerDepo = depo(GUARD_LEDGER_KEY, {
+  dosya: GUARD_LEDGER_FILE, varsayilan: [],
+  normalize: (v) => (Array.isArray(v) ? v : []),   // bozuk kayıtta ölçüm çökmesin
+});
+
 const GUARD = { busy: false, last: null, lastSummary: null };
 async function guardTick(trigger = "timer") {
   if (GUARD.busy) return { skipped: "busy" };
@@ -1245,6 +1342,11 @@ async function guardTick(trigger = "timer") {
     // Bulgular ÖNCE toplanır, mail EN SONDA tek parça gider (guard-mail.js sıralar+çizer).
     // İdempotensi değişmedi: mark() hâlâ tip:sembol:gün — bir bulgu güne yalnız bir kez girer.
     const alerts = [];
+    /* Deftere yalnız MAİL EDİLEN bulgu girer — bekçiyi seni rahatsız ettiği
+     * şeyden yargılıyoruz. Yalnız akışa düşenler (sert hareket, swing stop)
+     * bilgi, uyarı değil; onları paydaya katmak isabeti şişirirdi. */
+    const defterGirdileri = [];
+    const uyar = (anahtar, alert) => { alerts.push(alert); defterGirdileri.push({ anahtar, alert }); };
     for (const h of stocks) {
       const sym = String(h.symbol).toUpperCase();
       const q = qmap[sym]; if (!q || !(q.price > 0)) continue;
@@ -1262,8 +1364,11 @@ async function guardTick(trigger = "timer") {
         realized: realizedOf[sym] || 0,
         bugun: today,
       })) {
-        feedPush(b.feed);
-        if (b.alert && mark(b.anahtar)) alerts.push(b.alert);
+        // gid = uyarı defteri kimliği. Yalnız MAİL EDİLEN bulguda var; akışta
+        // duran bilgi olaylarında yok, çünkü onlar için "işe yaradı mı" sorusu
+        // sorulmuyor (bkz. guard-ledger.js kapsam notu).
+        feedPush(b.alert ? { ...b.feed, gid: b.anahtar } : b.feed);
+        if (b.alert && mark(b.anahtar)) uyar(b.anahtar, b.alert);
       }
     }
 
@@ -1287,11 +1392,11 @@ async function guardTick(trigger = "timer") {
           title: `Risk bütçesinin %${Math.round(rb.ratio)}'i dolu`,
           detail: `Realize zarar ${usd0(rb.lossUsed)} + açık stop riski ${usd0(rb.openRisk)} / bütçe ${usd0(rb.budget)} · yeni girişte küçül` });
       if (rb.budget > 0 && rb.ratio >= 100) {
-        feedPush({ key: `riskbudget:${rb.ym}:100`, type: "pos", sev: "crit", sym: null,
+        feedPush({ key: `riskbudget:${rb.ym}:100`, gid: `rbfull:${rb.ym}`, type: "pos", sev: "crit", sym: null,
           title: "Risk bütçesi DOLDU — bu ay yeni giriş yok",
           detail: `Kullanım ${usd0(rb.used)} / ${usd0(rb.budget)} (%${Math.round(rb.ratio)}) · ay sonuna kadar yalnız yönet (Kural 1)` });
         if (mark(`rbfull:${rb.ym}`))
-          alerts.push({ sev: "crit", kind: "riskbudget", kindLabel: "Risk bütçesi", sym: null,
+          uyar(`rbfull:${rb.ym}`, { sev: "crit", kind: "riskbudget", kindLabel: "Risk bütçesi", sym: null,
             title: `Aylık risk bütçen doldu (%${Math.round(rb.ratio)})`,
             headline: `Ay içi realize zarar <b>${usd0(rb.lossUsed)}</b> + açık stop riski <b>${usd0(rb.openRisk)}</b> = <b>${usd0(rb.used)}</b>.`,
             stats: [
@@ -1313,12 +1418,21 @@ async function guardTick(trigger = "timer") {
     try {
       for (const d of KAYNAKLAR.bayatOlanlar(SOURCE_STALE_MIN)) {
         const b = bayatKaynakBulgusu(d, SOURCE_STALE_MIN, today);
-        feedPush(b.feed);
-        if (mark(b.anahtar)) alerts.push(b.alert);
+        feedPush({ ...b.feed, gid: b.anahtar });
+        if (mark(b.anahtar)) uyar(b.anahtar, b.alert);
       }
     } catch {}
 
     if (changed) await guardSave(notified);
+
+    /* Uyarı defterine yaz — mail gitse de gitmese de. Kuyruk kararı postanın
+     * ne zaman çıkacağını belirler, bekçinin neyi iddia ettiğini değil. */
+    if (defterGirdileri.length) {
+      try {
+        const r = gdKayitEkle(await gLedgerDepo.oku(), defterGirdileri, { ts: new Date().toISOString(), gun: today });
+        if (r.eklenen) await gLedgerDepo.yaz(r.defter);
+      } catch (e) { console.error("uyarı defteri yazılamadı:", e.message); }
+    }
 
     // ── Kuyruk kararı — mantık ./guard-queue.js'te (saf, test edilebilir) ──
     const now = new Date();
@@ -1345,6 +1459,30 @@ setTimeout(() => guardTick("startup").catch(() => {}), 120_000);
 setInterval(() => guardTick("timer").catch(() => {}), 60 * 60_000);
 app.post("/api/guard/scan", async (_req, res) => res.json(await guardTick("manual")));
 app.get("/api/guard/status", (_req, res) => res.json({ last: GUARD.last, lastSummary: GUARD.lastSummary, mailConfigured: !!process.env.RESEND_API_KEY }));
+
+/* Uyarı isabeti — "bekçi işe yarıyor mu" sorusunun tek dürüst cevabı.
+ * gunler=90 gibi bir pencere verilebilir; verilmezse tüm defter ölçülür. */
+app.get("/api/guard/precision", async (req, res) => {
+  try {
+    const gunler = Number(req.query.gunler) || null;
+    const defter = await gLedgerDepo.oku();
+    res.json(gdIsabetOlc(defter, { gunler, bugun: new Date().toISOString().slice(0, 10) }));
+  } catch (e) { res.status(500).json({ error: String(e.message || e) }); }
+});
+
+/* Hüküm ver. id = uyarının anahtarı (tip:sembol:gün) — akış olayının key'i ile
+ * AYNI, çünkü ikisi de aynı bulgudan doğuyor. Ön yüz bu sayede fazladan istek
+ * yapmadan hangi satırın oylanabilir olduğunu biliyor. */
+app.post("/api/guard/feedback", async (req, res) => {
+  try {
+    const { id, hukum } = req.body || {};
+    if (!id || !GD_HUKUMLER.includes(hukum)) return res.status(400).json({ error: "id + hukum (yaradi|gereksiz) gerekli" });
+    const r = gdHukumYaz(await gLedgerDepo.oku(), String(id), hukum, { ts: new Date().toISOString() });
+    if (!r.ok) return res.status(404).json({ error: r.hata });
+    await gLedgerDepo.yaz(r.defter);
+    res.json({ ok: true, kayit: r.kayit });
+  } catch (e) { res.status(500).json({ error: String(e.message || e) }); }
+});
 
 /* Kaynak sağlığı — 3 Ağu dersinin kurumsallaşmış hâli. O gün döviz kaynağı
  * 9 gün boyunca sessizce bozuktu ve tek sinyal ön yüzdeki küçük bir rozetti.
@@ -2677,7 +2815,7 @@ function buildSignal(sym, price, costUSD) {
   out.score = score;
 
   // --- İşlem planı + swing kurulumu: Swing Tarayıcı ile AYNI motor ---
-  const plan = (t.atr && t.lastClose) ? buildPlan(planCtxFromCache(t, price)) : null;
+  const plan = (t.atr && t.lastClose) ? buildPlan(planCtxFromCache(t, price, sym)) : null;
   out.plan = plan;
   out.swing = swingFromPlan(plan);
 
@@ -3530,8 +3668,30 @@ function buildPlan(p) {
     if (p.high20 != null && price >= p.high20 * 0.985) setup = { type: "breakout", label: "Breakout · 20g zirve" };
     else if (p.sma50 != null && price <= p.sma50 * 1.03 && price >= p.sma50 * 0.95 && rsi != null && rsi >= 40 && rsi <= 58)
       setup = { type: "pullback", label: "Pullback · 50g destek" };
-    else if (rsi != null && rsi < RSI_OVERSOLD) setup = { type: "oversold", label: "Aşırı satım sıçraması" };
+    /* AŞIRI SATIM KURULUMU KALDIRILDI (11 Ağu 2026 ölçümü).
+     * Kural "RSI < 35 ise al"dı — düşen bıçağı yakalıyordu. Ham mumlarda,
+     * kapılardan SONRA, 10 günlük ufukta ölçüldü (45 sinyal · 32 bağımsız gün):
+     *   kurulum aramadan (temel çizgi)  +2.35 puan alfa
+     *   pullback                        +2.36
+     *   breakout                        +1.91
+     *   oversold                        -0.33   → temel çizgiden 2.68 puan KÖTÜ
+     * "Teyit şartı" (RSI eşiğe dönüş) denendi, DAHA KÖTÜ çıktı (-1.62). Yani
+     * kural ayarıyla kurtarılamıyordu; üretimden çıkarıldı.
+     * Defterdeki geçmiş oversold kayıtları KORUNUR — ölçüm tarihi silinmez.
+     * Ölçüm aracı: scripts/olcum-kurulum.mjs */
   }
+  /* ---- KURULUM KAPILARI (10 Ağu 2026 ölçümü) ----
+   * Kurulum bulunsa bile oynaklık tavanı ve göreli güç eşiği geçilmezse kurulum
+   * DÜŞER. Ölçüm: sinyaller aynı günlerde QQQ'nun 1.58 puan altında kaldı ve
+   * stop×hedef matrisinin her hücresi negatifti → çıkışı değil GİRİŞİ daraltmak
+   * gerekiyordu. Gerekçe plana taşınır ki kart "neden kurulum yok" diyebilsin.
+   * Kapı verisi yoksa fail-open — evren sessizce susmaz (bkz. signal-gates.js). */
+  const kapi = kurulumKapisi({ atrPct: oynaklikPct(atr, price), rsFark: p.rsFark ?? null });
+  // Yalnız GERÇEKTEN düşürülen kurulum işaretlenir. Kapı, kurulumu zaten olmayan
+  // sembolde de "reddetti" görünürse arayüz 114 sembolün 69'una boşuna gerekçe
+  // basar ve gerçek eleme kaybolur.
+  const kapiDusurdu = !!setup && !kapi.gecti;
+  if (kapiDusurdu) setup = null;
   const overbought = rsi != null && rsi >= RSI_OVERBOUGHT;
 
   // ---- GİRİŞ seviyesi: şu anki fiyat DEĞİL, kuruluma göre anlamlı seviye ----
@@ -3545,9 +3705,6 @@ function buildPlan(p) {
     const zone = p.sma50 != null ? p.sma50 : (p.support ?? price);
     entry = Math.min(price, zone * 1.01); entryType = "pullback";
     entryNote = `50g ortalama (${fmtP(zone)}) destek bölgesinde al; dönüş mumu (çekiç/yutan) teyit.`;
-  } else if (setup?.type === "oversold") {
-    entry = price; entryType = "now";
-    entryNote = `Aşırı satım (RSI ${rsi?.toFixed(0)}). Yeşil dönüş mumuyla teyitli al — düşen bıçağı tutma.`;
   } else if (above200) {
     // Kurulum yok ama trend yukarı → geri çekilmede al; tetik seviyeyi öner
     const zone = (p.sma20 != null && p.sma20 < price) ? p.sma20 : (p.sma50 ?? p.support ?? null);
@@ -3583,10 +3740,21 @@ function buildPlan(p) {
   if (overbought) g -= 1;
   const grade = g >= 4 ? "A" : g >= 3 ? "B" : g >= 2 ? "C" : "D";
 
-  // ---- ÖNERİ (verdict): net karar ----
+  /* ---- ÖNERİ (verdict): net karar ----
+   * "AL · kurulum var" DEĞİL "GİRİLEBİLİR · kurulum var" (11 Ağu 2026 ölçümü).
+   * Eski etiket bir getiri iddiasıydı; ölçüm bunu desteklemedi — kurulumlu
+   * girişler temel çizgiden (kapıdan geçen rastgele bar) daha fazla getiri
+   * ÜRETMİYOR. Ürettiği şey daha dar sarsıntı: aynı ufukta %20-25 daha küçük
+   * aleyhte hareket. Yani kurulumun anlamı "kazanır" değil, "planı yazılabilir
+   * ve stop yakın tutulabilir". Etiket artık bunu söylüyor.
+   * verdict.key "buy" olarak KALIYOR — istemci ve skor ona bağlı, anahtar bir
+   * iddia değil durum kodudur. Değişen, kullanıcının okuduğu cümle. */
   let verdict;
   if (overbought) verdict = { key: "wait", label: "BEKLE · aşırı alım", tone: "warn" };
-  else if (setup && above200) verdict = { key: "buy", label: "AL · kurulum var", tone: "good" };
+  // "· kurulum var" eklenmedi: etiketin YANINDA zaten kurulum çipi duruyor
+  // (swingRow ve oppTableRow ikisini yan yana basar). Tekrar hem gereksiz hem
+  // dar sütunu taşırıyordu — 151px çip, minmax(120px) hücrede.
+  else if (setup && above200) verdict = { key: "buy", label: "GİRİLEBİLİR", tone: "good" };
   else if (above200) verdict = { key: "watch", label: "İZLE · kuruluma yakın", tone: "warn" };
   else if (trend === "düşüş") verdict = { key: "avoid", label: "KAÇIN · trend zayıf", tone: "bad" };
   else verdict = { key: "watch", label: "İZLE · nötr", tone: "warn" };
@@ -3608,12 +3776,31 @@ function buildPlan(p) {
     entry, entryType, entryNote, currentPrice: price,
     stop, target, target2, targetBy,
     rr, riskPct: rp, rewardPct: wp, grade, note, longterm,
+    // Kapı bir kurulumu DÜŞÜRDÜYSE gerekçe burada — kart "neden yok" diyebilsin
+    kapi: kapiDusurdu ? { ad: kapi.kapi, sebep: kapi.sebep } : null,
   };
 }
 function fmtP(v) { return v == null ? "—" : "$" + Number(v).toFixed(2); }
 
+/* Göreli güç: sembolün 60g getirisi − QQQ'nun aynı penceredeki getirisi.
+ * Mumlar candleCache'ten okunur → ek API çağrısı YOK. Endeks mumu yoksa null
+ * döner ve kapı fail-open davranır (bkz. signal-gates.js). */
+const RS_ENDEKS = "QQQ";
+const RS_MAX_SAPMA_GUN = 5; // endeks mumu bundan bayatsa karşılaştırma anlamsız
+function rsFarkFor(sym) {
+  const h = candleCache[sym]?.candles, e = candleCache[RS_ENDEKS]?.candles;
+  if (!h?.length || !e?.length) return null;
+  /* Pencere hizası: goreliGuc iki seriyi de KENDİ sonundan geriye sayar. Endeks
+   * mumu bayatsa (tarama sırası, kota, tatil) farklı takvim aralıkları
+   * karşılaştırılır ve RS uydurma çıkar — sessiz yanlış yerine kapıyı aç. */
+  const fark = Math.abs(new Date(h[h.length - 1].time) - new Date(e[e.length - 1].time)) / 86400_000;
+  if (!isFinite(fark) || fark > RS_MAX_SAPMA_GUN) return null;
+  return goreliGuc(h.map((c) => c.close), e.map((c) => c.close), KAPI.rsUfukGun);
+}
+
 // signalCache (TwelveData teknikleri) → buildPlan bağlamı (liste için, TD çağrısı yok)
-function planCtxFromCache(t, price) {
+// sym verilirse kurulum kapıları (oynaklık + göreli güç) da uygulanır.
+function planCtxFromCache(t, price, sym = null) {
   const supCand = [t.low20, t.sma50, t.sma200].filter((v) => v != null && v < price);
   const resCand = [t.high20, t.w52High].filter((v) => v != null && v > price);
   return {
@@ -3622,6 +3809,7 @@ function planCtxFromCache(t, price) {
     support: supCand.length ? Math.max(...supCand) : null,
     resistance: resCand.length ? Math.min(...resCand) : null,
     resistance2: t.w52High,
+    rsFark: sym ? rsFarkFor(sym) : null,
   };
 }
 
@@ -3658,6 +3846,20 @@ async function persistLedger() {
 }
 
 
+/* Sinyal anındaki bağlam fotoğrafı — hesap ./signal-features.js'te (saf, testli).
+ * Buradaki tek iş global durumu (radarCache, VIX, F&G) toplayıp ona vermek. */
+function sinyalBaglami(sym, t, plan, price) {
+  return signalFeatures({
+    t, plan, price,
+    radar: radarCache[sym] || {},
+    rejim: {
+      vix: lastVix?.value ?? null,
+      vixBant: lastVix?.value != null ? vixRegime(lastVix.value)?.band ?? null : null,
+      fng: lastFng?.score ?? null,
+    },
+  });
+}
+
 // Tarama sonrası: kurulumlu planları karneye yaz (sembol+tip başına tek aktif kayıt)
 function recordSignals(symbols) {
   for (const symRaw of symbols) {
@@ -3665,7 +3867,7 @@ function recordSignals(symbols) {
     const t = signalCache[sym];
     const candles = candleCache[sym]?.candles;
     if (!t || !t.lastClose || !candles?.length) continue;
-    const plan = buildPlan(planCtxFromCache(t, t.lastClose));
+    const plan = buildPlan(planCtxFromCache(t, t.lastClose, sym));
     if (!plan?.setup || plan.entry == null || plan.stop == null || !(plan.entry > plan.stop)) continue;
     const type = plan.setup.type;
     const signalDate = candles[candles.length - 1].time; // sinyalin doğduğu mum
@@ -3683,6 +3885,9 @@ function recordSignals(symbols) {
       // "şimdi al" tipi sinyal mum kapanışında dolmuş sayılır; diğerleri tetik bekler
       status: plan.entryType === "now" ? "open" : "waiting",
       entryDate: plan.entryType === "now" ? signalDate : null,
+      // Bağlam fotoğrafı: sonradan "hangi rozet para kazandırdı" diye sorulabilsin.
+      // Üretimi patlarsa kayıt yine de düşsün — ölçüm uğruna defter kaybedilmez.
+      features: (() => { try { return sinyalBaglami(sym, t, plan, t.lastClose); } catch { return null; } })(),
     });
     ledgerDirty = true;
     // "Sen Yokken": yalnız A/B kurulumlar akışa girer (C gürültü yapar)
@@ -3737,6 +3942,24 @@ function evaluateLedger() {
         rec.status = "timeout"; rec.exit = c.close; rec.resolvedDate = c.time;
         rec.r = (c.close - rec.entry) / risk; ledgerDirty = true; break;
       }
+    }
+    /* Hâlâ açıksa PİYASA FİYATIYLA değerle (mark-to-market).
+     * NEDEN: 10 Ağu 2026 ölçümünde 102 kaydın 34'ü "open"dı ve hiçbirinin R'si
+     * yoktu — yani defterin üçte biri istatistiğe HİÇ girmiyordu. Karne yalnız
+     * kapanmışlara bakınca "%10 isabet" diyordu; açıkta duran işlemlerin artıda
+     * mı ekside mi olduğu görünmüyordu. mtmR bunu görünür kılar. Kapanmış kaydın
+     * r'si ile KARIŞTIRILMAMASI için ayrı ad: gerçekleşmiş değil, anlık. */
+    if (rec.status === "open" && rec.entryDate) {
+      const son = candles[candles.length - 1];
+      if (son && son.time >= rec.entryDate) {
+        const yeni = +((son.close - rec.entry) / risk).toFixed(3);
+        if (rec.mtmR !== yeni || rec.mtmDate !== son.time) {
+          rec.mtmR = yeni; rec.mtmDate = son.time; ledgerDirty = true;
+        }
+      }
+    } else if (rec.mtmR != null && rec.status !== "open") {
+      // Kapandı → anlık değerleme artık yanıltıcı, silinir (r alanı devraldı)
+      delete rec.mtmR; delete rec.mtmDate; ledgerDirty = true;
     }
   }
 }
@@ -4057,12 +4280,14 @@ function buildWhy(plan, ind, pattern, weekly) {
   else if (plan.trend === "düşüş") add("bad", "Fiyat 50 ve 200 günlük ortalamanın altında → ana trend aşağı. Yeni alım riskli; trend dönmeden girme.");
   // 2) Kurulum
   if (plan.setup) {
+    /* Metinler ÖLÇÜLENİ söyler, umulanı değil (11 Ağu 2026): kurulumlu girişler
+     * temel çizgiden daha fazla getirmiyor, ama %20-25 daha dar sarsıntı veriyor.
+     * "Kırılım sürebilir" / "fırsat" gibi getiri vaatleri bu yüzden kaldırıldı. */
     const m = {
-      breakout: "20 günlük zirveyi kırıyor → momentum alıcıları devrede, kırılım sürebilir.",
-      pullback: "Yükselen trendde 50g desteğe geri çekilmiş → trendi ucuzlamış fiyattan yakalama fırsatı, risk dar tutulabilir.",
-      oversold: "RSI aşırı satım → kısa vadede çok düşmüş, teknik sıçrama potansiyeli (ama düşen bıçak riski, teyit şart).",
+      breakout: "20 günlük zirveyi kırıyor → seviye net, stop kırılım altına yakın konur. Ölçüm: bu kurulum ekstra getiri üretmiyor, sarsıntıyı azaltıyor.",
+      pullback: "Yükselen trendde 50g desteğe geri çekilmiş → giriş ve stop tanımlı, risk dar. Ölçüm: üç kurulum içinde sarsıntısı en düşük olan.",
     };
-    add(plan.setup.type === "oversold" ? "warn" : "good", `Kurulum: ${plan.setup.label}. ${m[plan.setup.type] || ""}`);
+    add("good", `Kurulum: ${plan.setup.label}. ${m[plan.setup.type] || ""}`);
   } else if (plan.trend && plan.trend !== "düşüş") {
     add("warn", "Net bir teknik kurulum yok → acele etme; planlanan giriş seviyesine sarkmasını bekle.");
   }
@@ -4153,7 +4378,7 @@ app.get("/api/swing", async (_req, res) => {
     if (!t) continue;
     const price = radarCache[sym]?.price ?? t.lastClose ?? null;
     if (price == null) continue;
-    const plan = buildPlan(planCtxFromCache(t, price));
+    const plan = buildPlan(planCtxFromCache(t, price, sym));
     if (!plan) continue;
     items.push({
       symbol: sym, name: radarCache[sym]?.name ?? null, theme: RADAR_THEME[sym] || null,
@@ -4207,6 +4432,7 @@ app.get("/api/chart", async (req, res) => {
         price, atr: ind.atr, rsi: ind.rsi, sma20: ind.sma20, sma50: ind.sma50, sma200: ind.sma200,
         high20: ind.high20, low20: ind.low20,
         support: nearestSup, resistance: nearestRes, resistance2: piv.resistance[1] ?? null,
+        rsFark: rsFarkFor(sym),   // grafik modalı da liste ile AYNI kapıdan geçsin
       });
       const patterns = detectPatterns(candles);                   // eğimli trend çizgileri + formasyon
       const weekly = weeklyTrend(candles);                        // çoklu zaman dilimi onayı
@@ -4270,6 +4496,33 @@ app.get("/api/candles", (req, res) => {
   }
   res.json({ candles: out, missing, asOf: Date.now() });
   if (missing.length) queueWarmCandles(missing); // yanıttan SONRA, arka planda ısıt (bloklamaz)
+});
+
+/* ----- API: canlı kotasyon (Alfa Avı açık pozisyonları için) -----
+ * 17 Ağu: Alfa Avı açık pozisyonları GÜNLÜK MUMUN son kapanışıyla işaretliyordu.
+ * Bugün Pazartesi ise en son bar Cuma'nın kapanışı — piyasa saatlerinde kart bir
+ * iş günü bayat fiyat gösteriyor ve "gerçek fiyatlarla otomatik ölçülür" alt
+ * başlığıyla çelişiyor. Mum önbelleği gün-içi güncellenmiyor (ve güncellenmemeli:
+ * bar kapanmadan yazılırsa tüm sinyal geçmişi kayar).
+ *
+ * Ayrı uç nokta, çünkü Alfa Avı evreni PORTFÖYDEN BAĞIMSIZ — /api/portfolio'nun
+ * çektiği kotasyonlarda bu semboller yok. fetchStocks 60 sn önbellekli ve üç
+ * sağlayıcıya yedekli; eksik semboller son bilinen değerle (stale) dolduruluyor.
+ *
+ * TAVAN 12 SEMBOL: Finnhub ücretsiz katman dakikada 60 istek. Açık pozisyon sayısı
+ * pratikte 1-5; tavan, evrenin tamamının (60+) buradan sorgulanmasını engelliyor. */
+app.get("/api/quotes", async (req, res) => {
+  try {
+    const syms = String(req.query.symbols || "").toUpperCase().split(",")
+      .map((s) => s.trim()).filter(Boolean).slice(0, 12);
+    if (!syms.length) return res.json({ quotes: {}, asOf: Date.now() });
+    const map = await fetchStocks(syms);
+    const quotes = {};
+    for (const [sym, q] of Object.entries(map || {})) {
+      if (q && isFinite(q.price) && q.price > 0) quotes[sym] = { price: q.price, stale: !!q.stale };
+    }
+    res.json({ quotes, asOf: Date.now() });
+  } catch (e) { res.status(500).json({ error: String(e.message || e) }); }
 });
 
 /* ----- API: piyasa duygusu (VIX + Fear&Greed) — hızlı, hafif endpoint -----
@@ -4484,12 +4737,18 @@ app.get("/api/portfolio", async (_req, res) => {
     // (açılışa da aynı değeri ekleriz; opsiyonun gün içi salınımı günlük %'yi bozmasın)
     totalMarket += optionsMarketTRY;
     totalOpen += optionsMarketTRY;
-    // Swing pozisyonları (Swing Defteri) — ana toplama dahil (hepsi bir portföy; hero + grafik tutarlı)
-    for (const t of data.swingTrades || []) {
-      if (t.status !== "open" || !(Number(t.qty) > 0)) continue;
+    /* Swing pozisyonları (Swing Defteri) — ana toplama YALNIZ örtüşmeyen adetle dahil.
+     * 16 Ağu: 14 Ağu'daki çift sayım düzeltmesi swingPositions'a ve ön yüze uygulandı
+     * ama BURAYA uygulanmadı. Sonuç: sunucunun meta.totals.grandTRY'si (Net Değer KPI,
+     * günlük snapshot, raporlar) $5.207 derken ön yüzün kendi topladığı hero $4.593
+     * diyordu — aynı ekranda iki portföy değeri. Kapsam tek yerden gelir. */
+    const acikSwing = (data.swingTrades || []).filter((t) => t.status === "open" && Number(t.qty) > 0);
+    const totalKapsam = swingKapsam(acikSwing, data.holdings || []);
+    for (const t of acikSwing) {
       const q = stockMap[String(t.symbol).toUpperCase()];
       if (q?.price == null || !usdtry) continue;
-      const qty = Number(t.qty);
+      const qty = totalKapsam.get(String(t.id))?.ekQty ?? Number(t.qty);   // plan kaydında 0
+      if (!(qty > 0)) continue;
       totalMarket += q.price * qty * usdtry;
       totalOpen += (q.prevClose != null ? q.prevClose : q.price) * qty * usdtry; // swing gün-içi hareketi günlük %'ye yansısın
     }
@@ -4560,6 +4819,7 @@ app.get("/api/portfolio", async (_req, res) => {
     const noSignalYet = stocksEnriched.filter((h) => !h.sig).map((h) => h.symbol);
     const meta = {
       healthy: !anyError && allValued && !!usdtry && !!gram,
+      olcumBaslangic: OLCUM_BASLANGIC,     // ölçüm panelleri bu günden başlar (geriye doldurulmuş kayıtlar hariç)
       missingPrices,                       // fiyatı çekilemeyen semboller (kaynak meşgul olabilir)
       stalePrices,                         // son bilinen (canlı değil) fiyatla gösterilen semboller
       metalsStale,                         // döviz/altın son bilinen değerle (Truncgil erişilemedi)
@@ -4895,8 +5155,13 @@ app.get("/api/portfolio", async (_req, res) => {
         m[s] = { qty: (m[s]?.qty || 0) + (Number(t.qty) || 0), count: (m[s]?.count || 0) + 1 };
         return m;
       }, {}),
-      // Açık swing pozisyonları (Swing Defteri) — ana sayfa "⚡ Swing" tablosuna canlı K/Z ile
-      swingPositions: (data.swingTrades || []).filter((t) => t.status === "open" && Number(t.qty) > 0).map((t) => {
+      // Açık swing pozisyonları (Swing Defteri) — ana sayfa "⚡ Swing" tablosuna canlı K/Z ile.
+      // 14 Ağu: her kayıt Varlıklar'daki adetle ÖRTÜŞMESİNE göre işaretlenir; örtüşen kısım
+      // portföy toplamına ikinci kez eklenmez (bkz. swing-kapsam.js).
+      swingPositions: (() => {
+      const acikSwingler = (data.swingTrades || []).filter((t) => t.status === "open" && Number(t.qty) > 0);
+      const kapsamlar = swingKapsam(acikSwingler, data.holdings || []);
+      return acikSwingler.map((t) => {
         const sym = String(t.symbol || "").toUpperCase();
         const q = (stockMap || {})[sym];
         const live = q?.price ?? null;
@@ -4928,11 +5193,19 @@ app.get("/api/portfolio", async (_req, res) => {
             maeR = +((lo - entry) / riskPerShare).toFixed(2);
           }
         }
+        // Çift sayım kapısı: kaynak "portfoy" ise değer Varlıklar'da zaten sayılıyor
+        const kapsam = kapsamlar.get(String(t.id));
+        const pay = sayilanPay({ qty, costUSD, valueUSD }, kapsam);
         return {
           id: t.id, symbol: sym, name: t.name || radarCache[sym]?.name || null,
           qty, entry, stop: t.stop ?? null, target: t.target ?? null,
           price: live, dayChangePct: q?.dayChangePct ?? null, stale: !!q?.stale,
           costUSD, valueUSD, plUSD, plPct, openedAt: t.openedAt || null, note: t.note || "",
+          kaynak: pay.kaynak,                       // portfoy | ayri | karma
+          portfoydeVar: !!kapsam?.portfoydeVar,
+          sayilanQty: pay.sayilanQty,               // toplama giren adet (plan kaydında 0)
+          sayilanCostUSD: pay.sayilanCostUSD,
+          sayilanValueUSD: pay.sayilanValueUSD,
           guard: guard ? { stop: +guard.stop.toFixed(2), chandelier: +guard.chandelier.toFixed(2), distPct: +guard.distPct.toFixed(1), breached: guard.breached, near: guard.near, targetHit: guard.targetHit } : null,
           riskPerShare: riskPerShare != null ? +riskPerShare.toFixed(2) : null,
           currentR, mfeR, maeR, daysOpen, timeStop,
@@ -4940,7 +5213,8 @@ app.get("/api/portfolio", async (_req, res) => {
           belowMa10: ma10 != null && live != null ? live < ma10 : null,
           belowMa20: ma20 != null && live != null ? live < ma20 : null,
         };
-      }),
+      });
+      })(),
       // Birleşik realize K/Z (sembol başına, USD) — ana satışlar + SWING setup realize'leri (Büyüme için).
       // Çift sayım yok: swing satışı data.trades'e tradeId ile yazıldıysa base'den düşülür, swing tarafında sayılır.
       realizedBySym: (() => {
@@ -5394,7 +5668,9 @@ app.get("/api/signal-stats", async (_req, res) => {
   try {
     evaluateLedger();
     await persistLedger();
-    const TYPES = ["breakout", "pullback", "oversold"];
+    // Üretilen kurulumlar. oversold 11 Ağu 2026'da kaldırıldı; geçmiş kayıtları
+    // defterde durur ama yeni karne satırı açılmaz (bkz. buildPlan).
+    const TYPES = ["breakout", "pullback"];
     const byType = {};
     for (const tp of TYPES) {
       const recs = ledger.filter((r) => r.type === tp);
@@ -5413,12 +5689,40 @@ app.get("/api/signal-stats", async (_req, res) => {
         winRate: resolved.length ? (wins / resolved.length) * 100 : null,
         avgR: rs.length ? rs.reduce((a, b) => a + b, 0) / rs.length : null,
         totalR: rs.length ? rs.reduce((a, b) => a + b, 0) : null,
+        // Açıkların anlık değerlemesi — defterin görünmez üçte biri (bkz. evaluateLedger)
+        openMtm: (() => {
+          const m = recs.filter((r) => r.status === "open" && r.mtmR != null).map((r) => r.mtmR);
+          return m.length ? { n: m.length, avgR: m.reduce((a, b) => a + b, 0) / m.length,
+            artida: m.filter((x) => x > 0).length } : null;
+        })(),
       };
     }
+    /* GÜN KOHORTU: aynı gün açılan sinyaller aynı kaderi paylaşır (10 Ağu ölçümü:
+     * 07-07/07-21/07-23 partilerinin 32 sinyali de aynı hafta stoplandı). Kurulum
+     * bazlı ortalama bunu gizler; kohort tablosu "kurulum mu kötüydü, gün mü"
+     * sorusunu ayrıştırır. Az sayıda güne yığılmış defterde ortalamaya GÜVENME. */
+    const gunler = {};
+    for (const r of ledger) {
+      if (!r.signalDate) continue;
+      const g = (gunler[r.signalDate] ||= { n: 0, resolved: 0, target: 0, stop: 0, totalR: 0 });
+      g.n++;
+      if (["target", "stop", "timeout"].includes(r.status)) {
+        g.resolved++; g.totalR += r.r ?? 0;
+        if (r.status === "target") g.target++;
+        if (r.status === "stop") g.stop++;
+      }
+    }
+    const byDay = Object.entries(gunler).sort((a, b) => (a[0] < b[0] ? 1 : -1))
+      .map(([date, g]) => ({ date, ...g, totalR: +g.totalR.toFixed(2) }));
+    const cozulmus = ledger.filter((r) => ["target", "stop", "timeout"].includes(r.status));
     res.json({
       updated: Date.now(),
       count: ledger.length,
       byType,
+      byDay,
+      // Örneklem uyarısı: kaç AYRI günden geliyor? 51 sinyal 8 günden geliyorsa
+      // elde 51 değil ~8 bağımsız gözlem vardır; ön yüz bunu dürüstçe göstersin.
+      sample: { resolved: cozulmus.length, days: new Set(cozulmus.map((r) => r.signalDate)).size },
       records: [...ledger]
         .sort((a, b) => (a.signalDate < b.signalDate ? 1 : -1))
         .slice(0, 40),
@@ -5431,16 +5735,21 @@ app.get("/api/signal-stats", async (_req, res) => {
  * momentum + Sinyal Karnesi isabet oranı ekler, "fırsat skoru"na göre sıralar.
  * Dolarlık pozisyon penceresini ön yüz GERÇEK portföy değerinden çizer.
  * GARANTİ YOK: backtest isabet oranı dürüstçe gösterilir — bilerek abartmaz. */
+/* Kurulum tipi başına ölçülmüş karne. n/winRate ESKİ alanlar (kart bunları
+ * gösteriyor, kırma); kanit ise skor kalibrasyonunun girdisi — açık pozisyonları
+ * (mtmR) ve BAĞIMSIZ GÜN sayısını da taşır. Bkz. score-calibration.js. */
 function setupHitRates() {
   const out = {};
-  for (const tp of ["breakout", "pullback", "oversold"]) {
-    const resolved = ledger.filter((r) => r.type === tp && ["target", "stop", "timeout"].includes(r.status));
+  for (const tp of ["breakout", "pullback"]) {   // oversold kaldırıldı (11 Ağu 2026)
+    const recs = ledger.filter((r) => r.type === tp);
+    const resolved = recs.filter((r) => ["target", "stop", "timeout"].includes(r.status));
     const wins = resolved.filter((r) => (r.r ?? 0) > 0).length;
     const rs = resolved.map((r) => r.r).filter((v) => v != null && isFinite(v));
     out[tp] = {
       n: resolved.length,
       winRate: resolved.length ? Math.round((wins / resolved.length) * 100) : null,
       avgR: rs.length ? rs.reduce((a, b) => a + b, 0) / rs.length : null,
+      kanit: kanitOzeti(recs),
     };
   }
   return out;
@@ -5458,7 +5767,7 @@ app.get("/api/opportunities", async (_req, res) => {
     const candles = candleCache[sym]?.candles || null;
     const price = radarCache[sym]?.price ?? t.lastClose ?? null;
     if (price == null) continue;
-    const plan = buildPlan(planCtxFromCache(t, price));
+    const plan = buildPlan(planCtxFromCache(t, price, sym));
     if (!plan || plan.entry == null) continue;
     // FİLTRE: girilebilir + yükseliş tarafı + makul R/R + aşırı alım değil
     if (plan.overbought) continue;
@@ -5477,7 +5786,23 @@ app.get("/api/opportunities", async (_req, res) => {
 
     // Fırsat skoru (0-100 civarı): kalite + kurulum + R/R + RSI + trend + zirveye yakınlık + momentum + formasyon
     let score = ({ A: 40, B: 30, C: 18, D: 8 }[plan.grade] || 8);
-    if (plan.setup) score += ({ breakout: 10, pullback: 12, oversold: 4 }[plan.setup.type] || 6);
+    /* KURULUM TİPİ BONUSU KALDIRILDI (11 Ağu 2026 katma değer ölçümü).
+     * breakout +10 / pullback +12 puan alıyordu; bu, "bu kurulumlar daha çok
+     * getiri üretir" iddiasıydı ve ölçüm onu desteklemedi. 152 bağımsız gün,
+     * 6452 bar, gün-blok bootstrap, üç ufuk → altı testin HİÇBİRİNDE pozitif
+     * katma değer yok; ikisi anlamlı negatif (5g breakout −0.75 [−1.20,−0.22],
+     * 20g pullback −1.57 [−3.17,−0.17]). Medyan ve isabet oranı da temel
+     * çizginin (kurulum aramadan al) lehine.
+     *
+     * Kurulumun ÖLÇÜLEN faydası getiride değil riskte: girişi %20-25 daha dar
+     * sarsıntılı (MAE) yere koyuyor. Ama bu skorun sorusu değil — skor "hangisi
+     * daha çok kazandırır" diye sıralar. Risk faydası zaten stop mesafesine ve
+     * pozisyon boyutuna yansıyor (oppPositionWindow).
+     *
+     * Kurulumlu adaylar yine de öne çıkar: aşağıdaki verdict "buy" bonusu
+     * kurulum olmadan verilmiyor. O bonus bir edge iddiası değil, "bugün
+     * uygulanabilir bir plan var" bilgisidir.
+     * Ölçüm aracı: scripts/olcum-kurulum.mjs (bölüm 3) */
     score += Math.min(15, plan.rr * 5);
     if (t.rsi != null && t.rsi >= 45 && t.rsi <= 65) score += 8;
     if (plan.trend === "güçlü yükseliş") score += 6;
@@ -5492,11 +5817,17 @@ app.get("/api/opportunities", async (_req, res) => {
     else if (plan.verdict?.key === "watch" && !plan.setup) score -= 5;
 
     const hr = plan.setup ? hits[plan.setup.type] : null;
+    /* Skoru ölçümle hizala. DİKKAT: ham skor burada HENÜZ kırpılmadı (0-100'e
+     * kalibreSkor içinde kırpılır) — önce kırpsak 124→100 olur ve olumsuz
+     * ölçümün düzeltmesi kaybolurdu. hamSkor kartta şeffaflık için taşınır. */
+    const kal = kalibreSkor(score, hr?.kanit || null);
     items.push({
       symbol: sym, name: radarCache[sym]?.name ?? null, theme: RADAR_THEME[sym] || null,
       owned: port.has(sym), watched: wl.has(sym), cuma: cuma.has(sym),
       price, dayChangePct: radarCache[sym]?.dayChangePct ?? null, rsi: t.rsi,
-      score: Math.min(100, Math.round(score)),
+      score: kal.skor,
+      hamSkor: Math.min(100, Math.round(score)),
+      kalibre: { durum: kal.durum, etiket: kal.etiket, aciklama: kal.aciklama, carpan: kal.carpan },
       trend: plan.trend, setup: plan.setup, verdict: plan.verdict, grade: plan.grade,
       entry: plan.entry, entryType: plan.entryType, stop: plan.stop, target: plan.target, target2: plan.target2,
       rr: plan.rr, riskPct: plan.riskPct, rewardPct: plan.rewardPct,
@@ -5619,16 +5950,23 @@ app.get("/api/qm/:symbol", async (req, res) => {
   } catch (e) { res.status(502).json({ error: String(e?.message || e) }); }
 });
 
-// Benchmark — S&P 500 (SPY) + Nasdaq-100 (QQQ) günlük kapanış serisi (portföy getirini
-// aynı pencerede kıyaslamak için). candleCache'ten (24s TTL); 2 sembol, kota dostu.
-app.get("/api/benchmark", async (_req, res) => {
+/* Kıyas — "piyasayı yendim mi?" tek cevabı. Hesap kiyas.js'te (saf + testli);
+ * burası yalnız veriyi toplar. 16 Ağu'ya kadar bu soruyu iki panel ayrı ayrı
+ * cevaplıyordu ve iki farklı sayı söylüyorlardı (biri para girişini getiri
+ * sayıyordu). Tek kaynak, tek pencere, tek takvim. candleCache'ten (24s TTL). */
+app.get("/api/kiyas", async (_req, res) => {
   try {
-    const out = {};
-    for (const sym of ["SPY", "QQQ"]) {
+    const data = await loadData();
+    const endeksler = {};
+    for (const sym of ["QQQ", "SPY"]) {
       const candles = await getCandles(sym).catch(() => null);
-      out[sym] = candles?.length ? candles.map((c) => ({ date: c.time, close: c.close })) : null;
+      if (candles?.length) endeksler[sym] = candles.map((c) => ({ date: c.time, close: c.close }));
     }
-    res.json(out);
+    const sonuc = kiyasHesapla({ snaps: data.snapshots || [], flows: data.flows || [], endeksler, baslangic: OLCUM_BASLANGIC });
+    // Ana endeks QQQ: portföy teknoloji ağırlıklı ve docs/olcumler.md ölçümleri
+    // (§14, kapı testleri) QQQ'ya göre yazılı — hüküm başka endekse geçerse
+    // defterdeki sayılarla ekrandaki sayı ayrışır.
+    res.json({ ...sonuc, ana: "QQQ", hukum: kiyasHukum(sonuc, "QQQ") });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -5651,8 +5989,19 @@ app.get("/api/risk", async (_req, res) => {
   try {
     const data = await loadData();
     const stocks = (data.holdings || []).filter((h) => h.type === "stock" && Number(h.quantity) > 0);
-    // Açık swing pozisyonları da risk evrenine dahil (hepsi bir portföy)
-    for (const t of data.swingTrades || []) if (t.status === "open" && Number(t.qty) > 0) stocks.push({ symbol: t.symbol, quantity: t.qty, _swing: true });
+    /* Açık swing pozisyonları da risk evrenine dahil (hepsi bir portföy) — ama YALNIZ
+     * Varlıklar'la örtüşmeyen fazlası. 17 Ağu: buradaki döngü kaydı koşulsuz ekliyordu;
+     * LITE ve ONDS hem holding (horizon="swing") hem açık swing kaydı olduğu için aynı
+     * adet iki kez sayılıyordu. Sonuç sessizce yanlıştı: ağırlıklar şişti, dolayısıyla
+     * portföy volatilitesi, VaR, beta ve risk katkısı da. Kural swing-kapsam.js'te zaten
+     * yazılıydı (14 Ağu, hero toplamı ve donut için) — risk masası onu atlamıştı.
+     * Kapsam kayda YAZILMAZ, her istekte türetilir; adet değişince kendiliğinden düzelir. */
+    const acikSwingler = (data.swingTrades || []).filter((t) => t.status === "open" && Number(t.qty) > 0);
+    const swingKapsamlari = swingKapsam(acikSwingler, data.holdings || []);
+    for (const t of acikSwingler) {
+      const { sayilanQty } = sayilanPay({ qty: t.qty }, swingKapsamlari.get(String(t.id)));
+      if (sayilanQty > 0) stocks.push({ symbol: t.symbol, quantity: sayilanQty, _swing: true });
+    }
     for (const h of stocks) await getCandles(h.symbol).catch(() => {});
     const spy = await getCandles("SPY").catch(() => null);
     const LB = 90;
@@ -5682,7 +6031,8 @@ app.get("/api/risk", async (_req, res) => {
     const ann = Math.sqrt(252);
     for (const p of pos) {
       p.weight = totVal ? p.valueUSD / totVal : 0;
-      p.volAnn = _stdev(p.r) * ann;
+      p.volD = _stdev(p.r);              // günlük σ — korelasyon çarpanının girdisi
+      p.volAnn = p.volD * ann;
       p.adr = qmADR(p.candles, 20);
       p.beta = spyRet ? _cov(p.r, spyRet) / (_variance(spyRet) || 1) : null;
       const cl = p.candles.map((x) => x.close);
@@ -5705,13 +6055,24 @@ app.get("/api/risk", async (_req, res) => {
     let cs = 0, ck = 0;
     for (let i = 0; i < pos.length; i++) for (let j = i + 1; j < pos.length; j++) { cs += matrix[i][j]; ck++; }
     const avgCorr = ck ? cs / ck : 0;
+    /* KORELASYON ÇARPANI (17 Ağu 2026) — bağımsızlık varsayımının fiyatı.
+     * σ_bağımsız = √(Σ (wᵢσᵢ)²) ile gerçekleşmiş σ'nın oranı. Aynı ağırlıklar, aynı
+     * tek-tek volatiliteler; tek fark korelasyonun hesaba katılması. risk-mc.js'in
+     * iki-model karşılaştırmasının kapalı formu — ikisi de aynı kovaryanstan çıktığı
+     * için simülasyona gerek yok. Ölçüm ve yanlılıkları: docs/olcumler.md §16.
+     * SABİT YAZILMIYOR: 1,32 bugünkü bileşimin değeri, sabit sanılmamalı (§16f). */
+    const kor = korelasyonCarpaniHesapla(pos.map((p) => p.weight), pos.map((p) => p.volD), portVolD);
+
     // Risk-bazlı pozisyon boyutu: 1×ADR stopta portföyün %1'i risk → önerilen pozisyon
     const riskBudgetPct = 1;
     for (const p of pos) {
       const stopDist = (p.adr || 4) / 100;
       const maxRiskUSD = totVal * riskBudgetPct / 100;
       p.maxRiskUSD = maxRiskUSD;
-      p.suggestUSD = stopDist > 0 ? maxRiskUSD / stopDist : null;
+      /* Çarpan burada da BÖLER: "her pozisyona ayrı %1" cümlesi altı pozisyonda
+       * sessizce "toplam %6" demeye geliyordu ve o cümle yalnız bağımsızlıkta doğru. */
+      const ham = stopDist > 0 ? maxRiskUSD / stopDist : null;
+      p.suggestUSD = ham != null ? ham / kor.carpan : null;
       p.suggestPct = p.suggestUSD != null && totVal ? p.suggestUSD / totVal * 100 : null;
     }
     res.json({
@@ -5721,13 +6082,29 @@ app.get("/api/risk", async (_req, res) => {
       portfolio: {
         valueUSD: +totVal.toFixed(0),
         volAnnPct: +(portVolD * ann * 100).toFixed(1),
+        /* Beta BUGÜNKÜ ağırlıkların geçmişe uygulanmasıyla kurulur (sentetik seri) —
+         * "bu portföyü son L gün tutsaydım" sorusunun cevabı. Hesabın FİİLEN yaptığı
+         * beta bundan çok farklı olabilir (15 Ağu ölçümü: 3,52 vs 1,12), o yüzden
+         * betaTuru alanı hangi soruya cevap verdiğini söylüyor.
+         * R² ŞART: beta tek başına yanıltıcı. R² düşükse (yoğun portföylerde ~0,1)
+         * endeks portföyü açıklamıyor demektir ve "piyasadan agresif" cümlesi
+         * kurulamaz — beta o durumda bir tanım değil, gürültüdür. (docs/olcumler §14) */
         beta: spyRet ? +(_cov(portRet, spyRet) / (_variance(spyRet) || 1)).toFixed(2) : null,
+        betaTuru: "bugünkü ağırlıklar",
+        r2: spyRet ? +(((_cov(portRet, spyRet) / ((_stdev(portRet) * _stdev(spyRet)) || 1)) ** 2)).toFixed(2) : null,
         var95USD: +(1.645 * portVolD * totVal).toFixed(0),
         var95Pct: +(1.645 * portVolD * 100).toFixed(1),
         var99USD: +(2.326 * portVolD * totVal).toFixed(0),
         histVar95USD: +histVar95.toFixed(0),
         avgCorr: +avgCorr.toFixed(2),
         diversification: +((1 - Math.max(0, avgCorr)) * 100).toFixed(0),
+        /* Boyutlandırmanın kullandığı çarpan. `olculdu:false` ise kesinti YOK ve UI
+         * "ölçülmedi" der — score-calibration.js'in kuralı (kanıt yoksa çarpan 1,
+         * ama etiket yalan söylemez). */
+        korelasyonCarpani: +kor.carpan.toFixed(3),
+        korelasyonOlculdu: kor.olculdu,
+        volBagimsizPct: +(kor.sigmaBagimsiz * ann * 100).toFixed(1),
+        boyutKucultmePct: kor.olculdu ? +((1 - 1 / kor.carpan) * 100).toFixed(0) : 0,
       },
       positions: pos.map((p) => ({
         symbol: p.symbol, weightPct: +(p.weight * 100).toFixed(1), valueUSD: +p.valueUSD.toFixed(0),
@@ -6930,6 +7307,19 @@ function labParams(q = {}) {
     // "intraday" = alış-stop emri (dünkü EMA8 tetiği, gün içinde dolar). Gerekçe
     // ve gün içi girişin kaybettiği filtreler ./entry-modes.js başında.
     entryMode: q.entryMode === "intraday" ? "intraday" : "close",
+    /* Başa-baş kaydırma kuralı — 15 Ağu ölçümü (docs/olcumler.md §12) bunun asıl
+     * kusur olduğunu gösterdi: TP1'de yalnız %25 satılıyor, sonra stop başa-başa
+     * çekiliyor; kalan %75 başa-başta çıkınca kazanç 0.25×TP1 ile tavanlanıyor,
+     * kaybeden ise tam 1R ödüyor. Payoff 0,089× ölçüldü. Varyantlar:
+     *   "tp1" (CANLI) → TP1 vurulunca stop girişe
+     *   "r1"          → yalnız fiyat +1R gördüyse girişe (erken kilitleme yok)
+     *   "off"         → stop hiç kaydırılmaz, orijinal stop + EMA21 iz süren
+     * beBuffer: başa-baş yerine girişin BUFFER×1R altına koy (gürültü payı).
+     *   1R zaten ADR ölçekli olduğu için tampon R biriminde — ADR bağlamaya gerek yok. */
+    beMode: ["tp1", "r1", "off"].includes(q.beMode) ? q.beMode : "tp1",
+    beBuffer: labClamp(q.beBuffer, 0, 1, 0),
+    // TP1'de satılan pay (canlı kural %25). 0 → TP1 tamamen kapalı.
+    tp1Frac: labClamp(q.tp1Frac, 0, 0.75, 0.25),
   };
 }
 async function labCtx(start) {
@@ -6994,10 +7384,17 @@ function labReplay(ctx, P) {
     const defensive = P.regimeBE && gercekRejim === "off";
     for (const p of positions.filter((x) => x.open)) {
       const s = S[p.sym], i = s.idx[d]; if (i == null) continue; const c = s.v[i];
-      const effStop = p.tp1hit ? p.entry : p.stop;
+      // +1R görüldü mü (beMode="r1" için) — bar bazında güncellenir
+      if (!p.r1hit && c.high >= p.entry + (p.entry - p.stop)) p.r1hit = true;
+      // Başa-baş kaydırma: hangi koşulda ve NEREYE (bkz. labParams.beMode/beBuffer)
+      const beAktif = P.beMode === "off" ? false : P.beMode === "r1" ? p.r1hit : p.tp1hit;
+      const beSeviye = p.entry - P.beBuffer * (p.entry - p.stop);   // tampon 1R biriminde
+      const effStop = beAktif ? Math.max(p.stop, beSeviye) : p.stop;
       if (c.low <= effStop) { const fr = p.rem, px = c.open != null && c.open < effStop ? c.open : effStop, pnl = fr * p.shares * (px - p.entry) - P.commission; cash += fr * p.shares * px - P.commission; fees += P.commission; p.realized += pnl; p.rem = 0; p.open = false; continue; }
-      if (!p.tp1hit && c.high >= p.tp1) { const pnl = 0.25 * p.shares * (p.tp1 - p.entry) - P.commission; cash += 0.25 * p.shares * p.tp1 - P.commission; fees += P.commission; p.realized += pnl; p.rem -= 0.25; p.tp1hit = true; }
-      if (p.tp1hit && !p.tp2hit && c.high >= p.tp2) { const pnl = 0.25 * p.shares * (p.tp2 - p.entry) - P.commission; cash += 0.25 * p.shares * p.tp2 - P.commission; fees += P.commission; p.realized += pnl; p.rem -= 0.25; p.tp2hit = true; }
+      if (P.tp1Frac > 0 && !p.tp1hit && c.high >= p.tp1) { const f = P.tp1Frac, pnl = f * p.shares * (p.tp1 - p.entry) - P.commission; cash += f * p.shares * p.tp1 - P.commission; fees += P.commission; p.realized += pnl; p.rem -= f; p.tp1hit = true; }
+      // TP2 artık TP1'e BAĞLI DEĞİL: tp1Frac=0 varyantında (TP1 kapalı) TP2 de
+      // ölüyordu, "TP1'i kaldır" testi aslında "her iki hedefi de kaldır" oluyordu.
+      if (!p.tp2hit && c.high >= p.tp2) { const f = Math.min(0.25, p.rem), pnl = f * p.shares * (p.tp2 - p.entry) - P.commission; cash += f * p.shares * p.tp2 - P.commission; fees += P.commission; p.realized += pnl; p.rem -= f; p.tp2hit = true; }
       if (p.open && p.rem > 0 && c.close < s.ema21[i]) { const fr = p.rem, pnl = fr * p.shares * (c.close - p.entry) - P.commission; cash += fr * p.shares * c.close - P.commission; fees += P.commission; p.realized += pnl; p.rem = 0; p.open = false; }
       if (defensive && p.open && !p.tp1hit && c.close > p.entry && p.stop < p.entry) { p.stop = p.entry; diag.beZorlama++; }
     }
@@ -7041,7 +7438,7 @@ function labReplay(ctx, P) {
       const shares = notional / sig.entry;
       positions.push({ sym: sig.sym, lane: sig.lane, date: d, entry: sig.entry, stop: sig.stop,
         tp1: sig.entry * (1 + P.tp1 / 100), tp2: sig.entry * (1 + P.tp2 / 100),
-        shares, notional, initRisk: shares * (sig.entry - sig.stop), realized: -P.commission, rem: 1, tp1hit: false, tp2hit: false, open: true });
+        shares, notional, initRisk: shares * (sig.entry - sig.stop), realized: -P.commission, rem: 1, tp1hit: false, tp2hit: false, r1hit: false, open: true });
     }
     let mtm = 0; for (const p of positions.filter((x) => x.open)) { const s = S[p.sym], i = s.idx[d]; if (i != null) mtm += p.rem * p.shares * s.v[i].close; }
     const eq = cash + mtm; peak = Math.max(peak, eq); maxDD = Math.min(maxDD, eq / peak - 1);

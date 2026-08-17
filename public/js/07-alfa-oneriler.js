@@ -46,6 +46,28 @@ async function chLoadIndex() {
  * Kalibrasyon: 7 Nis 2025 çöküşü=2 · Haz 2026 rallisi=86 (315 günlük doğrulama). */
 const chRaiClamp = (x, a = 0, b = 100) => Math.max(a, Math.min(b, x));
 const chNearBar = (ser, d) => { if (!ser) return null; let i = ser.idx[d]; if (i == null) { for (i = ser.v.length - 1; i >= 0 && ser.v[i].time > d; i--); } return i != null && i >= 0 ? i : null; };
+
+/* Açık pozisyonun d günündeki işaretlenme fiyatı (mark-to-market).
+ *
+ * 17 Ağu: eşitlik eğrisi bunu `s.v[s.idx[d]].close` diye okuyordu. `idx[d]` YALNIZ
+ * sembolün o tarihte barı varsa dolu; yoksa undefined dönüyor ve `s.v[undefined].close`
+ * TÜM PANOYU düşürüyordu — "Alfa Avı yükleniyor…" sonsuza kadar öyle kalıyor, çünkü
+ * hata renderChallenge'ın await'inde yakalanmadan yükseliyor.
+ *
+ * Evren tek bir tarihte başlamıyor: Radar + Swing + Cuma listesi birleşiyor, semboller
+ * farklı uzunlukta geçmişe sahip (geç halka arz, önbellek boşluğu, tatil farkı). Yani
+ * "her sembolün her günde barı var" varsayımı hiçbir zaman doğru değildi; yalnız
+ * evren sıralaması şanslı olduğu sürece patlamadı.
+ *
+ * chNearBar zaten "d'de ya da ÖNCESİNDE en yakın bar"ı veriyor ve chRaiAt/chEmaGateAt
+ * bunu kullanıyordu — MTM döngüleri atlamıştı. İşlem görmeyen günde son bilinen fiyatı
+ * taşımak MTM'in doğru semantiği; bar hiç yoksa (pozisyon serinin başından önce
+ * açılmış olamaz, ama savunma kalsın) girişten taşınır, sıfıra düşmez. */
+function chMarkAt(P, p, d) {
+  const s = P._sym[p.sym];
+  const i = chNearBar(s, d);
+  return i != null ? s.v[i].close : p.entry;
+}
 const chRatioSer = (a, b) => { if (!a || !b) return null; const v = []; for (let i = 0; i < a.v.length; i++) { const j = chNearBar(b, a.v[i].time); if (j == null) continue; v.push({ time: a.v[i].time, close: a.v[i].close / b.v[j].close }); } return v.length >= 30 ? { v, ema21: chEMA(v, 21), idx: Object.fromEntries(v.map((c, i) => [c.time, i])) } : null; };
 const chRaiBand = (s) => s == null ? null : s >= 65 ? "riskon" : s >= 45 ? "notr" : s >= 30 ? "temkin" : "riskoff";
 const chRaiBandTR = {
@@ -283,7 +305,7 @@ function chRun() {
     }
     // 2) Yeni sinyaller — açılır açılmaz sunucu defterine dondurulur (kapanmış barlar)
     // Rejim kapısı: off ise O GÜN yeni giriş YOK (açıklar savunma modunda yönetilmeye devam eder)
-    if (regime === "off") { let mtm0 = 0; for (const p of positions.filter((x) => x.open)) { const s = P._sym[p.sym]; mtm0 += p.rem * p.shares * s.v[s.idx[d]].close; } equity.push({ d, v: +(cash + mtm0).toFixed(2) }); continue; }
+    if (regime === "off") { let mtm0 = 0; for (const p of positions.filter((x) => x.open)) mtm0 += p.rem * p.shares * chMarkAt(P, p, d); equity.push({ d, v: +(cash + mtm0).toFixed(2) }); continue; }
     const raiD = chRaiAt(d);
     const sigs = P.watch.filter((sym) => P._sym[sym] && P._sym[sym].idx[d] != null && !held.has(sym)).map((sym) => chSignal(sym, P._sym[sym].idx[d])).filter(Boolean)
       .sort((a, b) => chRS(P._sym[b.sym], b.i) - chRS(P._sym[a.sym], a.i) || b.volRatio - a.volRatio); // önce göreli güç (QM), eşitse hacim
@@ -302,7 +324,7 @@ function chRun() {
       held.add(sig.sym);
       if (d < todayISO) chFreeze(t); // gün kapanmışsa karar kesindir → dondur (bugünün barı hâlâ oluşuyor olabilir)
     }
-    let mtm = 0; for (const p of positions.filter((x) => x.open)) { const s = P._sym[p.sym]; mtm += p.rem * p.shares * s.v[s.idx[d]].close; }
+    let mtm = 0; for (const p of positions.filter((x) => x.open)) mtm += p.rem * p.shares * chMarkAt(P, p, d);
     equity.push({ d, v: +(cash + mtm).toFixed(2) });
   }
   for (const p of positions) { p.initRisk = p.shares * (p.entry - p.stop); p.R = p.initRisk > 0 ? +(p.realized / p.initRisk).toFixed(2) : 0; if (p.open) { p.mark = lastClose(p.sym); p.unreal = +(p.rem * p.shares * (p.mark - p.entry)).toFixed(2); } }
@@ -526,9 +548,38 @@ async function chLocalBoard(el) {
   return { positions, cash, watch: chWatch(new Set(positions.filter((p) => p.open).map((p) => p.sym))), regime: chRegimeToday(), rai: chRaiToday(), universeCount: CHALLENGE.watch.length, vixReal: !!CHALLENGE._vixSer, source: "client" };
 }
 
+/* Açık pozisyonları CANLI fiyatla işaretle.
+ *
+ * 17 Ağu: hem istemci motoru (lastClose) hem sunucu panosu açık pozisyonu son
+ * GÜNLÜK KAPANIŞLA işaretliyordu. Pazartesi öğlen kart Cuma kapanışını gösteriyor;
+ * sunucu panosu ayrıca 30 dakikaya kadar bayat olabiliyor. Mum önbelleği gün-içi
+ * yazılmamalı (bar kapanmadan yazılırsa sinyal geçmişi kayar), o yüzden düzeltme
+ * mumlarda değil BURADA: yalnız görüntülenen mark tazeleniyor, geçmişe dokunulmuyor.
+ *
+ * Yalnız AÇIK pozisyonlar sorgulanır (kapananların fiyatı tarihseldir, tazelenmesi
+ * yanlış olur). Kotasyon gelmezse mevcut mark korunur — boş/0 fiyat basılmaz. */
+async function chCanliMark(D) {
+  const acik = (D.positions || []).filter((p) => p.open && p.sym);
+  if (!acik.length) return D;
+  try {
+    const syms = [...new Set(acik.map((p) => p.sym))].join(",");
+    const r = await fetch(`/api/quotes?symbols=${encodeURIComponent(syms)}`);
+    if (!r.ok) return D;
+    const { quotes } = await r.json();
+    for (const p of acik) {
+      const q = quotes?.[p.sym];
+      if (!q || !(q.price > 0)) continue;
+      p.mark = q.price;
+      p.markCanli = !q.stale;                       // kart "canlı mı" diye soruyor
+      if (p.shares > 0) p.unreal = +(p.rem * p.shares * (p.mark - p.entry)).toFixed(2);
+    }
+  } catch { /* kotasyon yok → mum kapanışıyla devam */ }
+  return D;
+}
+
 async function renderChallenge() {
   const el = $("#challengeBox"); if (!el) return;
-  const D = (await chLoadBoard()) || (await chLocalBoard(el));
+  const D = await chCanliMark((await chLoadBoard()) || (await chLocalBoard(el)));
   const positions = D.positions, cash = D.cash;
   const closed = positions.filter((p) => !p.open), open = positions.filter((p) => p.open);
   const realized = positions.reduce((s, p) => s + p.realized, 0);
@@ -556,7 +607,7 @@ async function renderChallenge() {
       <div class="ch-card-dt">${chFmtD(p.date)} → açık · ~${fmtUSD0(p.notional)} pozisyon · %${(p.rem * 100).toFixed(0)} taşınıyor${p.initRisk ? ` · risk ${fmtUSD0(p.initRisk)}` : ""}${Math.abs(p.realized) > (D.commission ?? 1.5) + 0.5 ? ` · realize <b class="${cls(p.realized)}" title="komisyonlar düşülmüş net">${p.realized >= 0 ? "+" : ""}${fmtUSD0(p.realized)}</b>` : ""}</div>
       ${chLadder(p)}
       <div class="ch-dist">
-        <span class="cd now ${pct >= 0 ? "up" : "dn"}">${pct >= 0 ? "▲" : "▼"} Şimdi <b>${fmtUSD(p.mark)}</b> · ${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%</span>
+        <span class="cd now ${pct >= 0 ? "up" : "dn"}" title="${p.markCanli ? "canlı kotasyon" : "son günlük kapanış — canlı fiyat alınamadı"}">${pct >= 0 ? "▲" : "▼"} ${p.markCanli ? "Şimdi" : "Kapanış"} <b>${fmtUSD(p.mark)}</b> · ${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%</span>
         <span class="cd tp">${nextLbl} <s>+${Math.max(0, toTgt).toFixed(1)}% uzak</s></span>
         <span class="cd stop">stop <s>${toStop.toFixed(1)}% uzak</s></span>
       </div>
@@ -589,14 +640,64 @@ async function renderChallenge() {
   const wl = D.watch;
   const wlAct = wl.filter((w) => w.status !== "off");
   const wlOff = wl.filter((w) => w.status === "off");
+  /* Kurulum kapısı rozeti — radar tarafındaki .rb-kapi ile aynı dil (kesik
+   * çerçeve, susturulmuş metin): bu bir uyarı değil, "neden girilmiyor" cevabı.
+   * Kapı KESİN engeldir; why'daki diğer sebepler ("tetik bekleniyor" gibi)
+   * geçicidir. O yüzden rozet metnin başında ve ayrı duruyor. */
+  const KAPI_ETIKET = { oynaklik: "çok oynak", "goreli-guc": "endeksin gerisinde" };
+  const wlKapi = (w) => w.kapi
+    ? `<span class="wl-kapi" title="${(w.kapi.sebep || "").replace(/"/g, "")}">kapı · ${KAPI_ETIKET[w.kapi.ad] || w.kapi.ad}</span> `
+    : "";
   const wpill = (st) => st === "ready" ? `<span class="ch-pill win">Tetik bölgesi</span>` : st === "forming" ? `<span class="ch-pill open">Oluşuyor</span>` : `<span class="ch-pill neu">Trendde</span>`;
-  const wlRows = wlAct.map((w) => `<tr class="wl-${w.status}" data-chsym="${w.sym}" title="Grafiği aç — ${w.sym}">
-    <td class="l"><b>${w.sym}</b></td><td>${wpill(w.status)}</td><td>${fmtUSD(w.close)}</td>
-    <td class="${w.distPct <= 0 ? "win-c" : ""}">${w.distPct <= 0 ? "EMA8 üstü ✓" : `+${w.distPct.toFixed(1)}%`}</td>
-    <td>${fmtUSD(w.entry)} · <span class="loss-c">${fmtUSD0(w.stop)}</span> · <span class="win-c">${fmtUSD0(w.tp2)}</span></td>
-    <td>~${fmtUSD0(w.notional)} <span class="sw-muted">(risk ${fmtUSD0(w.riskUSD)})</span></td>
-    <td class="l wl-why">${w.why || "—"}</td></tr>`).join("")
-    || `<tr><td colspan="7" class="ch-none">Şu an trendde aday yok — evren taranmaya devam ediyor.</td></tr>`;
+  const wlN = wlAct.length;
+  // 14 Ağu: 7 sütunlu tabloydu — plan tek hücrede "$97 · $88 · $115" diye sıkışıyor,
+  // tetiğe 0.3% kalan sembolle 12% kalan aynı ağırlıkta duruyordu. Radar'ın plan
+  // kartıyla aynı dile geçti: seviyeler kendi sütununda, tetiğe uzaklık bir şerit,
+  // sıralama aciliyete göre (tetik bölgesi → oluşuyor → trendde).
+  const WL_SIRA = { ready: 0, forming: 1 };
+  const wlSorted = [...wlAct].sort((a, b) => {
+    const ra = WL_SIRA[a.status] ?? 9, rb = WL_SIRA[b.status] ?? 9;
+    return ra !== rb ? ra - rb : (a.distPct ?? 99) - (b.distPct ?? 99);
+  });
+  const wlKart = (w) => {
+    // Tetiğe uzaklık şeridi: 0% = tetikte, 8%+ = uzak. Sayıyı gözle karşılaştırılabilir yapar.
+    const d = w.distPct;
+    const dolu = d == null ? 0 : Math.max(0, Math.min(100, (1 - d / 8) * 100));
+    return `<article class="rp-card wl-card wl-${w.status}" data-chsym="${w.sym}" title="Grafiği aç — ${w.sym}">
+      <header class="rp-head">
+        <div class="rp-id"><span class="rp-sym">${w.sym}</span>${wpill(w.status)}</div>
+        <div class="rp-px">${fmtUSD(w.close)}</div>
+      </header>
+      <div class="wl-dist">
+        <div class="wl-dist-h">
+          <span>Tetiğe</span>
+          <b class="${d != null && d <= 0 ? "pos" : ""}">${d == null ? "—" : d <= 0 ? "EMA8 üstü ✓" : `+${d.toFixed(1)}%`}</b>
+        </div>
+        <div class="wl-dist-bar"><i style="width:${dolu.toFixed(0)}%"></i></div>
+      </div>
+      <div class="rp-lvls">
+        <div class="rp-lvl"><span>Gir</span><b>${fmtUSD(w.entry)}</b></div>
+        <div class="rp-lvl stop"><span>Stop</span><b>${fmtUSD0(w.stop)}</b></div>
+        <div class="rp-lvl tgt"><span>Hedef</span><b>${fmtUSD0(w.tp2)}</b></div>
+      </div>
+      <div class="rp-size">
+        <span class="rp-size-n"><b>${fmtUSD0(w.notional)}</b> pozisyon</span>
+        <span class="rp-size-s">riskin <b>${fmtUSD0(w.riskUSD)}</b> · motor otomatik boyutlar</span>
+      </div>
+      <div class="wl-neden">${wlKapi(w)}${w.why || "—"}</div>
+    </article>`;
+  };
+  // Kart okunaklı ama 40 kart 8000px kaydırma demek — "detayda boğulma" tam da bu.
+  // İlk 12 (en yakın tetikler) kart, kalanı tek satırlık katlanır liste.
+  const WL_KART_TAVAN = 12;
+  const wlIlk = wlSorted.slice(0, WL_KART_TAVAN), wlKalan = wlSorted.slice(WL_KART_TAVAN);
+  const wlRows = wlSorted.length
+    ? `<div class="rp-grid">${wlIlk.map(wlKart).join("")}</div>`
+      + (wlKalan.length ? `<details class="wl-more"><summary>${wlKalan.length} sembol daha <i>tetiğe daha uzak</i></summary>
+          <div class="wl-more-list">${wlKalan.map((w) => `<button class="wl-mini" data-chsym="${w.sym}" title="${(w.why || "").replace(/"/g, "")}">
+            <b>${w.sym}</b><span>${w.distPct == null ? "—" : w.distPct <= 0 ? "tetikte" : `+${w.distPct.toFixed(1)}%`}</span></button>`).join("")}</div>
+        </details>` : "")
+    : `<div class="ch-empty-box">Şu an trendde aday yok — evren taranmaya devam ediyor.</div>`;
   const wlOffLine = wlOff.length ? `<div class="wl-off-line">Trend dışı (aday değil): ${wlOff.map((w) => w.sym).join(" · ")}</div>` : "";
 
   const regNow = D.regime;
@@ -623,27 +724,50 @@ async function renderChallenge() {
       </div>
     </div>`;
   })() : "";
+  // 14 Ağu: kural metni sekmenin ilk öğesiydi — sekmeye her girişte 6 satırlık bir
+  // duvar okunuyordu. Kurallar sabit, sayılar değişken: değişkeni öne al, sabiti kapat.
   el.innerHTML = `
-    <div class="ch-strat">Strateji: <b>Swing Momentum (8/21/50 EMA)</b> + <b>Qullamaggie</b> teyidi · <b>bugünden ileri</b> canlı hesap · evren: <b>Radar + Swing defteri (${D.universeCount} hisse)</b> · sadece tetikte açar (asla stop'suz değil) · riske göre ~%${CHALLENGE.riskPct}/işlem · kademeli kâr-al (TP1 +%${CHALLENGE.tp1}/TP2 +%${CHALLENGE.tp2}, sonra ${CHALLENGE.trailEma} iz süren stop) · <b>rejim kapısı: QQQ &lt; EMA21 veya risk iştahı &lt; 30 → giriş yok</b> · aynı gün çok tetikte <b>göreli güç</b> önce · <b>bilanço karartması</b>: bilançoya ≤3 gün kala giriş yok · <b>sektör tavanı</b>: sektör başına 1 pozisyon · <b>komisyon</b>: emir başına $${(D.commission ?? CHALLENGE.commission).toFixed(2)} (alış + her satış, Midas) — tüm rakamlar net.</div>
+    <details class="ch-strat-wrap"><summary>Alfa Avı hangi kurallarla işlem açıyor? <i>evren ${D.universeCount} hisse · ~%${CHALLENGE.riskPct} risk/işlem · rejim kapısı açık</i></summary>
+    <div class="ch-strat">Strateji: <b>Swing Momentum (8/21/50 EMA)</b> + <b>Qullamaggie</b> teyidi · <b>bugünden ileri</b> canlı hesap · evren: <b>Radar + Swing defteri (${D.universeCount} hisse)</b> · sadece tetikte açar (asla stop'suz değil) · riske göre ~%${CHALLENGE.riskPct}/işlem · kademeli kâr-al (TP1 +%${CHALLENGE.tp1}/TP2 +%${CHALLENGE.tp2}, sonra ${CHALLENGE.trailEma} iz süren stop) · <b>rejim kapısı: QQQ &lt; EMA21 veya risk iştahı &lt; 30 → giriş yok</b> · aynı gün çok tetikte <b>göreli güç</b> önce · <b>bilanço karartması</b>: bilançoya ≤3 gün kala giriş yok · <b>sektör tavanı</b>: sektör başına 1 pozisyon · <b>komisyon</b>: emir başına $${(D.commission ?? CHALLENGE.commission).toFixed(2)} (alış + her satış, Midas) — tüm rakamlar net.</div></details>
     ${raiPanel}
     ${regBadge}
-    <div class="ch-kpis">
-      <div class="ch-kpi hero"><div class="ch-k-l">SERMAYE</div><div class="ch-k-v">${fmtUSD0(equityNow)}</div>
-        <div class="ch-k-s ${cls(equityNow - CHALLENGE.startCapital)}">${equityNow - CHALLENGE.startCapital >= 0 ? "▲ +" : "▼ "}${fmtUSD0(equityNow - CHALLENGE.startCapital)} · ${totPct >= 0 ? "+" : ""}${totPct.toFixed(1)}% · başlangıç ${fmtUSD0(CHALLENGE.startCapital)}</div></div>
-      <div class="ch-kpi"><div class="ch-k-l">NAKİT</div><div class="ch-k-v">${fmtUSD0(cashNow)}</div><div class="ch-k-s">${open.length} açıkta ${fmtUSD0(open.reduce((s, p) => s + (p.notional || 0), 0))}</div></div>
-      <div class="ch-kpi"><div class="ch-k-l">REALİZE K/Z</div><div class="ch-k-v ${cls(realized)}">${realized >= 0 ? "+" : ""}${fmtUSD0(realized)}</div><div class="ch-k-s">${closed.length} kapanan${closed.length ? ` · %${winRate.toFixed(0)} isabet` : ""}</div></div>
-      <div class="ch-kpi"><div class="ch-k-l">AÇIK POZİSYON</div><div class="ch-k-v">${open.length}</div><div class="ch-k-s">${unreal >= 0 ? "+" : ""}${fmtUSD0(unreal)} açık K/Z</div></div>
+    <!-- 15 Ağu: dört eşit KPI kutusuydu; hangisinin karar değiştirdiği belli değildi.
+         Sermaye TEK giriş noktası (hesabın tamamı bu sayı), gerisi swing'in nöbet
+         şeridine indi. Renk yalnız sermayenin başlangıca göre yönünde — nakit ve
+         açık pozisyon sayısı nötr, çünkü onlar bir şey yapmanı gerektirmiyor. -->
+    <section class="ch-hero">
+      <div class="ch-hero-top">
+        <div>
+          <span class="sw2-eyebrow">Sermaye <i>oyun parası · ${CHALLENGE.startCapital}$ ile başladı</i></span>
+          <div class="ch-hero-val ${equityNow < CHALLENGE.startCapital ? "neg" : ""}">${fmtUSD0(equityNow)}</div>
+          <span class="ch-hero-meta ${cls(equityNow - CHALLENGE.startCapital)}">${equityNow - CHALLENGE.startCapital >= 0 ? "+" : "−"}${fmtUSD0(Math.abs(equityNow - CHALLENGE.startCapital))} · ${totPct >= 0 ? "+" : ""}${totPct.toFixed(1)}%</span>
+        </div>
+      </div>
+    </section>
+    <div class="sw2-strip">
+      <div class="sw2-strip-i"><span class="sw2-strip-k">Realize K/Z</span>
+        <b class="sw2-strip-v ${cls(realized)}">${realized >= 0 ? "+" : "−"}${fmtUSD0(Math.abs(realized))}</b>
+        <span class="sw2-strip-s">${closed.length} kapanan${closed.length ? ` · %${winRate.toFixed(0)} isabet` : ""}</span></div>
+      <div class="sw2-strip-i"><span class="sw2-strip-k">Açık pozisyon K/Z</span>
+        <b class="sw2-strip-v ${open.length ? cls(unreal) : ""}">${unreal >= 0 ? "+" : "−"}${fmtUSD0(Math.abs(unreal))}</b>
+        <span class="sw2-strip-s">${open.length} pozisyon · ${fmtUSD0(open.reduce((s, p) => s + (p.notional || 0), 0))}</span></div>
+      <div class="sw2-strip-i"><span class="sw2-strip-k">Nakit</span>
+        <b class="sw2-strip-v">${fmtUSD0(cashNow)}</b>
+        <span class="sw2-strip-s">yeni işlem için hazır</span></div>
     </div>
     ${chGoalLadder(D, equityNow)}
 
-    <div class="ch-h ch-h-tbl">Açık pozisyonlar <span class="ch-sub">gerçek fiyatla canlı · hedef/stop otomatik</span></div>
+    <header class="sw2-sec-h ch-sec"><h3>Açık pozisyonlar</h3><span class="sw2-sec-rule"></span>
+      <span class="sw2-sec-n">${open.length ? `${open.length} pozisyon · ${fmtUSD0(open.reduce((s, p) => s + (p.notional || 0), 0))} · canlı fiyat` : "pozisyon yok — tetik bekleniyor"}</span></header>
     ${open.length ? `<div class="ch-jrnl">${openCards}</div>` : `<div class="ch-empty-box">Şu an açık pozisyon yok. Sistem <b>tetik</b> bekliyor — kural olmadan (stop'suz) girmez. Aşağıdaki izleme listesi hangi hisselerin kuruluma yaklaştığını gösterir.</div>`}
 
-    <div class="ch-h ch-h-tbl">İzleme listesi — kurulum oluşuyor mu? <span class="ch-sub">tetik = EMA8'i hacimle geri almak · sonra otomatik giriş</span></div>
-    <div class="tbl-wrap"><table class="ch-table wl-table"><thead><tr><th class="l">Sembol</th><th>Durum</th><th>Fiyat</th><th>Tetiğe Uzaklık</th><th>Plan (giriş·stop·hedef)</th><th>~Pozisyon</th><th class="l">Neden bekliyor?</th></tr></thead><tbody>${wlRows}</tbody></table></div>
+    <header class="sw2-sec-h ch-sec"><h3>İzleme listesi</h3><span class="sw2-sec-rule"></span>
+      <span class="sw2-sec-n">${wlN} sembol${wlAct.filter((w) => w.status === "ready").length ? ` · <b class="sw2-acil">${wlAct.filter((w) => w.status === "ready").length} tetik bölgesinde</b>` : ""} · tetik = EMA8'i hacimle geri almak</span></header>
+    ${wlRows}
     ${wlOffLine}
 
-    ${closed.length ? `<div class="ch-h ch-h-tbl">Kapanan işlemler — gerekçeli <span class="ch-sub">bugünden beri</span></div>
+    ${closed.length ? `<header class="sw2-sec-h ch-sec"><h3>Kapanan işlemler</h3><span class="sw2-sec-rule"></span>
+      <span class="sw2-sec-n">${closed.length} kapanış · %${winRate.toFixed(0)} isabet · bugünden beri</span></header>
     <div class="ch-jrnl">${closed.slice().sort((a, b) => new Date(b.exitDate) - new Date(a.exitDate)).map((p) => {
       const st = p.realized > 1 ? "win" : p.realized < -1 ? "loss" : "neu";
       const pill = st === "win" ? `<span class="ch-pill win">Kâr</span>` : st === "loss" ? `<span class="ch-pill loss">Zarar</span>` : `<span class="ch-pill neu">Başa-baş</span>`;
@@ -692,6 +816,7 @@ $("#huntStrip")?.addEventListener("click", (e) => { if (e.target.closest("[data-
 function renderAnaliz() {
   renderAnalizSummary();
   renderProRisk();
+  renderKiyas();          // sekmenin ilk paneli — temel çizgi olmadan diğer sayılar okunmaz
   renderRealizeSummary();
   renderRisk();
   renderPosTech();

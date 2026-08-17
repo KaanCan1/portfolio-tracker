@@ -148,7 +148,10 @@ function swingStats(closed) {
   return { n: recs.length, winCount: wins.length, lossCount: losses.length,
     winRate: (wins.length / recs.length) * 100, profitFactor, payoff, avgWin, avgLoss,
     expectancyUSD, expectancyR, avgDays, best, worst, maxW, maxL, rBuckets: buckets, rN: rVals.length,
-    disciplinePct, stopViol, avgLossR, lossRN: lossR.length };
+    // stopHonored yüzdenin PAYI. 14 Ağu: alt satır "lossRN − stopViol" yazıyordu; o
+    // "1.5R'yi aşmayan" demek, yüzde ise "1.1R içinde kalan" — kart "%50" derken
+    // "4/4 kayıp 1R içinde" diyordu. Aynı şeyi iki tanımla ölçmek ölçmemektir.
+    disciplinePct, stopHonored, stopViol, avgLossR, lossRN: lossR.length };
 }
 
 function swingStatsPanel(closed) {
@@ -160,25 +163,46 @@ function swingStatsPanel(closed) {
   const histo = s.rBuckets.map((b) =>
     `<div class="sx-bar"><div class="sx-bar-fill ${b.tone}" style="height:${Math.round((b.n / maxBucket) * 100)}%"></div>
       <span class="sx-bar-n">${b.n}</span><span class="sx-bar-l">${b.lbl}</span></div>`).join("");
+  // Üç birincil + kalanı ikincil. Eski hâlinde on iki karo aynı ağırlıktaydı: göz
+  // hangisinin karar değiştirdiğini seçemiyordu. Karar değiştiren üç sayı şunlar:
+  // işlem başı BEKLENTİ (defter para kazandırıyor mu), İSABET (ne sıklıkta haklısın),
+  // STOP DİSİPLİNİ (Kural 1'e uyuyor musun). Gerisi bağlam — okunur ama bağırmaz.
+  const lead = (lbl, val, tone, sub) =>
+    `<div class="sx-lead"><span class="sx-lead-k">${lbl}</span><b class="sx-lead-v ${tone}">${val}</b><span class="sx-lead-s">${sub}</span></div>`;
+  // fmtUSD0 negatifi "$-179" basar; işaret rakamın önüne gelmeli → "−$179"
+  const s$ = (n) => (n < 0 ? "−" : "") + fmtUSD0(Math.abs(n));
+  const sR = (n) => (n >= 0 ? "+" : "−") + Math.abs(n).toFixed(2) + "R";
+  // R ortalaması YALNIZ stop'u girilmiş işlemleri kapsar — $ beklentisi hepsini.
+  // İki sayı farklı örneklemden geliyorsa örneklem yazılmadan yan yana konmaz.
+  const rNot = s.expectancyR != null
+    ? `${sR(s.expectancyR)} · ${s.rN} stop'lu işlemde`
+    : "her kapanışta ortalama";
   const stat = (lbl, val, tone = "", sub = "") =>
     `<div class="sx-stat"><span class="sx-lbl">${lbl}</span><b class="${tone}">${val}</b>${sub ? `<span class="sx-sub">${sub}</span>` : ""}</div>`;
   return `
     <section class="panel sx-panel">
-      <div class="panel-head"><div><h2>Swing Karnesi <span class="sw-chip">${s.n} işlem</span></h2>
-        <span class="chart-sub">Qullamaggie'yi ne kadar iyi uyguluyorsun — profit factor, payoff, beklenti, R-dağılımı</span></div></div>
+      <div class="panel-head"><div><h2>Karne</h2>
+        <span class="chart-sub">${s.n} kapanmış işlemden — kâr ÷ zarar, işlem başı beklenti, R dağılımı</span></div></div>
+      <div class="sx-leads">
+        ${lead("İşlem başı beklenti", s$(s.expectancyUSD),
+          s.expectancyUSD >= 0 ? "pos" : "neg", rNot)}
+        ${lead("İsabet", s.winRate.toFixed(0) + "%", "", `${s.winCount} kârlı / ${s.lossCount} zararlı`)}
+        ${s.disciplinePct != null
+          ? lead("Stop disiplini", Math.round(s.disciplinePct) + "%",
+              s.disciplinePct >= 80 ? "" : "neg",
+              `${s.stopHonored}/${s.lossRN} kayıp 1R içinde kaldı`)
+          : lead("Stop disiplini", "—", "", "stop girilmiş kapanış gerek")}
+      </div>
       <div class="sx-grid">
-        ${stat("İsabet", s.winRate.toFixed(0) + "%", s.winRate >= 50 ? "pos" : "", `${s.winCount}K / ${s.lossCount}Z`)}
-        ${stat("Profit Factor", fmtPF(s.profitFactor), cls2(s.profitFactor, s.profitFactor >= 1), "kâr ÷ zarar")}
-        ${stat("Payoff", fmtPF(s.payoff), cls2(s.payoff, s.payoff >= 1), "ort kazanç ÷ kayıp")}
-        ${stat("Beklenti", fmtUSD0(s.expectancyUSD), s.expectancyUSD >= 0 ? "pos" : "neg", s.expectancyR != null ? `${s.expectancyR >= 0 ? "+" : ""}${s.expectancyR.toFixed(2)}R / işlem` : "işlem başı")}
-        ${stat("Ort. Kazanç", fmtUSD0(s.avgWin), "pos", `${s.winCount} kârlı`)}
-        ${stat("Ort. Kayıp", "−" + fmtUSD0(s.avgLoss), "neg", `${s.lossCount} zararlı`)}
-        ${stat("Ort. Tutuş", s.avgDays != null ? Math.round(s.avgDays) + " gün" : "—", "", "açılış→kapanış")}
-        ${stat("Seri", `${s.maxW}K / ${s.maxL}Z`, "", "en uzun üst üste")}
-        ${stat("En İyi", fmtUSD0(s.best.realized), "pos", s.best.sym)}
-        ${stat("En Kötü", fmtUSD0(s.worst.realized), "neg", s.worst.sym)}
-        ${s.disciplinePct != null ? stat("Stop Disiplini", Math.round(s.disciplinePct) + "%", s.disciplinePct >= 80 ? "pos" : s.disciplinePct >= 50 ? "" : "neg", `${s.lossRN - s.stopViol}/${s.lossRN} kayıp 1R içinde`) : ""}
-        ${s.avgLossR != null ? stat("Ort. Kayıp (R)", s.avgLossR.toFixed(2) + "R", s.avgLossR >= -1.1 ? "pos" : "neg", "ideal ≈ −1R") : ""}
+        ${stat("Profit factor", fmtPF(s.profitFactor), cls2(s.profitFactor, s.profitFactor >= 1), "kâr ÷ zarar")}
+        ${stat("Payoff", fmtPF(s.payoff), "", "ort. kazanç ÷ kayıp")}
+        ${stat("Ort. kazanç", s$(s.avgWin), "", `${s.winCount} kârlı`)}
+        ${stat("Ort. kayıp", "−" + fmtUSD0(s.avgLoss), "", `${s.lossCount} zararlı`)}
+        ${stat("Ort. tutuş", s.avgDays != null ? Math.round(s.avgDays) + " gün" : "—", "", "açılış → kapanış")}
+        ${stat("En uzun seri", `${s.maxW}K / ${s.maxL}Z`, "", "üst üste")}
+        ${stat("En iyi", s$(s.best.realized), "", s.best.sym)}
+        ${stat("En kötü", s$(s.worst.realized), "", s.worst.sym)}
+        ${s.avgLossR != null ? stat("Ort. kayıp (R)", sR(s.avgLossR), s.avgLossR >= -1.1 ? "" : "neg", "ideal ≈ −1R") : ""}
       </div>
       ${s.disciplinePct != null ? `<div class="sx-disc ${s.disciplinePct >= 80 ? "ok" : "warn"}">
         ${s.disciplinePct >= 80
@@ -213,7 +237,7 @@ function decisionScorecardPanel(closed) {
   const recs = decisionRecs(closed);
   const journaled = recs.filter((r) => r.planFollow || r.conf || r.setupKind);
   if (!journaled.length) {
-    return closed.length ? `<section class="panel dj-panel dj-empty"><div class="panel-head"><div><h2>Karar Kalitesi</h2></div></div>
+    return closed.length ? `<section class="panel dj-panel dj-empty"><div class="panel-head"><div><h2>Karar kalitesi</h2></div></div>
       <p class="dj-empty-note">Karar defterini doldurmaya başla: yeni swing açarken <b>tez · güven · setup</b> gir, kapatırken <b>“plana uydun mu?”</b> yanıtla. Zamanla <b>şans mı beceri mi</b> ayrışır — Kural 1'in gerçek ölçüsü budur.</p></section>` : "";
   }
   // ── 2×2 şans/beceri matrisi (planFollow gerekir) ──
@@ -261,7 +285,7 @@ function decisionScorecardPanel(closed) {
 
   const small = journaled.length < 5;
   return `<section class="panel dj-panel">
-    <div class="panel-head"><div><h2>Karar Kalitesi <span class="sw-chip">${journaled.length} kayıt</span></h2>
+    <div class="panel-head"><div><h2>Karar kalitesi <span class="sw-chip">${journaled.length} kayıt</span></h2>
       <span class="chart-sub">Şans mı beceri mi — tezine, güvenine ve plana uyumuna göre kendi kararların</span></div></div>
     ${small ? `<div class="dj-small">İlk sinyaller — sağlıklı okuma için ~5+ etiketli kapanış gerek. Yine de biriktikçe netleşir.</div>` : ""}
     ${matrix ? `<div class="dj-block"><div class="dj-block-h">Şans / Beceri matrisi <span class="sw-muted">${pf.length} tam kapanış</span></div>
@@ -298,17 +322,25 @@ const SW_VERDICT = {
   yetersiz: { tone: "mute", txt: "Hüküm için yeterli kapanmış işlem yok." },
 };
 
-function provenCard(goal) {
+/* Sekmenin TEK giriş noktası. Eski hâlinde bu kart, üç özdeş mini kartla yan yana
+ * duruyordu: dördü de aynı ağırlıkta, göz nereye bakacağını bilmiyordu. Oysa bu
+ * projenin iddiası "ölçülmemiş hiçbir şey söylenmez" — o hâlde sayfanın kahramanı
+ * büyük bir rakam değil, RAKAMIN BELİRSİZLİĞİ olmalı. Şerit tam genişlikte: sıfır
+ * sert bir çizgi, tahmin bir nokta, %90 aralık bir bant. Hüküm cümlesi hemen altında.
+ * (14 Ağu tasarım geçişi) */
+function swHero(goal) {
   const p = SWINGDECK.proven;
-  const editBtn = `<button class="sw-goal-target" id="swGoalEditBtn" title="Aylık hedefi düzenle">
-      Hedef<br><b>$${goal.min}–${goal.max}</b><span>/ay</span>
+  const goalBtn = `<button class="sw2-goal" id="swGoalEditBtn" title="Aylık hedefi düzenle">
+      <span class="sw2-goal-k">Hedef</span><b>$${goal.min}–${goal.max}</b><span class="sw2-goal-u">/ay</span>
     </button>`;
   if (!p) {
-    return `<div class="sw-goal-card sw-proven">
-      <div class="sw-goal-head"><div><div class="sw-goal-lbl">Kanıtlanmış Aylık Katkı</div>
-        <div class="sw-goal-val">—</div></div>${editBtn}</div>
-      <div class="sw-goal-foot"><span class="sw-muted">ölçüm yüklenemedi</span></div>
-    </div>`;
+    return `<section class="sw2-hero">
+      <div class="sw2-hero-top"><div>
+        <span class="sw2-eyebrow">Kanıtlanmış aylık katkı</span>
+        <div class="sw2-hero-val">—</div>
+        <span class="sw2-hero-meta">ölçüm yüklenemedi</span>
+      </div>${goalBtn}</div>
+    </section>`;
   }
   const v = SW_VERDICT[p.verdict] || SW_VERDICT.yetersiz;
   const cls = p.perMonth > 0 ? "pos" : p.perMonth < 0 ? "neg" : "";
@@ -316,21 +348,29 @@ function provenCard(goal) {
   const s$ = (n) => (n > 0 ? "+" : n < 0 ? "−" : "") + fmtUSD0(Math.abs(n));
 
   // --- güven aralığı şeridi: alan [lo,hi] ∪ {0, nokta tahmin}, %8 pay ---
-  let ciBar = "";
+  let rail = "";
   if (p.ci) {
     const lo = Math.min(p.ci.lo, 0, p.perMonth), hi = Math.max(p.ci.hi, 0, p.perMonth);
     const pad = Math.max((hi - lo) * 0.08, 1);
     const d0 = lo - pad, d1 = hi + pad, span = d1 - d0 || 1;
     const at = (x) => ((x - d0) / span) * 100;
     const pc = (x) => at(x).toFixed(2);
-    ciBar = `
-      <div class="sw-ci" title="1000 yeniden örneklemeyle (bootstrap) %90 güven aralığı">
-        <div class="sw-ci-band ${v.tone}" style="left:${pc(p.ci.lo)}%;width:${(at(p.ci.hi) - at(p.ci.lo)).toFixed(2)}%"></div>
-        <div class="sw-ci-zero" style="left:${pc(0)}%"></div>
-        <div class="sw-ci-dot ${cls}" style="left:${pc(p.perMonth)}%"></div>
-      </div>
-      <div class="sw-ci-ax">
-        <span>${s$(p.ci.lo)}</span><span class="sw-ci-ax-c">%90 aralık</span><span>${s$(p.ci.hi)}</span>
+    // Sıfır etiketi kenara taşarsa içeri çek — "0" hiçbir zaman kırpılmasın
+    const z = at(0), zSide = z < 8 ? " sol" : z > 92 ? " sag" : "";
+    rail = `
+      <div class="sw2-rail">
+        <div class="sw2-rail-track">
+          <div class="sw2-rail-band ${v.tone}" style="left:${pc(p.ci.lo)}%;width:${(at(p.ci.hi) - at(p.ci.lo)).toFixed(2)}%">
+            <i class="sw2-rail-cap sol"></i><i class="sw2-rail-cap sag"></i>
+          </div>
+          <div class="sw2-rail-zero${zSide}" style="left:${pc(0)}%"><i>0</i></div>
+          <div class="sw2-rail-dot ${cls}" style="left:${pc(p.perMonth)}%"></div>
+        </div>
+        <div class="sw2-rail-ax">
+          <span>${s$(p.ci.lo)}</span>
+          <span class="sw2-rail-ax-c">%90 güven aralığı · 1000 yeniden örnekleme</span>
+          <span>${s$(p.ci.hi)}</span>
+        </div>
       </div>`;
   }
 
@@ -339,30 +379,55 @@ function provenCard(goal) {
   if (p.suggest) {
     advice = `Veri savunulabilir hedef olarak <b>$${p.suggest.min}–${p.suggest.max}/ay</b> diyor.`;
   } else if (p.verdict === "yetersiz") {
-    advice = `En az <b>5</b> kapanmış işlem gerekiyor — şu an <b>${p.n}</b>.`;
+    advice = `Hüküm için en az <b>5</b> kapanmış işlem gerekiyor — şu an <b>${p.n}</b>.`;
   } else {
     advice = `Veri şu an bir aylık gelir hedefini <b>desteklemiyor</b>.`;
   }
   const gap = p.perMonth > 0 && goal.min > 0 && goal.min / p.perMonth >= 2
-    ? `<div class="sw-pv-gap">Mevcut hedef ($${goal.min}) kanıtlanmış katkının <b>${Math.round(goal.min / p.perMonth)} katı</b>.</div>` : "";
+    ? ` Mevcut hedef ($${goal.min}) kanıtlanmış katkının <b>${Math.round(goal.min / p.perMonth)} katı</b>.` : "";
 
   return `
-    <div class="sw-goal-card sw-proven">
-      <div class="sw-goal-head">
+    <section class="sw2-hero">
+      <div class="sw2-hero-top">
         <div>
-          <div class="sw-goal-lbl">Kanıtlanmış Aylık Katkı <i>son ${p.monthsBack} ay · ölçüm</i></div>
-          <div class="sw-goal-val ${cls}">${s$(p.perMonth)}<span class="sw-pv-unit">/ay</span></div>
+          <span class="sw2-eyebrow">Kanıtlanmış aylık katkı <i>son ${p.monthsBack} ay · ölçüm</i></span>
+          <div class="sw2-hero-val ${cls}">${s$(p.perMonth)}<span class="sw2-hero-unit">/ay</span></div>
+          <span class="sw2-hero-meta">${p.n} işlem · ${p.wins}K/${p.losses}Z · ${p.spanMonths} ay</span>
         </div>
-        ${editBtn}
+        ${goalBtn}
       </div>
-      ${ciBar}
-      <div class="sw-goal-foot">
-        <span class="sw-verdict ${v.tone}">${v.txt}</span>
-        <span class="sw-muted">${p.n} işlem · ${p.wins}K/${p.losses}Z · ${p.spanMonths} ay</span>
-      </div>
-      <div class="sw-pv-advice">${advice}</div>
-      ${gap}
-    </div>`;
+      ${rail}
+      <p class="sw2-verdict ${v.tone}">${v.txt}</p>
+      <p class="sw2-advice">${advice}${gap}</p>
+    </section>`;
+}
+
+/* Nöbet şeridi kalemi — hero'yla yarışmasın diye kart değil, hairline'la ayrılmış sütun.
+ * Renk yalnız EYLEM gerektiren sayıda (açık K/Z): kapanmış aylar nötr kalır, yoksa
+ * ekran baştan aşağı kırmızı-yeşil olur ve hiçbir renk bir şey söylemez. */
+function swStripItem(lbl, val, sub, renkli) {
+  const t = renkli && val > 0 ? " pos" : renkli && val < 0 ? " neg" : "";
+  return `<div class="sw2-strip-i">
+    <span class="sw2-strip-k">${lbl}</span>
+    <b class="sw2-strip-v${t}">${fmtUSD0(val)}</b>
+    <span class="sw2-strip-s">${sub}</span>
+  </div>`;
+}
+
+/* Bölüm rayı. Her ray KENDİ KANIT MİKTARINI yazar — score-calibration.js'in
+ * "kanıt yoksa etiket 'ölçülmedi' der" kuralının yerleşime uygulanmış hâli.
+ * Kanıtı olmayan bölüm var gibi davranmaz, ne kadar az veriyle konuştuğunu söyler. */
+function swSection(baslik, kanit, icerik, ek = "") {
+  if (!icerik) return "";
+  return `<section class="sw2-sec">
+    <header class="sw2-sec-h">
+      <h3>${baslik}</h3>
+      <span class="sw2-sec-rule"></span>
+      <span class="sw2-sec-n">${kanit}</span>
+      ${ek}
+    </header>
+    <div class="sw2-sec-body">${icerik}</div>
+  </section>`;
 }
 
 function renderSwingDeck() {
@@ -397,26 +462,15 @@ function renderSwingDeck() {
   const total12 = months.reduce((a, m) => a + m.total, 0);
   const openPnl = open.reduce((a, t) => a + (swEnrich(t).pnl || 0), 0);
 
-  // --- hero kartları: dilek değil ÖLÇÜM önde ---
+  // --- Giriş noktası: ölçüm, kendi belirsizliğiyle birlikte (bkz. swHero) ---
   const pnlCls = (n) => (n > 0 ? "pos" : n < 0 ? "neg" : "");
-  const hero = `
-    <div class="sw-hero">
-      ${provenCard(goal)}
-      <div class="sw-mini">
-        <div class="sw-mini-lbl">Bu Ay Realize</div>
-        <div class="sw-mini-val ${pnlCls(thisMonth)}">${fmtUSD0(thisMonth)}</div>
-        <div class="sw-mini-sub">${months[mIndex[curKey]]?.count || 0} kapanış bu ay</div>
-      </div>
-      <div class="sw-mini">
-        <div class="sw-mini-lbl">Açık Pozisyon K/Z</div>
-        <div class="sw-mini-val ${pnlCls(openPnl)}">${fmtUSD0(openPnl)}</div>
-        <div class="sw-mini-sub">${open.length} açık pozisyon</div>
-      </div>
-      <div class="sw-mini">
-        <div class="sw-mini-lbl">Son 12 Ay Toplam</div>
-        <div class="sw-mini-val ${pnlCls(total12)}">${fmtUSD0(total12)}</div>
-        <div class="sw-mini-sub">${closed.length} kapanmış işlem</div>
-      </div>
+  const hero = swHero(goal);
+  // Nöbet şeridi — üç hızlı sayı. Hero'yla yarışmasın diye kart değil, tek satır.
+  const strip = `
+    <div class="sw2-strip">
+      ${swStripItem("Açık pozisyon K/Z", openPnl, `${open.length} açık pozisyon`, open.length > 0)}
+      ${swStripItem("Bu ay realize", thisMonth, `${months[mIndex[curKey]]?.count || 0} kapanış bu ay`, false)}
+      ${swStripItem("Son 12 ay", total12, `${closed.length} kapanmış işlem`, false)}
     </div>`;
 
   // --- 12 ay bar grafik ---
@@ -433,6 +487,10 @@ function renderSwingDeck() {
   const pv = SWINGDECK.proven;
   const pvTopPct = pv && pv.perMonth > 0 && pv.perMonth <= scale ? (1 - pv.perMonth / scale) * 100 : null;
   const zeroFromTop = 100;                             // 0 çizgisi en altta (pozitif veriler)
+  // 14 Ağu: ay etiketleri sütunun İÇİNDEYDİ, hedef bandı/kanıt çizgisi ise .sw-chart'ın
+  // tamamına göre yüzdeyle konumlanıyordu → kanıt çizgisi düşükken etiketi "Nis"in,
+  // negatif barın tutar etiketi de "Tem"in üstüne biniyordu. Artık çizim alanı (.sw-plot)
+  // ile eksen satırı (.sw-xaxis) ayrı: yüzdeler yalnız çizim alanına göre hesaplanıyor.
   const bars = months.map((m) => {
     const h = Math.max(0, (Math.max(0, m.total) / scale) * 100);
     const negH = Math.max(0, (Math.max(0, -m.total) / scale) * 100);
@@ -441,38 +499,48 @@ function renderSwingDeck() {
     const cur = m.key === curKey ? " cur" : "";
     return `
       <div class="sw-bar-col${cur}" data-swm-lbl="${m.label} ${m.year}" data-swm-total="${fmtUSD0(m.total)}" data-swm-count="${m.count}" data-swm-hit="${hit ? 1 : 0}">
-        <div class="sw-bar-track">
-          <div class="sw-bar ${cls}" style="height:${m.total >= 0 ? h : negH}%">
-            ${m.total !== 0 ? `<span class="sw-bar-tag">${fmtUSD0(m.total)}</span>` : ""}
-          </div>
+        <div class="sw-bar ${cls}" style="height:${m.total >= 0 ? h : negH}%">
+          ${m.total !== 0 ? `<span class="sw-bar-tag">${fmtUSD0(m.total)}</span>` : ""}
         </div>
-        <div class="sw-bar-x${cur}">${m.label}</div>
       </div>`;
   }).join("");
+  const xaxis = months.map((m) =>
+    `<div class="sw-bar-x${m.key === curKey ? " cur" : ""}">${m.label}</div>`).join("");
 
   const chart = `
     <section class="panel sw-chart-panel">
       <div class="panel-head">
         <div>
-          <h2>Aylık Swing Kazancı <span class="sw-chip">12 ay</span></h2>
-          <span class="chart-sub">Her ay realize ettiğin kâr${goalFits ? ` · yeşil bant = aylık hedef ($${goal.min}–${goal.max})` : ""}${pvTopPct != null ? ` · kesikli çizgi = kanıtlanmış katkı` : ""}</span>
+          <h2>Aylık realize</h2>
+          <span class="chart-sub">Her ay kapattığın kâr${goalFits ? ` · yeşil bant = hedef ($${goal.min}–${goal.max})` : ""}${pvTopPct != null ? ` · kesikli çizgi = kanıtlanmış katkı` : ""}</span>
         </div>
-        <button class="btn primary sm" id="swAddBtn">+ Swing Seç</button>
       </div>
       <div class="sw-chart">
-        ${goalFits
-          ? `<div class="sw-goalband" style="top:${goalTopPct}%;height:${goalBotPct - goalTopPct}%">
-               <span class="sw-goalband-lbl">hedef $${goal.min}–${goal.max}</span>
-             </div>`
-          : `<div class="sw-goal-off">hedef $${goal.min}–${goal.max} · grafik dışı</div>`}
-        ${pvTopPct != null
-          ? `<div class="sw-pvline${pvTopPct > 86 ? " low" : ""}" style="top:${pvTopPct.toFixed(2)}%"><span class="sw-pvline-lbl">kanıtlanmış ${fmtUSD0(pv.perMonth)}/ay</span></div>` : ""}
-        <div class="sw-bars">${bars}</div>
+        <div class="sw-plot">
+          ${goalFits
+            ? `<div class="sw-goalband" style="top:${goalTopPct}%;height:${goalBotPct - goalTopPct}%">
+                 <span class="sw-goalband-lbl">hedef $${goal.min}–${goal.max}</span>
+               </div>`
+            : `<div class="sw-goal-off">hedef $${goal.min}–${goal.max} · grafik dışı</div>`}
+          ${pvTopPct != null
+            ? `<div class="sw-pvline${pvTopPct > 86 ? " low" : ""}" style="top:${pvTopPct.toFixed(2)}%"><span class="sw-pvline-lbl">kanıtlanmış ${fmtUSD0(pv.perMonth)}/ay</span></div>` : ""}
+          <div class="sw-bars">${bars}</div>
+        </div>
+        <div class="sw-xaxis">${xaxis}</div>
       </div>
     </section>`;
 
   // --- açık pozisyonlar ---
-  const openCards = open.length ? open.map((t) => {
+  // Eylem gerektiren üste. Sıra: stop tetiklendi → hedefe ulaştı → stopa yakın → sakin.
+  // Liste açılış tarihine göre dizilince acil pozisyon aşağıda kalabiliyordu; bir stop
+  // ihlalini görmek için kaydırmak zorunda olmak Kural 1'e aykırı.
+  const ACIL = { stop: 0, target: 1, "near-stop": 2 };
+  const openSorted = [...open].sort((a, b) => {
+    const ra = ACIL[swEnrich(a).alert] ?? 9, rb = ACIL[swEnrich(b).alert] ?? 9;
+    return ra !== rb ? ra - rb : String(b.openedAt || "").localeCompare(String(a.openedAt || ""));
+  });
+  const acilN = open.filter((t) => swEnrich(t).alert).length;
+  const openCards = openSorted.length ? openSorted.map((t) => {
     const m = swEnrich(t);
     const liveTxt = m.live != null
       ? `$${fmtNum(m.live, 2)}${m.stale ? " <i class='sw-stale'>(bayat)</i>" : ""}`
@@ -532,17 +600,9 @@ function renderSwingDeck() {
           <button class="btn primary sm" data-sw-sell="${t.id}">💵 Sat / Ana Para Çek</button>
         </div>
       </div>`;
-  }).join("") : `<div class="sw-empty">Henüz açık swing pozisyonu yok. <b>+ Swing Seç</b> ile portföydeki bir pozisyonu swing olarak işaretle — stop ve hedef opsiyonel.</div>`;
+  }).join("") : `<div class="sw-empty">Açık swing pozisyonun yok. <b>+ Swing aç</b> ile portföydeki bir pozisyonu planla — stop ve hedef opsiyonel ama planı olmayan işleme girme.</div>`;
 
-  const openPanel = `
-    <section class="panel">
-      <div class="panel-head">
-        <div><h2>Açık Pozisyonlar <span class="sw-chip">${open.length}</span></h2>
-        <span class="chart-sub">Canlı fiyatla anlık K/Z · stop &amp; hedefe mesafe</span></div>
-        <button class="btn ghost sm" id="swRefreshBtn">↻ Fiyat yenile</button>
-      </div>
-      <div class="sw-pos-grid">${openCards}</div>
-    </section>`;
+  const openPanel = `<div class="sw-pos-grid">${openCards}</div>`;
 
   // --- kapanmış işlemler ---
   const closedSorted = [...closed].sort((a, b) => String(b.closedAt).localeCompare(String(a.closedAt)));
@@ -582,7 +642,7 @@ function renderSwingDeck() {
   const closedPanel = closed.length ? `
     <section class="panel">
       <div class="panel-head">
-        <div><h2>Kapanmış İşlemler <span class="sw-chip">${closed.length}</span></h2>
+        <div><h2>Kapanmış işlemler</h2>
         <span class="chart-sub">İsabet ${cst ? cst.winRate.toFixed(0) + "%" : "—"} · ${cst ? cst.winCount : 0}/${closed.length} kârlı · işlem başı beklenti ${fmtUSD0(cst ? cst.expectancyUSD : 0)}${cst && cst.expectancyR != null ? ` · ort. ${cst.expectancyR >= 0 ? "+" : ""}${cst.expectancyR.toFixed(2)}R` : ""}</span></div>
       </div>
       <div class="trade-list-wrap">
@@ -596,8 +656,27 @@ function renderSwingDeck() {
       </div>
     </section>` : "";
 
-  el.innerHTML = hero + swRegimeLine() + chart + swAnalyticsPanel(trades) + swingStatsPanel(closed) + decisionScorecardPanel(closed) + `<section id="planGapBox"></section>` + openPanel + closedPanel;
+  // ---- Yerleşim: üç katman. Sekme artık on eşit panel değil; önce eylem, sonra
+  // ölçüm, sonra muhasebe. Her ray kendi kanıt miktarını yazar — kanıtı olmayan
+  // bölüm "ölçülmedi" der, var gibi davranmaz. ----
+  const kanitAcik = open.length
+    ? `${open.length} pozisyon · canlı${acilN ? ` · <b class="sw2-acil">${acilN} eylem bekliyor</b>` : ""}`
+    : "pozisyon yok";
+  const kanitUretim = closed.length
+    ? `${closed.length} kapanış${cst && cst.avgDays != null ? ` · ort. ${Math.round(cst.avgDays)} gün tutuş` : ""}`
+    : "ölçülmedi — kapanmış işlem yok";
+  const etiketli = decisionRecs(closed).filter((r) => r.planFollow || r.conf || r.setupKind).length;
+  const kanitKarar = etiketli ? `${etiketli} etiketli kapanış` : "ölçülmedi — karar defteri boş";
+
+  const ekleBtn = `<button class="btn primary sm sw2-sec-btn" id="swAddBtn">+ Swing aç</button>`;
+  const yenileBtn = open.length ? `<button class="btn ghost sm sw2-sec-btn" id="swRefreshBtn">↻ Fiyat yenile</button>` : "";
+
+  el.innerHTML = hero + strip + swRegimeLine()
+    + swSection("Bu hafta", kanitAcik, `<section id="weeklyPlanBox"></section>` + openPanel, yenileBtn + ekleBtn)
+    + swSection("Defter ne üretti", kanitUretim, chart + swAnalyticsPanel(trades) + swingStatsPanel(closed))
+    + swSection("Karar kalitesi", kanitKarar, decisionScorecardPanel(closed) + `<section id="planGapBox"></section>` + closedPanel);
   renderPlanGap();
+  renderWeeklyPlanBox(); // kutu artık deck'in içinde — her yeniden çizimde önbellekten doldur
 }
 
 /* Defter analitiği: kümülatif realize eğrisi + sembol bazlı K/Z barları.
@@ -867,6 +946,40 @@ function swEffectiveEntry() {
   }
   return Number(swingForm.entry.value);
 }
+/* Bu kayıt portföy toplamına ne yapacak? — modalda CANLI cevap.
+ * 14 Ağu: Kaan LITE/ONDS'u Varlıklar'a ekledi, sonra "Portföyden seç" ile aynı adetleri
+ * deftere kaydetti; ikisi de toplama girdi ve para iki kez göründü. Kural sunucuda
+ * (swing-kapsam.js) düzeltildi ama kullanıcı KAYDETMEDEN önce de görmeli — yoksa aynı
+ * soruyu her seferinde yeniden sorar. Sunucudaki mantığın birebir aynısı burada. */
+function swKapsamHint() {
+  const box = $("#swKapsam"); if (!box) return;
+  const sym = String(swingForm.symbol.value || "").toUpperCase().trim();
+  const qty = Number(swingForm.qty.value) || 0;
+  if (!sym || qty <= 0) { box.hidden = true; return; }
+  const holdingQty = (STATE?.holdings || [])
+    .filter((h) => h.type === "stock" && String(h.symbol).toUpperCase() === sym)
+    .reduce((a, h) => a + (Number(h.quantity) || 0), 0);
+  // Aynı semboldeki DİĞER açık kayıtlar kapsam bütçesini önceden tüketir (düzenlenen hariç)
+  const duzenlenen = swingForm.id.value || null;
+  const digerQty = (SWINGDECK.trades || [])
+    .filter((t) => t.status === "open" && t.id !== duzenlenen && String(t.symbol).toUpperCase() === sym)
+    .reduce((a, t) => a + (Number(t.qty) || 0), 0);
+  const butce = Math.max(0, holdingQty - digerQty);
+  const kapsanan = Math.min(qty, butce);
+  const ek = qty - kapsanan < 1e-9 ? 0 : qty - kapsanan;
+  box.hidden = false;
+  if (holdingQty <= 0) {
+    box.className = "sw-kapsam ayri";
+    box.innerHTML = `<b>Ayrı alım.</b> ${sym} Varlıklar'da yok — bu ${fmtNum(qty, 2)} adet portföy toplamına <b>eklenecek</b>.`;
+  } else if (ek === 0) {
+    box.className = "sw-kapsam plan";
+    box.innerHTML = `<b>Plan kaydı.</b> Bu ${fmtNum(qty, 2)} adet Varlıklar'da zaten var${digerQty > 0 ? ` (${fmtNum(digerQty, 2)} adedi başka swing kaydında)` : ""} — Swing Defteri yalnız <b>stop/hedef planını</b> izler, portföy toplamına <b>ikinci kez eklenmez</b>.`;
+  } else {
+    box.className = "sw-kapsam karma";
+    box.innerHTML = `<b>Kısmen ayrı.</b> ${fmtNum(kapsanan, 2)} adet Varlıklar'da var (plan olarak izlenir), kalan <b>${fmtNum(ek, 2)} adet</b> ayrı alım sayılıp toplama eklenecek. Bu doğru değilse adedi ${fmtNum(butce, 2)}'e indir.`;
+  }
+}
+
 /* ---- Karar defteri pil grupları: tek seçim → gizli input'a yaz ---- */
 function setPillGroup(groupId, hiddenInput, dataKey, value) {
   const g = document.getElementById(groupId); if (!g) return;
@@ -928,6 +1041,7 @@ function openSwingModal(id, prefill) {
   }
   swingRiskHint();
   swingSizeCalc();
+  swKapsamHint();
   swQmSym = ""; $("#swQmCheck") && ($("#swQmCheck").hidden = true);  // QM kapısını sıfırla
   scheduleSwQmCheck();                                              // sembol ön-doluysa hemen tara
   swingModalBg.hidden = false;
@@ -945,7 +1059,7 @@ $("#swPick")?.addEventListener("change", (e) => {
   if (Number(h.planStop) > 0) swingForm.stop.value = h.planStop;
   if (Number(h.planTarget) > 0) swingForm.target.value = h.planTarget;
   $("#swAvail").textContent = `Portföyde ${fmtNum(h.quantity, 2)} adet${Number(h.costUSD) > 0 ? ` · ort. maliyet $${fmtNum(h.costUSD, 2)}` : ""}`;
-  swingRiskHint(); swingSizeCalc();
+  swingRiskHint(); swingSizeCalc(); swKapsamHint();
 });
 // Elle sembol değişti → picker bağını kopar
 swingForm?.symbol?.addEventListener("input", () => {
@@ -994,20 +1108,25 @@ function swingSizeCalc() {
     body.innerHTML = `<div class="sw-calc-hint">Giriş ve stop (giriş'in altında) gir → riske ${riskPct}% ile önerilen adet otomatik gelir.</div>`;
     return;
   }
+  /* 17 Ağu: formül artık KOPYA DEĞİL — adetHesapla (01-cekirdek) tek yer, raAdet de
+   * aynısını çağırıyor. Korelasyon çarpanı da orada uygulanıyor (docs/olcumler §16). */
+  const h = adetHesapla({ sermaye: capital, riskPct, giris: entry, stop, korelasyonCarpani: KORCARPAN.carpan });
   const riskAmt = capital * (riskPct / 100);
-  const perShare = entry - stop;
-  let shares = riskAmt / perShare;
-  const maxShares = (capital * 0.25) / entry; // tek pozisyon %25 sınırı (kaldıraçsız)
-  let capped = false;
-  if (shares > maxShares) { shares = maxShares; capped = true; }
-  const posVal = shares * entry;
-  swCalcShares = Math.round(shares * 100) / 100;
+  const posVal = h.tutarUSD;
+  swCalcShares = Math.round(h.adet * 100) / 100;
   if (useBtn) useBtn.disabled = false;
+  /* Kesintisiz adet de gösteriliyor: kullanıcı "neden 10 değil 7,6" diye sorduğunda
+   * cevap kartın üstünde dursun. Sayıyı sessizce küçültmek "hesap yanlış" hissi verir. */
+  const kesinti = h.olculdu
+    ? `<div class="sw-calc-row"><span>Korelasyon kesintisi</span><b>−%${KORCARPAN.kucultmePct} <i>· ×${KORCARPAN.carpan.toFixed(2)}</i></b></div>`
+    : "";
   body.innerHTML = `
     <div class="sw-calc-row"><span>Risk sermayesi${goal.capital > 0 ? "" : " (portföy)"}</span><b>${fmtUSD0(capital)}</b></div>
     <div class="sw-calc-row"><span>Riske attığın (${riskPct}%)</span><b>${fmtUSD0(riskAmt)}</b></div>
-    <div class="sw-calc-row hi"><span>Önerilen adet</span><b>${fmtNum(swCalcShares, 2)}${capped ? " <i>· %25 sınırı</i>" : ""}</b></div>
-    <div class="sw-calc-row"><span>Pozisyon tutarı</span><b>${fmtUSD0(posVal)} · %${((posVal / capital) * 100).toFixed(1)} portföy</b></div>`;
+    ${kesinti}
+    <div class="sw-calc-row hi"><span>Önerilen adet</span><b>${fmtNum(swCalcShares, 2)}${h.tavanDeydi ? " <i>· %25 sınırı</i>" : ""}</b></div>
+    <div class="sw-calc-row"><span>Pozisyon tutarı</span><b>${fmtUSD0(posVal)} · %${((posVal / capital) * 100).toFixed(1)} portföy</b></div>
+    <div class="sw-calc-note">${korCarpanNotu()}</div>`;
 }
 // Risk/ödül canlı ipucu
 function swingRiskHint() {
@@ -1044,7 +1163,7 @@ function swingRiskHint() {
     } else { planBox.hidden = true; }
   }
 }
-["input", "change"].forEach((ev) => swingForm?.addEventListener(ev, () => { swingRiskHint(); swingSizeCalc(); }));
+["input", "change"].forEach((ev) => swingForm?.addEventListener(ev, () => { swingRiskHint(); swingSizeCalc(); swKapsamHint(); }));
 
 /* ---- Faz 2: QM giriş-kalitesi kapısı (sembol girilince checklist + ADR + extended) ---- */
 let swQmTimer = null, swQmSym = "";
@@ -1265,7 +1384,7 @@ function renderWeeklyPlanBox() {
     ? `<span class="wkp-rb ${rb.level}">${rb.level === "full" ? "risk bütçesi dolu" : `bütçe %${Math.round(rb.ratio)}`}</span>` : "";
   if (!p || !((p.candidates || []).length || (p.watch || []).length)) {
     el.innerHTML = `<section class="panel wkp-panel">
-      <div class="panel-head"><div><h2>Haftalık Plan <span class="sw-chip">${d.yw}</span> ${rbChip}</h2>
+      <div class="panel-head"><div><h2>Haftalık plan <span class="sw-chip">${d.yw}</span> ${rbChip}</h2>
         <span class="chart-sub">Hafta sonu rutini: rejim → adaylar → seviyeler · plan yazılır, hafta planla oynanır</span></div>
         <button class="btn primary sm" id="wkndStartBtn">Rutini Başlat</button></div>
       <p class="wkp-none">Bu hafta için plan yok. Pazar akşamı 10 dakika yeter — plan dışı işlem Karar Defteri'nde itiraf ister.</p>
@@ -1276,7 +1395,7 @@ function renderWeeklyPlanBox() {
       <td>${c.entry != null ? fmtUSD(c.entry) : "—"}</td><td>${c.stop != null ? fmtUSD(c.stop) : "—"}</td>
       <td>${c.qty != null ? fmtNum(c.qty, 2) : "—"}</td><td class="l wkp-cnote">${c.note || ""}</td></tr>`).join("");
     el.innerHTML = `<section class="panel wkp-panel">
-      <div class="panel-head"><div><h2>Haftalık Plan <span class="sw-chip">${d.yw}</span> ${rbChip}</h2>
+      <div class="panel-head"><div><h2>Haftalık plan <span class="sw-chip">${d.yw}</span> ${rbChip}</h2>
         <span class="chart-sub">${p.regime?.band ? `Rejim: <b>${p.regime.band}</b>${p.regime.vix != null ? ` · VIX ${fmtNum(p.regime.vix, 1)}` : ""} · ` : ""}${(p.candidates || []).length} aday${(p.watch || []).length ? ` · izleme: ${p.watch.join(", ")}` : ""}</span></div>
         <button class="btn ghost sm" id="wkndStartBtn">Düzenle</button></div>
       ${rows ? `<div class="tbl-wrap wkp-tblwrap"><table class="wkp-table"><thead><tr><th class="l">Sembol</th><th class="l">Setup</th><th>Giriş</th><th>Stop</th><th>Adet</th><th class="l">Not</th></tr></thead><tbody>${rows}</tbody></table></div>` : ""}
@@ -1456,7 +1575,7 @@ async function renderPlanGap(force) {
   const d = PGAP.d;
   if (!d || d.error) { el.innerHTML = ""; return; }
   if (!d.n) {
-    el.innerHTML = `<section class="panel pg-panel"><div class="panel-head"><div><h2>Masada Bıraktığın Para</h2>
+    el.innerHTML = `<section class="panel pg-panel"><div class="panel-head"><div><h2>Masada bıraktığın para</h2>
       <span class="chart-sub">Stop/hedefine harfiyen uysaydın ne olurdu — disiplinin dolar karşılığı</span></div></div>
       <p class="dj-empty-note">Henüz ölçülebilir işlem yok. Stop <b>ve</b> hedefle açılan swing'ler kapandıkça burada birikir${d.atlanan ? ` (${d.atlanan} işlem planı/mum verisi eksik olduğu için ölçüme girmedi)` : ""}.</p></section>`;
     return;
@@ -1487,7 +1606,7 @@ async function renderPlanGap(force) {
   el.innerHTML = `
     <section class="panel pg-panel">
       <div class="panel-head"><div>
-        <h2>Masada Bıraktığın Para <span class="sw-chip">${d.n} işlem</span></h2>
+        <h2>Masada bıraktığın para <span class="sw-chip">${d.n} işlem</span></h2>
         <span class="chart-sub">Stop/hedefine harfiyen uysaydın ne olurdu — disiplinin dolar karşılığı</span>
       </div></div>
       <div class="pg-hero ${tone}">
