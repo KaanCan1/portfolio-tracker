@@ -53,22 +53,19 @@ Vanilla JavaScript SPA · Express · PostgreSQL · Claude API · MCP
 
 ## Architecture
 
-```
-Browser ── vanilla JS SPA (no framework, no build step — public/)
-   │
-   ▼
-Express (server.js)
-   ├── market data: Finnhub + Twelve Data (+ Yahoo fallback locally)
-   │     └── TTL caches: candles · quotes · news · earnings  → free-tier friendly
-   ├── engines: radar scoring · QM setup detection (qm.js) · guardian · day audit
-   ├── Claude API (@anthropic-ai/sdk) — adaptive thinking + json_schema outputs
-   ├── persistence: single JSON document → PostgreSQL (DATABASE_URL)
-   │                                        └─ file fallback for local dev
-   └── auth: salted-hash password + signed cookie (open mode if unset)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/diagrams/architecture-dark.png">
+  <img alt="Application architecture: four price providers behind a quota-and-cache source layer feeding an Express server, which reads and writes a Postgres store, calls the risk engine and serves the vanilla-JS dashboard; an MCP server consumes the same API and an offline measurement harness reads the store directly" src="docs/diagrams/architecture.png">
+</picture>
 
-scripts/mcp-portfoy.js ── stdio MCP server → Claude Code / Desktop
-scripts/mock-swing-server.js ── full-app mock for dev & UI testing
-```
+The dashed arrow on the right is deliberate: the measurement harness reads the **store directly** and reuses the risk engine's *same* pure module. That is what keeps the number on the dashboard and the number in a measurement from drifting apart — if a metric had two implementations, one of them would eventually be wrong.
+
+What the diagram leaves out, for node-budget reasons:
+
+- **Engines inside Express** — radar scoring, Qullamaggie setup detection (`qm.js`), guardian checks, daily trade audit
+- **Claude layer** — called from the server with `json_schema` structured outputs, cached 24h and persisted as an audit trail
+- **Auth** — salted-hash password + signed cookie; open mode when unset
+- **Dev/prod parity** — `scripts/mock-swing-server.js` serves the real SPA against realistic fake data and stubbed AI endpoints
 
 **Engineering choices I'd defend in a review**
 - **No frontend framework, no build step.** One hand-rolled SPA talking to one Express file. For a single-user tool, the absence of tooling *is* the feature: instant deploys, zero dependency churn, 3 runtime deps total (`express`, `pg`, `@anthropic-ai/sdk`).
@@ -76,6 +73,54 @@ scripts/mock-swing-server.js ── full-app mock for dev & UI testing
 - **Provider-agnostic data layer.** Every external call goes through a TTL cache sized to free-tier quotas; the app stays fully usable when a provider throttles (stale-but-shown beats blank).
 - **Honest measurement.** The paper-trading ledger is append-only, the day audit stores its inputs alongside the verdict, and realized P/L can be overridden with broker ground truth — the app is designed to prevent me from lying to myself.
 - **Dev/prod parity via a mock.** `scripts/mock-swing-server.js` serves the real SPA with realistic fake data and stubbed AI endpoints, so UI work never touches production data.
+
+---
+
+## Measurement discipline
+
+The app produces risk numbers and trading signals. The rule I hold it to: **no claim ships before it is measured, and every number is written down next to its known bias.** Producing a number is the easy half.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/diagrams/measurement-pipeline-dark.png">
+  <img alt="Risk measurement pipeline across data, model and validation lanes: daily bars, alignment to common dates, covariance factored with Cholesky, Monte Carlo over two models, VaR and CVaR, and a final out-of-sample breach test" src="docs/diagrams/measurement-pipeline.png">
+</picture>
+
+### A worked example: the assumption that wasn't in the code
+
+The risk desk's VaR was right — it takes volatility from the portfolio's own daily return series, so days when holdings fall *together* are already in the data.
+
+But a second calculation sizes positions, and it looked at each position alone: *"risk 1% of capital per position."* Across six positions that quietly means *"6% total risk"* — and that sentence is only true if the positions are independent.
+
+Nothing in the code said "these are independent." The assumption wasn't in the line; it was in its **absence**.
+
+So I measured it. Same holdings, same weights, same per-asset volatilities, 50,000 Monte Carlo draws — the only difference being whether the covariance matrix is factored in (Σ = L·Lᵀ, Cholesky):
+
+| 1-day measure | independent | actual | ratio |
+|---|---|---|---|
+| daily volatility | 3.52% | **4.66%** | ×1.32 |
+| VaR 95% | 5.78% of portfolio | **7.72%** | ×1.34 |
+| CVaR 95% | 7.27% | **9.67%** | ×1.33 |
+
+Average pairwise correlation was **0.40** — not one pair was independent. Six holdings turn out to be **2.39 effective positions** once risk contribution is accounted for, so to carry the risk I actually intended, position sizes have to shrink by ~24%.
+
+### Two models differing isn't evidence the new one is right
+
+Both could be wrong, so the model went on trial: a 120-day window rolled forward day by day, scoring **239 days the model had never seen**. A 95% threshold is *supposed* to be breached about 12 times:
+
+| model | breaches | expected | Kupiec | verdict |
+|---|---|---|---|---|
+| independent | 20 | 12 | 4.79 | **rejected** — understates risk |
+| correlated | 14 | 12 | 0.35 | passed |
+| historical (empirical quantile) | 23 | 12 | 8.57 | **rejected** |
+
+The last row was the surprise. The method that assumes *no distribution at all* also failed, and did worse than the flawed model — a 120-day empirical quantile reacts too slowly when volatility rises. **Making no assumption is not the same as being right.**
+
+Two things I took from this:
+
+- **The most dangerous assumptions are never written down.** They live in the absence of a line, which is exactly why they survive review.
+- **Passing tests doesn't mean the model is correct.** Tests check what the code *does*, not whether it models the right thing. Those are separate questions, and only the second one needs domain knowledge.
+
+> Ticker names are withheld and figures are shown as percentages of portfolio value. Every number comes from real portfolio data with a fixed seed, so a re-run reproduces it. The measurement harness and the full write-up (each result stored with its biases) live in my private working repo, not in this snapshot.
 
 ---
 

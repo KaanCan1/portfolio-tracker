@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Portfolio Tracker — application architecture</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper: #f6f5f1; --color-ink: #12140f; --color-muted: #5f6457;
+      --color-soft: #6e7366; --color-accent: #1b6a40;
+      --font-sans: 'Geist', system-ui, sans-serif;
+      --font-serif: 'Instrument Serif', serif;
+      --font-mono: 'Geist Mono', ui-monospace, monospace;
+    }
+    body { font-family: var(--font-sans); background: var(--color-paper); color: var(--color-ink);
+           min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 3rem 2rem; }
+    .frame { max-width: 1200px; width: 100%; }
+    .eyebrow { font-family: var(--font-mono); font-size: 0.66rem; font-weight: 500; letter-spacing: 0.18em;
+               text-transform: uppercase; color: var(--color-muted); margin-bottom: 0.5rem; }
+    h1 { font-family: var(--font-serif); font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem); font-weight: 400;
+         letter-spacing: -0.02em; line-height: 1.15; color: var(--color-ink); margin-bottom: 0.75rem; }
+    .sub { font-size: 0.9rem; line-height: 1.5; color: var(--color-muted); max-width: 64ch; margin-bottom: 1.75rem; }
+    svg { width: 100%; min-width: 900px; display: block; }
+    footer { margin-top: 1.75rem; padding-top: 0.9rem; border-top: 1px solid rgba(18,20,15,0.12);
+             font-family: var(--font-mono); font-size: 0.66rem; letter-spacing: 0.06em;
+             color: var(--color-soft); line-height: 1.7; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Architecture · Portfolio Tracker</p>
+    <h1>Application architecture</h1>
+    <p class="sub">A single-user portfolio tracker: four price providers behind a quota-and-cache layer, one Express
+    server, Postgres as the single source of truth. The highlighted node is the risk engine — the part
+    that was measured and corrected in this round.</p>
+
+    <svg viewBox="0 0 1040 540" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="mimari-title mimari-desc">
+      <title id="mimari-title">Portfolio Tracker application architecture</title>
+      <desc id="mimari-desc">Price providers flow through a quota-and-cache layer into the Express server,
+      which reads and writes the Postgres store, calls the risk engine and feeds the dashboard. An MCP server
+      consumes the same API as tools; the measurement harness reads the store directly and reuses the risk
+      engine's pure module.</desc>
+
+      <defs>
+        <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#5f6457"/></marker>
+        <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#1b6a40"/></marker>
+        <marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#46688a"/></marker>
+      </defs>
+
+      <rect width="100%" height="100%" fill="#f6f5f1"/>
+
+      <!-- ===== zones (painted first) ===== -->
+      <rect x="280" y="64" width="464" height="248" rx="8" fill="rgba(18,20,15,0.02)" stroke="rgba(18,20,15,0.10)" stroke-width="0.8"/>
+      <rect x="440" y="68" width="144" height="12" rx="2" fill="#f6f5f1"/>
+      <text x="512" y="77" fill="rgba(18,20,15,0.40)" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">NODE · EXPRESS</text>
+
+      <rect x="800" y="64" width="208" height="248" rx="8" fill="rgba(18,20,15,0.02)" stroke="rgba(18,20,15,0.10)" stroke-width="0.8"/>
+      <rect x="856" y="68" width="96" height="12" rx="2" fill="#f6f5f1"/>
+      <text x="904" y="77" fill="rgba(18,20,15,0.40)" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">CONSUMERS</text>
+
+      <!-- ===== connectors (BEFORE nodes, so lines sit behind boxes) ===== -->
+
+      <!-- 1. price providers -> source layer -->
+      <line x1="216" y1="128" x2="294" y2="128" stroke="#46688a" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+      <rect x="238" y="108" width="36" height="12" rx="2" fill="#f6f5f1"/>
+      <text x="256" y="117" fill="#46688a" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">HTTP</text>
+
+      <!-- 2. source layer -> express -->
+      <line x1="472" y1="128" x2="550" y2="128" stroke="#5f6457" stroke-width="1.2" marker-end="url(#arrow)"/>
+
+      <!-- 3. express -> dashboard -->
+      <line x1="728" y1="128" x2="814" y2="128" stroke="#46688a" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+      <rect x="748" y="108" width="44" height="12" rx="2" fill="#f6f5f1"/>
+      <text x="770" y="117" fill="#46688a" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">JSON</text>
+
+      <!-- 4. express -> risk engine (focal) -->
+      <line x1="640" y1="160" x2="640" y2="230" stroke="#1b6a40" stroke-width="1.6" marker-end="url(#arrow-accent)"/>
+      <rect x="652" y="188" width="60" height="12" rx="2" fill="#f6f5f1"/>
+      <text x="682" y="197" fill="#1b6a40" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.04em">/api/risk</text>
+
+      <!-- 5. express -> postgres -->
+      <path d="M 600,160 V 184 Q 600,192 592,192 H 400 Q 392,192 392,200 V 366"
+            fill="none" stroke="#5f6457" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <rect x="458" y="170" width="76" height="12" rx="2" fill="#f6f5f1"/>
+      <text x="496" y="179" fill="#5f6457" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">READ · WRITE</text>
+
+      <!-- 6. postgres -> measurement harness (offline) -->
+      <line x1="472" y1="400" x2="814" y2="400" stroke="#5f6457" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+      <rect x="616" y="380" width="56" height="12" rx="2" fill="#f6f5f1"/>
+      <text x="644" y="389" fill="#6e7366" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">DIRECT</text>
+
+      <!-- 7. risk engine -> measurement harness (same pure module) -->
+      <path d="M 680,296 V 328 Q 680,336 688,336 H 896 Q 904,336 904,344 V 366"
+            fill="none" stroke="#5f6457" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+      <rect x="744" y="314" width="92" height="12" rx="2" fill="#f6f5f1"/>
+      <text x="790" y="323" fill="#6e7366" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">SAME MODULE</text>
+
+      <!-- 8. mcp server -> express -->
+      <path d="M 816,264 H 784 Q 776,264 776,256 V 152 Q 776,144 768,144 H 730"
+            fill="none" stroke="#46688a" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+
+      <!-- ===== nodes ===== -->
+
+      <!-- price providers - external -->
+      <rect x="40" y="96" width="176" height="64" rx="6" fill="#f6f5f1"/>
+      <rect x="40" y="96" width="176" height="64" rx="6" fill="rgba(18,20,15,0.03)" stroke="rgba(18,20,15,0.30)" stroke-width="1"/>
+      <rect x="48" y="102" width="28" height="12" rx="2" fill="transparent" stroke="rgba(18,20,15,0.30)" stroke-width="0.8"/>
+      <text x="62" y="111" fill="rgba(18,20,15,0.65)" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">API</text>
+      <text x="128" y="136" fill="#12140f" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Price providers</text>
+      <text x="128" y="152" fill="#5f6457" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Finnhub · TwelveData · TEFAS</text>
+
+      <!-- source layer - backend -->
+      <rect x="296" y="96" width="176" height="64" rx="6" fill="#f6f5f1"/>
+      <rect x="296" y="96" width="176" height="64" rx="6" fill="#ffffff" stroke="#12140f" stroke-width="1"/>
+      <rect x="304" y="102" width="28" height="12" rx="2" fill="transparent" stroke="rgba(18,20,15,0.40)" stroke-width="0.8"/>
+      <text x="318" y="111" fill="rgba(18,20,15,0.80)" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">LIB</text>
+      <text x="384" y="136" fill="#12140f" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Source layer</text>
+      <text x="384" y="152" fill="#5f6457" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">quota + disk cache</text>
+
+      <!-- express server - backend -->
+      <rect x="552" y="96" width="176" height="64" rx="6" fill="#f6f5f1"/>
+      <rect x="552" y="96" width="176" height="64" rx="6" fill="#ffffff" stroke="#12140f" stroke-width="1"/>
+      <rect x="560" y="102" width="28" height="12" rx="2" fill="transparent" stroke="rgba(18,20,15,0.40)" stroke-width="0.8"/>
+      <text x="574" y="111" fill="rgba(18,20,15,0.80)" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">SRV</text>
+      <text x="640" y="136" fill="#12140f" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Express server</text>
+      <text x="640" y="152" fill="#5f6457" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">server.js</text>
+
+      <!-- dashboard - client -->
+      <rect x="816" y="96" width="176" height="64" rx="6" fill="#f6f5f1"/>
+      <rect x="816" y="96" width="176" height="64" rx="6" fill="rgba(95,100,87,0.10)" stroke="#6e7366" stroke-width="1"/>
+      <rect x="824" y="102" width="28" height="12" rx="2" fill="transparent" stroke="rgba(110,115,102,0.60)" stroke-width="0.8"/>
+      <text x="838" y="111" fill="#6e7366" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">UI</text>
+      <text x="904" y="136" fill="#12140f" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Dashboard</text>
+      <text x="904" y="152" fill="#5f6457" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">vanilla JS · public/js</text>
+
+      <!-- risk engine - FOCAL -->
+      <rect x="552" y="232" width="176" height="64" rx="6" fill="#f6f5f1"/>
+      <rect x="552" y="232" width="176" height="64" rx="6" fill="rgba(27,106,64,0.08)" stroke="#1b6a40" stroke-width="1.4"/>
+      <rect x="560" y="238" width="36" height="12" rx="2" fill="transparent" stroke="rgba(27,106,64,0.50)" stroke-width="0.8"/>
+      <text x="578" y="247" fill="#1b6a40" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">PURE</text>
+      <text x="640" y="272" fill="#12140f" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Risk engine</text>
+      <text x="640" y="288" fill="#5f6457" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Monte Carlo · Cholesky</text>
+
+      <!-- mcp server - external consumer -->
+      <rect x="816" y="232" width="176" height="64" rx="6" fill="#f6f5f1"/>
+      <rect x="816" y="232" width="176" height="64" rx="6" fill="rgba(18,20,15,0.03)" stroke="rgba(18,20,15,0.30)" stroke-width="1"/>
+      <rect x="824" y="238" width="32" height="12" rx="2" fill="transparent" stroke="rgba(18,20,15,0.30)" stroke-width="0.8"/>
+      <text x="840" y="247" fill="rgba(18,20,15,0.65)" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">MCP</text>
+      <text x="904" y="272" fill="#12140f" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">MCP server</text>
+      <text x="904" y="288" fill="#5f6457" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">zod-schema tools</text>
+
+      <!-- postgres - store -->
+      <rect x="296" y="368" width="176" height="64" rx="6" fill="#f6f5f1"/>
+      <rect x="296" y="368" width="176" height="64" rx="6" fill="rgba(18,20,15,0.05)" stroke="#5f6457" stroke-width="1"/>
+      <rect x="304" y="374" width="28" height="12" rx="2" fill="transparent" stroke="rgba(95,100,87,0.60)" stroke-width="0.8"/>
+      <text x="318" y="383" fill="#5f6457" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">DB</text>
+      <text x="384" y="408" fill="#12140f" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Supabase Postgres</text>
+      <text x="384" y="424" fill="#5f6457" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">app_data · single source</text>
+
+      <!-- measurement harness - offline -->
+      <rect x="816" y="368" width="176" height="64" rx="6" fill="#f6f5f1"/>
+      <rect x="816" y="368" width="176" height="64" rx="6" fill="rgba(18,20,15,0.02)" stroke="rgba(18,20,15,0.20)" stroke-width="1" stroke-dasharray="4,3"/>
+      <rect x="824" y="374" width="28" height="12" rx="2" fill="transparent" stroke="rgba(18,20,15,0.25)" stroke-width="0.8"/>
+      <text x="838" y="383" fill="rgba(18,20,15,0.55)" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">CLI</text>
+      <text x="904" y="408" fill="#12140f" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Measurement harness</text>
+      <text x="904" y="424" fill="#5f6457" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">CLI · launchd (private)</text>
+
+      <!-- ===== legend ===== -->
+      <line x1="32" y1="464" x2="1008" y2="464" stroke="rgba(18,20,15,0.10)" stroke-width="0.8"/>
+      <text x="32" y="484" fill="#5f6457" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.14em">LEGEND</text>
+
+      <rect x="120" y="474" width="16" height="12" rx="3" fill="rgba(27,106,64,0.08)" stroke="#1b6a40" stroke-width="1.2"/>
+      <text x="144" y="484" fill="#5f6457" font-size="8" font-family="'Geist Mono', monospace">measured this round</text>
+
+      <rect x="280" y="474" width="16" height="12" rx="3" fill="rgba(18,20,15,0.05)" stroke="#5f6457" stroke-width="1"/>
+      <text x="304" y="484" fill="#5f6457" font-size="8" font-family="'Geist Mono', monospace">persistent store</text>
+
+      <rect x="416" y="474" width="16" height="12" rx="3" fill="rgba(18,20,15,0.03)" stroke="rgba(18,20,15,0.30)" stroke-width="1"/>
+      <text x="440" y="484" fill="#5f6457" font-size="8" font-family="'Geist Mono', monospace">external service</text>
+
+      <line x1="552" y1="480" x2="580" y2="480" stroke="#5f6457" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <text x="588" y="484" fill="#5f6457" font-size="8" font-family="'Geist Mono', monospace">internal flow</text>
+
+      <line x1="668" y1="480" x2="696" y2="480" stroke="#46688a" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+      <text x="704" y="484" fill="#5f6457" font-size="8" font-family="'Geist Mono', monospace">HTTP / API</text>
+
+      <line x1="816" y1="480" x2="844" y2="480" stroke="#5f6457" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+      <text x="852" y="484" fill="#5f6457" font-size="8" font-family="'Geist Mono', monospace">offline</text>
+    </svg>
+
+    <footer>
+      server.js · sources.js · store.js · scripts/mcp-portfoy.js<br>
+      The Claude analysis layer is called from the Express server; it is left out of this diagram's node budget.
+    </footer>
+  </div>
+</body>
+</html>

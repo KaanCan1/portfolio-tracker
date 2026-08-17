@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Risk measurement pipeline — dark</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper: #16211a; --color-ink: #f2f0e9; --color-muted: #c9cfc4;
+      --color-soft: #8a978c; --color-accent: #66c99a;
+      --font-sans: 'Geist', system-ui, sans-serif;
+      --font-serif: 'Instrument Serif', serif;
+      --font-mono: 'Geist Mono', ui-monospace, monospace;
+    }
+    body { font-family: var(--font-sans); background: var(--color-paper); color: var(--color-ink);
+           min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 3rem 2rem; }
+    .frame { max-width: 1200px; width: 100%; }
+    .eyebrow { font-family: var(--font-mono); font-size: 0.66rem; font-weight: 500; letter-spacing: 0.18em;
+               text-transform: uppercase; color: var(--color-muted); margin-bottom: 0.5rem; }
+    h1 { font-family: var(--font-serif); font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem); font-weight: 400;
+         letter-spacing: -0.02em; line-height: 1.15; color: var(--color-ink); margin-bottom: 0.75rem; }
+    .sub { font-size: 0.9rem; line-height: 1.5; color: var(--color-muted); max-width: 62ch; margin-bottom: 1.75rem; }
+    svg { width: 100%; min-width: 900px; display: block; }
+    footer { margin-top: 1.75rem; padding-top: 0.9rem; border-top: 1px solid rgba(242,240,233,0.12);
+             font-family: var(--font-mono); font-size: 0.66rem; letter-spacing: 0.06em; color: var(--color-soft); line-height: 1.7; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Data flow · Portfolio Tracker</p>
+    <h1>Risk measurement pipeline</h1>
+    <p class="sub">Producing a VaR number is half the pipeline. The other half is counting how often that
+    number turned out to be wrong &mdash; the verdict is set in the last step, not in the simulation.</p>
+      <svg viewBox="0 0 840 356" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="pipeline-dark-title pipeline-dark-desc">
+      <title id="pipeline-dark-title">Risk measurement pipeline</title>
+      <desc id="pipeline-dark-desc">Six steps across data, model and validation lanes: daily bars are aligned to common dates, the covariance matrix is factored with Cholesky, two models are simulated by Monte Carlo, VaR and CVaR are read off, and in the final step the model is tested out-of-sample by counting how often its threshold was breached.</desc>
+      <defs>
+      <marker id="arr-muted" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#8a978c"/></marker>
+      <marker id="arr-accent" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#66c99a"/></marker>
+      </defs>
+      <rect width="100%" height="100%" fill="#16211a"/>
+      <rect x="0" y="36" width="840" height="80" fill="rgba(242,240,233,0.025)"/>
+      <rect x="0" y="196" width="840" height="80" fill="rgba(242,240,233,0.025)"/>
+      <line x1="0" y1="36" x2="840" y2="36" stroke="rgba(242,240,233,0.12)" stroke-width="0.8"/>
+      <line x1="0" y1="116" x2="840" y2="116" stroke="rgba(242,240,233,0.12)" stroke-width="0.8"/>
+      <line x1="0" y1="196" x2="840" y2="196" stroke="rgba(242,240,233,0.12)" stroke-width="0.8"/>
+      <line x1="0" y1="276" x2="840" y2="276" stroke="rgba(242,240,233,0.12)" stroke-width="0.8"/>
+      <line x1="140" y1="36" x2="140" y2="276" stroke="rgba(242,240,233,0.12)" stroke-width="0.8"/>
+      <rect x="180" y="6" width="32" height="16" rx="8" fill="rgba(242,240,233,0.12)"/>
+      <text x="196" y="14" fill="#f2f0e9" font-size="8" font-weight="600" font-family="'Geist Mono', monospace" text-anchor="middle" dominant-baseline="middle">01</text>
+      <text x="196" y="29" fill="#c9cfc4" font-size="8" font-weight="600" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.10em">COLLECT</text>
+      <rect x="292" y="6" width="32" height="16" rx="8" fill="rgba(242,240,233,0.12)"/>
+      <text x="308" y="14" fill="#f2f0e9" font-size="8" font-weight="600" font-family="'Geist Mono', monospace" text-anchor="middle" dominant-baseline="middle">02</text>
+      <text x="308" y="29" fill="#c9cfc4" font-size="8" font-weight="600" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.10em">ALIGN</text>
+      <rect x="404" y="6" width="32" height="16" rx="8" fill="rgba(242,240,233,0.12)"/>
+      <text x="420" y="14" fill="#f2f0e9" font-size="8" font-weight="600" font-family="'Geist Mono', monospace" text-anchor="middle" dominant-baseline="middle">03</text>
+      <text x="420" y="29" fill="#c9cfc4" font-size="8" font-weight="600" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.10em">FACTOR</text>
+      <rect x="516" y="6" width="32" height="16" rx="8" fill="rgba(242,240,233,0.12)"/>
+      <text x="532" y="14" fill="#f2f0e9" font-size="8" font-weight="600" font-family="'Geist Mono', monospace" text-anchor="middle" dominant-baseline="middle">04</text>
+      <text x="532" y="29" fill="#c9cfc4" font-size="8" font-weight="600" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.10em">SIMULATE</text>
+      <rect x="628" y="6" width="32" height="16" rx="8" fill="rgba(242,240,233,0.12)"/>
+      <text x="644" y="14" fill="#f2f0e9" font-size="8" font-weight="600" font-family="'Geist Mono', monospace" text-anchor="middle" dominant-baseline="middle">05</text>
+      <text x="644" y="29" fill="#c9cfc4" font-size="8" font-weight="600" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.10em">READ</text>
+      <rect x="740" y="6" width="32" height="16" rx="8" fill="rgba(102,201,154,0.20)"/>
+      <text x="756" y="14" fill="#66c99a" font-size="8" font-weight="600" font-family="'Geist Mono', monospace" text-anchor="middle" dominant-baseline="middle">06</text>
+      <text x="756" y="29" fill="#66c99a" font-size="8" font-weight="600" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.10em">TEST</text>
+      <text x="70" y="80" fill="#c9cfc4" font-size="9" font-weight="600" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">DATA</text>
+      <text x="70" y="160" fill="#c9cfc4" font-size="9" font-weight="600" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">MODEL</text>
+      <text x="70" y="240" fill="#c9cfc4" font-size="9" font-weight="600" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">VALIDATION</text>
+      <line x1="246" y1="76" x2="256" y2="76" stroke="#8a978c" stroke-width="1" marker-end="url(#arr-muted)"/>
+      <path d="M 358,76 H 412 Q 420,76 420,84 V 122" fill="none" stroke="#8a978c" stroke-width="1.0" marker-end="url(#arr-muted)"/>
+      <line x1="470" y1="156" x2="480" y2="156" stroke="#8a978c" stroke-width="1" marker-end="url(#arr-muted)"/>
+      <line x1="582" y1="156" x2="592" y2="156" stroke="#8a978c" stroke-width="1" marker-end="url(#arr-muted)"/>
+      <path d="M 694,156 H 748 Q 756,156 756,164 V 202" fill="none" stroke="#66c99a" stroke-width="1.2" marker-end="url(#arr-accent)"/>
+      <rect x="701" y="174" width="47" height="12" rx="2" fill="#16211a"/>
+      <text x="725" y="182" fill="#66c99a" font-size="7" font-weight="600" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">THRESHOLD</text>
+      <rect x="146" y="44" width="100" height="64" rx="6" fill="#16211a"/>
+      <rect x="146" y="44" width="100" height="64" rx="6" fill="#16211a" stroke="rgba(242,240,233,0.25)" stroke-width="1"/>
+      <rect x="150" y="48" width="22" height="10" rx="3" fill="rgba(242,240,233,0.12)"/>
+      <text x="161" y="53" fill="#c9cfc4" font-size="6" font-weight="600" font-family="'Geist Mono', monospace" text-anchor="middle" dominant-baseline="middle" letter-spacing="0.06em">DAT</text>
+      <text x="196" y="67" fill="#f2f0e9" font-size="9" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Candle cache</text>
+      <text x="196" y="79" fill="#c9cfc4" font-size="6.5" font-family="'Geist Mono', monospace" text-anchor="middle">6 symbols × 360 bars</text>
+      <text x="196" y="91" fill="#8a978c" font-size="6.5" font-family="'Geist Mono', monospace" text-anchor="middle">daily bars</text>
+      <rect x="226" y="98" width="16" height="8" rx="3" fill="#82a0c0"/>
+      <text x="234" y="102" fill="#16211a" font-size="5" font-weight="700" font-family="'Geist Mono', monospace" text-anchor="middle" dominant-baseline="middle">DB</text>
+      <rect x="258" y="44" width="100" height="64" rx="6" fill="#16211a"/>
+      <rect x="258" y="44" width="100" height="64" rx="6" fill="#16211a" stroke="rgba(242,240,233,0.25)" stroke-width="1"/>
+      <rect x="262" y="48" width="22" height="10" rx="3" fill="rgba(242,240,233,0.12)"/>
+      <text x="273" y="53" fill="#c9cfc4" font-size="6" font-weight="600" font-family="'Geist Mono', monospace" text-anchor="middle" dominant-baseline="middle" letter-spacing="0.06em">DAT</text>
+      <text x="308" y="67" fill="#f2f0e9" font-size="9" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Common days</text>
+      <text x="308" y="79" fill="#c9cfc4" font-size="6.5" font-family="'Geist Mono', monospace" text-anchor="middle">intersection · 359</text>
+      <text x="308" y="91" fill="#8a978c" font-size="6.5" font-family="'Geist Mono', monospace" text-anchor="middle">align()</text>
+      <rect x="262" y="98" width="16" height="8" rx="3" fill="#82a0c0"/>
+      <text x="270" y="102" fill="#16211a" font-size="5" font-weight="700" font-family="'Geist Mono', monospace" text-anchor="middle" dominant-baseline="middle">DB</text>
+      <rect x="338" y="98" width="16" height="8" rx="3" fill="#d3ad7a"/>
+      <text x="346" y="102" fill="#16211a" font-size="5" font-weight="700" font-family="'Geist Mono', monospace" text-anchor="middle" dominant-baseline="middle">TB</text>
+      <rect x="370" y="124" width="100" height="64" rx="6" fill="#16211a"/>
+      <rect x="370" y="124" width="100" height="64" rx="6" fill="#16211a" stroke="rgba(242,240,233,0.25)" stroke-width="1"/>
+      <rect x="374" y="128" width="22" height="10" rx="3" fill="rgba(242,240,233,0.12)"/>
+      <text x="385" y="133" fill="#c9cfc4" font-size="6" font-weight="600" font-family="'Geist Mono', monospace" text-anchor="middle" dominant-baseline="middle" letter-spacing="0.06em">MDL</text>
+      <text x="420" y="147" fill="#f2f0e9" font-size="9" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Covariance → L</text>
+      <text x="420" y="159" fill="#c9cfc4" font-size="6.5" font-family="'Geist Mono', monospace" text-anchor="middle">Σ = L·Lᵀ</text>
+      <text x="420" y="171" fill="#8a978c" font-size="6.5" font-family="'Geist Mono', monospace" text-anchor="middle">cholesky()</text>
+      <rect x="374" y="178" width="16" height="8" rx="3" fill="#d3ad7a"/>
+      <text x="382" y="182" fill="#16211a" font-size="5" font-weight="700" font-family="'Geist Mono', monospace" text-anchor="middle" dominant-baseline="middle">TB</text>
+      <rect x="450" y="178" width="16" height="8" rx="3" fill="#d3ad7a"/>
+      <text x="458" y="182" fill="#16211a" font-size="5" font-weight="700" font-family="'Geist Mono', monospace" text-anchor="middle" dominant-baseline="middle">TB</text>
+      <rect x="482" y="124" width="100" height="64" rx="6" fill="#16211a"/>
+      <rect x="482" y="124" width="100" height="64" rx="6" fill="#16211a" stroke="rgba(242,240,233,0.25)" stroke-width="1"/>
+      <rect x="486" y="128" width="22" height="10" rx="3" fill="rgba(242,240,233,0.12)"/>
+      <text x="497" y="133" fill="#c9cfc4" font-size="6" font-weight="600" font-family="'Geist Mono', monospace" text-anchor="middle" dominant-baseline="middle" letter-spacing="0.06em">MDL</text>
+      <text x="532" y="147" fill="#f2f0e9" font-size="9" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Monte Carlo</text>
+      <text x="532" y="159" fill="#c9cfc4" font-size="6.5" font-family="'Geist Mono', monospace" text-anchor="middle">50,000 × two models</text>
+      <text x="532" y="171" fill="#8a978c" font-size="6.5" font-family="'Geist Mono', monospace" text-anchor="middle">simulate()</text>
+      <rect x="486" y="178" width="16" height="8" rx="3" fill="#d3ad7a"/>
+      <text x="494" y="182" fill="#16211a" font-size="5" font-weight="700" font-family="'Geist Mono', monospace" text-anchor="middle" dominant-baseline="middle">TB</text>
+      <rect x="562" y="178" width="16" height="8" rx="3" fill="#d3ad7a"/>
+      <text x="570" y="182" fill="#16211a" font-size="5" font-weight="700" font-family="'Geist Mono', monospace" text-anchor="middle" dominant-baseline="middle">TB</text>
+      <rect x="594" y="124" width="100" height="64" rx="6" fill="#16211a"/>
+      <rect x="594" y="124" width="100" height="64" rx="6" fill="#16211a" stroke="rgba(242,240,233,0.25)" stroke-width="1"/>
+      <rect x="598" y="128" width="22" height="10" rx="3" fill="rgba(242,240,233,0.12)"/>
+      <text x="609" y="133" fill="#c9cfc4" font-size="6" font-weight="600" font-family="'Geist Mono', monospace" text-anchor="middle" dominant-baseline="middle" letter-spacing="0.06em">MDL</text>
+      <text x="644" y="147" fill="#f2f0e9" font-size="9" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">VaR · CVaR</text>
+      <text x="644" y="159" fill="#c9cfc4" font-size="6.5" font-family="'Geist Mono', monospace" text-anchor="middle">95% · 99% quantile</text>
+      <text x="644" y="171" fill="#8a978c" font-size="6.5" font-family="'Geist Mono', monospace" text-anchor="middle">varCvar()</text>
+      <rect x="598" y="178" width="16" height="8" rx="3" fill="#d3ad7a"/>
+      <text x="606" y="182" fill="#16211a" font-size="5" font-weight="700" font-family="'Geist Mono', monospace" text-anchor="middle" dominant-baseline="middle">TB</text>
+      <rect x="674" y="178" width="16" height="8" rx="3" fill="#b88670"/>
+      <text x="682" y="182" fill="#16211a" font-size="5" font-weight="700" font-family="'Geist Mono', monospace" text-anchor="middle" dominant-baseline="middle">FL</text>
+      <rect x="706" y="204" width="100" height="64" rx="6" fill="#16211a"/>
+      <rect x="706" y="204" width="100" height="64" rx="6" fill="rgba(102,201,154,0.07)" stroke="#66c99a" stroke-width="1"/>
+      <rect x="710" y="208" width="22" height="10" rx="3" fill="rgba(102,201,154,0.20)"/>
+      <text x="721" y="213" fill="#66c99a" font-size="6" font-weight="600" font-family="'Geist Mono', monospace" text-anchor="middle" dominant-baseline="middle" letter-spacing="0.06em">VAL</text>
+      <text x="756" y="227" fill="#f2f0e9" font-size="9" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Breach test</text>
+      <text x="756" y="239" fill="#c9cfc4" font-size="6.5" font-family="'Geist Mono', monospace" text-anchor="middle">239 days out-of-sample</text>
+      <text x="756" y="251" fill="#8a978c" font-size="6.5" font-family="'Geist Mono', monospace" text-anchor="middle">Kupiec POF</text>
+      <rect x="710" y="258" width="16" height="8" rx="3" fill="#b88670"/>
+      <text x="718" y="262" fill="#16211a" font-size="5" font-weight="700" font-family="'Geist Mono', monospace" text-anchor="middle" dominant-baseline="middle">FL</text>
+      <text x="70" y="295" fill="#8a978c" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">STEPS</text>
+      <text x="70" y="316" fill="#8a978c" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">DATA TYPE</text>
+      <text x="70" y="338" fill="#8a978c" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">FLOW</text>
+      <rect x="144" y="284" width="24" height="16" rx="8" fill="rgba(242,240,233,0.12)"/>
+      <text x="156" y="292" fill="#f2f0e9" font-size="7" font-weight="600" font-family="'Geist Mono', monospace" text-anchor="middle" dominant-baseline="middle">01</text>
+      <text x="174" y="295" fill="#c9cfc4" font-size="7.5" font-family="'Geist Mono', monospace" letter-spacing="0.08em">COLLECT</text>
+      <rect x="235.8" y="284" width="24" height="16" rx="8" fill="rgba(242,240,233,0.12)"/>
+      <text x="247.8" y="292" fill="#f2f0e9" font-size="7" font-weight="600" font-family="'Geist Mono', monospace" text-anchor="middle" dominant-baseline="middle">02</text>
+      <text x="265.8" y="295" fill="#c9cfc4" font-size="7.5" font-family="'Geist Mono', monospace" letter-spacing="0.08em">ALIGN</text>
+      <rect x="316.8" y="284" width="24" height="16" rx="8" fill="rgba(242,240,233,0.12)"/>
+      <text x="328.8" y="292" fill="#f2f0e9" font-size="7" font-weight="600" font-family="'Geist Mono', monospace" text-anchor="middle" dominant-baseline="middle">03</text>
+      <text x="346.8" y="295" fill="#c9cfc4" font-size="7.5" font-family="'Geist Mono', monospace" letter-spacing="0.08em">FACTOR</text>
+      <rect x="403.20000000000005" y="284" width="24" height="16" rx="8" fill="rgba(242,240,233,0.12)"/>
+      <text x="415.20000000000005" y="292" fill="#f2f0e9" font-size="7" font-weight="600" font-family="'Geist Mono', monospace" text-anchor="middle" dominant-baseline="middle">04</text>
+      <text x="433.20000000000005" y="295" fill="#c9cfc4" font-size="7.5" font-family="'Geist Mono', monospace" letter-spacing="0.08em">SIMULATE</text>
+      <rect x="500.40000000000003" y="284" width="24" height="16" rx="8" fill="rgba(242,240,233,0.12)"/>
+      <text x="512.4000000000001" y="292" fill="#f2f0e9" font-size="7" font-weight="600" font-family="'Geist Mono', monospace" text-anchor="middle" dominant-baseline="middle">05</text>
+      <text x="530.4000000000001" y="295" fill="#c9cfc4" font-size="7.5" font-family="'Geist Mono', monospace" letter-spacing="0.08em">READ</text>
+      <rect x="576.0" y="284" width="24" height="16" rx="8" fill="rgba(102,201,154,0.20)"/>
+      <text x="588.0" y="292" fill="#66c99a" font-size="7" font-weight="600" font-family="'Geist Mono', monospace" text-anchor="middle" dominant-baseline="middle">06</text>
+      <text x="606.0" y="295" fill="#66c99a" font-size="7.5" font-family="'Geist Mono', monospace" letter-spacing="0.08em">TEST</text>
+      <rect x="144" y="307" width="16" height="8" rx="3" fill="#82a0c0"/>
+      <text x="152" y="311" fill="#16211a" font-size="5" font-weight="700" font-family="'Geist Mono', monospace" text-anchor="middle" dominant-baseline="middle">DB</text>
+      <text x="166" y="315" fill="#c9cfc4" font-size="7.5" font-family="'Geist Mono', monospace">Raw series</text>
+      <rect x="235.0" y="307" width="16" height="8" rx="3" fill="#d3ad7a"/>
+      <text x="243.0" y="311" fill="#16211a" font-size="5" font-weight="700" font-family="'Geist Mono', monospace" text-anchor="middle" dominant-baseline="middle">TB</text>
+      <text x="257.0" y="315" fill="#c9cfc4" font-size="7.5" font-family="'Geist Mono', monospace">Matrix</text>
+      <rect x="307.2" y="307" width="16" height="8" rx="3" fill="#b88670"/>
+      <text x="315.2" y="311" fill="#16211a" font-size="5" font-weight="700" font-family="'Geist Mono', monospace" text-anchor="middle" dominant-baseline="middle">FL</text>
+      <text x="329.2" y="315" fill="#c9cfc4" font-size="7.5" font-family="'Geist Mono', monospace">Verdict</text>
+      <text x="384.1" y="315" fill="#8a978c" font-size="7" font-family="'Geist Mono', monospace">left chip = in · right chip = out</text>
+      <line x1="144" y1="335" x2="170" y2="335" stroke="#8a978c" stroke-width="1" marker-end="url(#arr-muted)"/>
+      <text x="178" y="338" fill="#c9cfc4" font-size="7.5" font-family="'Geist Mono', monospace">intermediate step</text>
+      <line x1="314" y1="335" x2="340" y2="335" stroke="#66c99a" stroke-width="1.2" marker-end="url(#arr-accent)"/>
+      <text x="348" y="338" fill="#66c99a" font-size="7.5" font-family="'Geist Mono', monospace">the leg that sets the verdict — the model&#39;s exam</text>
+      </svg>
+    <footer>
+      Two models, same weights and same per-asset volatilities &mdash; the only difference is whether
+      correlation is taken into account.<br>
+      Ticker names withheld. Every number comes from real portfolio data with a fixed seed, so the same
+      command reproduces the same result.
+    </footer>
+  </div>
+</body>
+</html>
