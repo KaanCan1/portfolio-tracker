@@ -58,6 +58,12 @@ Vanilla JavaScript SPA · Express · PostgreSQL · Claude API · MCP
   <img alt="Application architecture: four price providers behind a quota-and-cache source layer feeding an Express server, which reads and writes a Postgres store, calls the risk engine and serves the vanilla-JS dashboard; an MCP server consumes the same API and an offline measurement harness reads the store directly" src="docs/diagrams/architecture.png">
 </picture>
 
+> Vector source: [`docs/diagrams/architecture.html`](docs/diagrams/architecture.html)
+> — one self-contained HTML file with inline SVG ([dark](docs/diagrams/architecture-dark.html)).
+> How the diagrams are built, how their palette maps to the dashboard's own CSS
+> variables, and two dark-mode rules found by measuring:
+> [`docs/diagrams/README.md`](docs/diagrams/README.md).
+
 The dashed arrow on the right is deliberate: the measurement harness reads the **store directly** and reuses the risk engine's *same* pure module. That is what keeps the number on the dashboard and the number in a measurement from drifting apart — if a metric had two implementations, one of them would eventually be wrong.
 
 What the diagram leaves out, for node-budget reasons:
@@ -84,6 +90,9 @@ The app produces risk numbers and trading signals. The rule I hold it to: **no c
   <source media="(prefers-color-scheme: dark)" srcset="docs/diagrams/measurement-pipeline-dark.png">
   <img alt="Risk measurement pipeline across data, model and validation lanes: daily bars, alignment to common dates, covariance factored with Cholesky, Monte Carlo over two models, VaR and CVaR, and a final out-of-sample breach test" src="docs/diagrams/measurement-pipeline.png">
 </picture>
+
+> Vector source: [`docs/diagrams/measurement-pipeline.html`](docs/diagrams/measurement-pipeline.html)
+> ([dark](docs/diagrams/measurement-pipeline-dark.html)).
 
 ### A worked example: the assumption that wasn't in the code
 
