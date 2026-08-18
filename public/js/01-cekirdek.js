@@ -165,15 +165,16 @@ async function korCarpaniYukle(hazirVeri = null) {
   try {
     const d = hazirVeri || await (await fetch("/api/risk")).json();
     const p = d?.portfolio;
-    if (!p || d.error) { KORCARPAN = { carpan: 1, olculdu: false, kucultmePct: 0, durum: "olculmedi" }; return; }
+    if (!p || d.error) { KORCARPAN = { carpan: 1, olculdu: false, kucultmePct: 0, durum: "olculmedi", seri: { olculdu: false, gun: 0 } }; return; }
     KORCARPAN = {
       carpan: Number(p.korelasyonCarpani) || 1,
       olculdu: !!p.korelasyonOlculdu,
       kucultmePct: Number(p.boyutKucultmePct) || 0,
       durum: p.korelasyonOlculdu ? "olculdu" : "olculmedi",
+      seri: p.korelasyonSerisi || { olculdu: false, gun: 0 },
     };
   } catch {
-    KORCARPAN = { carpan: 1, olculdu: false, kucultmePct: 0, durum: "olculmedi" };
+    KORCARPAN = { carpan: 1, olculdu: false, kucultmePct: 0, durum: "olculmedi", seri: { olculdu: false, gun: 0 } };
   }
   // Swing formu açıksa adet satırı taze çarpanla yeniden yazılsın
   if (typeof swingSizeCalc === "function" && document.querySelector("#swCalcBody")) swingSizeCalc();
@@ -183,7 +184,13 @@ async function korCarpaniYukle(hazirVeri = null) {
 function korCarpanNotu() {
   if (KORCARPAN.durum === "bekliyor") return `<i>korelasyon ölçülüyor — bu adet henüz kesintisiz</i>`;
   if (!KORCARPAN.olculdu) return `<i>korelasyon ölçülmedi — kesinti uygulanmadı</i>`;
-  return `<i>korelasyon ×${KORCARPAN.carpan.toFixed(2)} → %${KORCARPAN.kucultmePct} küçültüldü</i>`;
+  /* Tek günün çarpanı BUGÜNKÜ bileşimin değeri; sabit sanılmasın diye seri de
+   * yazılır (docs/olcumler §16f). Kanıt yoksa aralık cümlesi HİÇ kurulmaz —
+   * iki günlük seriden "1,28-1,41 arası" demek ölçmediğini vaat etmektir. */
+  const t = `<i>korelasyon ×${KORCARPAN.carpan.toFixed(2)} → %${KORCARPAN.kucultmePct} küçültüldü</i>`;
+  const s = KORCARPAN.seri;
+  if (!s?.olculdu) return t;
+  return `${t}<br><i>${s.gun} gün ölçüldü · aralık ×${s.min.toFixed(2)}–×${s.max.toFixed(2)}</i>`;
 }
 
 async function load() {

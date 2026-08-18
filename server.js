@@ -24,6 +24,7 @@ import { depoOlustur, appDataYaz, jsonMetin } from "./store.js";
 import { swingKapsam, sayilanPay } from "./swing-kapsam.js";
 import { kiyasHesapla, kiyasHukum } from "./kiyas.js";
 import { korelasyonCarpaniHesapla } from "./boyutlandirma.js";
+import { gunlukKayit, kayitKur, normalize as korGunlukNormalize, karne as korKarne } from "./korelasyon-gunlugu.js";
 
 /* ÖLÇÜM TABANI (16 Ağu 2026). Defterdeki 2 Mart – 30 Mayıs arası 24 kayıt GERİYE
  * DOLDURULMUŞ: hepsi tek bir kuru (45,9267) taşıyor ve aralarında 30 güne varan
@@ -5985,6 +5986,19 @@ const _dailyReturns = (candles, n) => {
   return r;
 };
 
+/* KORELASYON GÜNLÜĞÜ (18 Ağu 2026) — çarpanın zaman serisi.
+ * Çarpan 17 Ağu'da boyutlandırmaya bağlandı ve her önerilen adedi bölüyor, ama
+ * her istekte hesaplanıp ATILIYORDU. docs/olcumler §16g "ikinci bir rejim
+ * görülmeden 1,32 sabit sanılmamalı" diyor — o rejim geldiğinde kıyaslanacak
+ * seri yoktu ve geriye dönük üretilemez (geçmiş bileşim bilinmiyor).
+ * DİZİ anahtarı: store.js'in jsonMetin/::jsonb yolundan geçmek ZORUNDA,
+ * yoksa signal_ledger'ın 10 Ağu'daki sessiz kaybı tekrarlanır. */
+const KOR_KEY = "korelasyon_gunlugu";
+const KOR_FILE = join(__dirname, "korelasyon_gunlugu.json");
+const korDepo = depo(KOR_KEY, { dosya: KOR_FILE, varsayilan: [], normalize: korGunlukNormalize });
+let korGunluk = [];
+async function loadKorGunluk() { korGunluk = await korDepo.oku(); }
+
 app.get("/api/risk", async (_req, res) => {
   try {
     const data = await loadData();
@@ -6075,6 +6089,28 @@ app.get("/api/risk", async (_req, res) => {
       p.suggestUSD = ham != null ? ham / kor.carpan : null;
       p.suggestPct = p.suggestUSD != null && totVal ? p.suggestUSD / totVal * 100 : null;
     }
+    /* Çarpanı günlüğe işle. Gün içinde eşik altı oynama YAZMA TETİKLEMEZ —
+     * bu uç her sayfa açılışında koşuyor. Yazma yanıtı BEKLETMEZ: günlük bir
+     * ölçüm kaydı, panelin gecikmesine değmez; hata yutulur ama seri bellekte
+     * güncel kalır (bir sonraki yazma denemesi aynı günü tazeler). */
+    /* Çarpan TEK YERDE yuvarlanır: hem günlüğe hem cevaba aynı sayı gider.
+     * Ham float'ı günlüğe, yuvarlanmışını panele yazmak "aynı sayının iki
+     * yazımı" demekti ve bu projede o hep ikinci bir değere dönüştü (§15). */
+    const korCarpan3 = +kor.carpan.toFixed(3);
+    const korKayit = kayitKur({
+      t: new Date().toISOString().slice(0, 10),
+      kor: { carpan: korCarpan3, olculdu: kor.olculdu },
+      volAnnPct: +(portVolD * ann * 100).toFixed(1),
+      volBagimsizPct: +(kor.sigmaBagimsiz * ann * 100).toFixed(1),
+      avgCorr: +avgCorr.toFixed(2),
+      n: pos.length,
+    });
+    const korSonuc = gunlukKayit(korGunluk, korKayit);
+    if (korSonuc.degisti) {
+      korGunluk = korSonuc.gunluk;
+      korDepo.yaz(korGunluk).catch((e) => console.error("korelasyon günlüğü yazılamadı:", e.message));
+    }
+
     res.json({
       asOf: new Date().toISOString(),
       lookback: L,
@@ -6101,10 +6137,20 @@ app.get("/api/risk", async (_req, res) => {
         /* Boyutlandırmanın kullandığı çarpan. `olculdu:false` ise kesinti YOK ve UI
          * "ölçülmedi" der — score-calibration.js'in kuralı (kanıt yoksa çarpan 1,
          * ama etiket yalan söylemez). */
-        korelasyonCarpani: +kor.carpan.toFixed(3),
+        korelasyonCarpani: korCarpan3,
         korelasyonOlculdu: kor.olculdu,
         volBagimsizPct: +(kor.sigmaBagimsiz * ann * 100).toFixed(1),
         boyutKucultmePct: kor.olculdu ? +((1 - 1 / kor.carpan) * 100).toFixed(0) : 0,
+        /* Çarpanın GEÇMİŞİ. Tek bir günün çarpanı "bugünkü bileşimin değeri";
+         * §16f sabit sanılmamasını istiyor ve bunu ancak seri gösterebilir.
+         * Kanıt yetmezse `olculdu:false` ve sayılar null — kart aralık vaat etmez. */
+        korelasyonSerisi: (() => {
+          const kr = korKarne(korGunluk);
+          return kr.olculdu
+            ? { olculdu: true, gun: kr.gun, ilk: kr.ilk, son: kr.son,
+                min: +kr.min.toFixed(3), max: +kr.max.toFixed(3), ort: +kr.ort.toFixed(3) }
+            : { olculdu: false, gun: kr.gun };
+        })(),
       },
       positions: pos.map((p) => ({
         symbol: p.symbol, weightPct: +(p.weight * 100).toFixed(1), valueUSD: +p.valueUSD.toFixed(0),
@@ -7901,6 +7947,7 @@ setInterval(() => {
     await loadCandleCache(); // grafik mumlarını diskten ısıt → ilk tıkta anında
     await loadNewsCache();   // haftalık fırsat haber nöbeti önbelleği
     await loadLedger();      // sinyal karnesi geçmişi
+    await loadKorGunluk();   // korelasyon çarpanı zaman serisi
     await loadOppHistory();  // fırsat backtest geçmişi
     const data = await loadData();
     if (data.signals) Object.assign(signalCache, data.signals);
