@@ -1349,13 +1349,37 @@ swingGoalForm?.addEventListener("submit", async (e) => {
   renderSwingDeck();
 });
 
+/* 20 Ağu 2026: burası YAPMADIĞI ŞEYİ raporluyordu. Kısmi satış kârı olan kayıtta
+ * sunucu silmiyor, arşivliyor — ama diyalog "defterden kaldırılacak", toast da
+ * "silindi" diyordu ve satır yerinde kalıyordu. Kaan yanlış girdiği bir TEM
+ * kaydını silmeye çalıştı, olmadı, defalarca "silindi" okudu.
+ *
+ * Artık üç durum ÜÇ AYRI cümle kuruyor ve toast sunucunun GERÇEKTE ne yaptığını
+ * söylüyor (yanıttaki `islem`), tahmin etmiyor. */
 async function delSwing(id) {
   const t = SWINGDECK.trades.find((x) => x.id === id);
   const lbl = t ? t.symbol : "Pozisyon";
-  const ok = await confirmDialog({ title: `${lbl} kaydı silinsin mi?`, message: "Bu swing kaydı defterden kaldırılacak.", confirmText: "Sil", danger: true });
-  if (!ok) return;
-  await fetch(`/api/swing-trades/${id}`, { method: "DELETE" });
-  toast(`${lbl} silindi`);
+  const lots = (t && t.realizedLots) || [];
+  const lotSum = lots.reduce((a, l) => a + (l.pnlUSD || 0), 0);
+  const arsivde = !!(t && t.archived);
+
+  const soru = lots.length && !arsivde
+    ? { title: `${lbl} arşive alınsın mı?`,
+        message: `Bu kayıtta kısmi satıştan GERÇEKLEŞMİŞ ${fmtUSD(lotSum)} kâr var. Tamamen silmek onu bu ayın realize toplamından geriye dönük düşerdi, o yüzden kayıt önce arşive alınır — kâr korunur, kalan adet ana portföyde durur. Kalıcı silmek istersen arşiv satırındaki ×'e bir daha bas.`,
+        confirmText: "Arşive al" }
+    : lots.length
+    ? { title: `${lbl} KALICI olarak silinsin mi?`,
+        message: `Kayıt ve içindeki ${fmtUSD(lotSum)} realize kâr defterden tamamen kaldırılacak. Bu ayın realize toplamı ve isabet oranı değişir. Geri alınamaz.`,
+        confirmText: "Kalıcı sil", danger: true }
+    : { title: `${lbl} kaydı silinsin mi?`,
+        message: "Bu swing kaydı defterden kaldırılacak.",
+        confirmText: "Sil", danger: true };
+
+  if (!await confirmDialog(soru)) return;
+  const r = await fetch(`/api/swing-trades/${id}`, { method: "DELETE" });
+  const y = await r.json().catch(() => ({}));
+  if (!r.ok) { toast(y.error || `${lbl} silinemedi`, "err"); return; }
+  toast(y.islem === "arsivlendi" ? `${lbl} arşive alındı — kâr korundu` : `${lbl} silindi`);
   loadSwingDeck();
 }
 

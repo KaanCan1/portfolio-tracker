@@ -55,6 +55,23 @@ jobs:
           done
           [ $eksik = 0 ]
 
+      - name: Portföy yazmaları kuyruktan geçiyor mu
+        run: |
+          # NEDEN VAR (18 Ağu 2026): her yazan uç `loadData()` → değiştir →
+          # `saveData()` yazıyordu; eşzamanlı iki istek birbirinin kaydını
+          # siliyordu (ölçüldü: 5 POST → 1 kayıt). Kural artık şu: portföy
+          # belgesine YALNIZ veriIslem() yazar. Kural koda değil alışkanlığa
+          # dayanırsa bir sonraki uçta sessizce bozulur — kapı burada.
+          # Tanım satırı hariç HER saveData( çağrısı kaçaktır.
+          kacak=$(grep -nE '(^|[^A-Za-z0-9_.])saveData\(' server.js \
+                  | grep -vE '^[0-9]+:[[:space:]]*(\*|//|/\*)' \
+                  | grep -v 'async function saveData(' || true)
+          if [ -n "$kacak" ]; then
+            echo "::error::saveData doğrudan çağrılmış — veriIslem() kullan (bkz. yazma-kuyrugu.js)"
+            echo "$kacak"; exit 1
+          fi
+          echo "  ✓ doğrudan saveData çağrısı yok"
+
       - name: Sunucu ayağa kalkıyor mu (asıl test)
         run: |
           # portfolio.json BİLEREK yok (gitignore'da) → taze klon yolu sınanır
@@ -71,6 +88,75 @@ jobs:
           cat /tmp/boot.log
           kill $pid 2>/dev/null
           exit 1
+
+      - name: Taze belgede ana uç açılıyor mu
+        timeout-minutes: 3
+        run: |
+          # NEDEN VAR (19 Ağu 2026): portfolio.json gitignore'da (tek kaynak
+          # Supabase), yani taze klonda YOK ve belge {} oluyor. Bu hâlde
+          # GET /api/portfolio `data.holdings.filter` ile 500 dönüyordu —
+          # uygulama ilk holding eklenene kadar hiç açılmıyordu, ama ekleme
+          # ekranına da bu uçtan geçiliyor. /healthz bunu GÖRMEZ: süreç ayakta,
+          # ana uç çökük. Açılış testi "ayağa kalktı" deyip yeşil yanıyordu.
+          # AUTH_PASSWORD YOK → şifre kapısı açık mod, uca doğrudan gidilir.
+          rm -f portfolio.json
+          DATABASE_URL= PORT=4096 node server.js > /tmp/bos.log 2>&1 &
+          pid=$!
+          for i in $(seq 1 30); do
+            curl -sf --max-time 5 http://localhost:4096/healthz >/dev/null && break
+            kill -0 $pid 2>/dev/null || { echo "::error::süreç öldü"; cat /tmp/bos.log; exit 1; }
+            sleep 1
+          done
+          # 28 Ağu: liste genişledi. /api/kiyas ve /api/temalar da boş belgede
+          # çağrılıyor (Analiz sekmesi açılır açılmaz) ve ikisi de snapshot /
+          # holdings / radar önbelleği okuyor — üçü de CI'da BOŞ. Biri `{}` üstünde
+          # .filter/.map çağırırsa aynı 19 Ağu hatası tekrar eder, bu kez Analiz'de.
+          hata=0
+          for uc in /api/portfolio /api/kiyas /api/temalar; do
+            code=$(curl -s -o /tmp/bos-govde -w "%{http_code}" --max-time 90 "http://localhost:4096$uc" || echo 000)
+            # 5xx = sunucu çöktü (aranan hata). Dış veri kaynağı CI'da erişilemezse
+            # uç yine 200 döner (hata meta'ya yazılır) — bu kapı ona takılmaz.
+            case "$code" in
+              5*|000) echo "::error::taze belgede GET $uc → $code"; head -c 400 /tmp/bos-govde; hata=1 ;;
+              *) echo "  ✓ taze belgede GET $uc → $code" ;;
+            esac
+          done
+          kill $pid 2>/dev/null
+          rm -f portfolio.json
+          [ $hata = 0 ] || { cat /tmp/bos.log; exit 1; }
+
+      - name: Eşzamanlı yazma kayıt kaybettiriyor mu (yarış testi)
+        timeout-minutes: 2
+        run: |
+          # Birim testi mekanizmayı kanıtlıyor (test/yazma-kuyrugu.test.mjs);
+          # burası GERÇEK sunucuda, gerçek HTTP ile aynı ölçümü tekrarlar —
+          # 18 Ağu'da 5 POST'tan 4'ünü sessizce yutan senaryonun aynısı.
+          # AUTH_PASSWORD YOK → şifre kapısı açık mod (dosya modu, DB'siz).
+          rm -f portfolio.json
+          DATABASE_URL= PORT=4098 node server.js > /tmp/yaris.log 2>&1 &
+          pid=$!
+          for i in $(seq 1 30); do
+            curl -sf --max-time 5 http://localhost:4098/healthz >/dev/null && break
+            kill -0 $pid 2>/dev/null || { echo "::error::süreç öldü"; cat /tmp/yaris.log; exit 1; }
+            sleep 1
+          done
+          # ÇIPLAK `wait` KULLANMA: arka plandaki TÜM çocukları bekler, sunucu
+          # süreci dahil → adım hiç bitmez (19 Ağu: iş 8 dk timeout'a gitti).
+          # Yalnız curl'lerin pid'lerini bekle. Yerelde yakalanmadı çünkü orada
+          # sunucu kabuğun çocuğu değildi — CI'da öyle.
+          curller=""
+          for n in 301 302 303 304 305; do
+            curl -s -o /dev/null --max-time 20 -X POST http://localhost:4098/api/realized2026 \
+              -H 'content-type: application/json' \
+              -d "{\"label\":\"RACE\",\"symbol\":\"RACE\",\"amountTRY\":$n}" &
+            curller="$curller $!"
+          done
+          wait $curller
+          kill $pid 2>/dev/null; sleep 1
+          n=$(node -e 'const j=JSON.parse(require("fs").readFileSync("portfolio.json","utf8"));console.log((j.realized2026||[]).filter(r=>r.label==="RACE").length)')
+          rm -f portfolio.json
+          [ "$n" = "5" ] || { echo "::error::5 eşzamanlı POST → defterde $n kayıt (5 olmalı) — yazma yarışı geri geldi"; exit 1; }
+          echo "  ✓ 5 eşzamanlı POST → 5 kayıt"
 
       - name: Açılış logu
         if: always()

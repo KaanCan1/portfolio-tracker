@@ -25,6 +25,11 @@ import { swingKapsam, sayilanPay } from "./swing-kapsam.js";
 import { kiyasHesapla, kiyasHukum } from "./kiyas.js";
 import { korelasyonCarpaniHesapla } from "./boyutlandirma.js";
 import { gunlukKayit, kayitKur, normalize as korGunlukNormalize, karne as korKarne } from "./korelasyon-gunlugu.js";
+import { silmeKarari } from "./swing-silme.js";
+import { MIDAS_FEE, alisNakitDelta, satisNakitDelta, nakitUygula } from "./nakit-komisyon.js";
+import { mutabakat, mutabakatNotu } from "./deger-mutabakat.js";
+import { temaGucu } from "./tema-gucu.js";
+import { RADAR_GROUPS, RADAR_THEME, RADAR_SYMBOLS } from "./radar-evren.js";
 
 /* ÖLÇÜM TABANI (16 Ağu 2026). Defterdeki 2 Mart – 30 Mayıs arası 24 kayıt GERİYE
  * DOLDURULMUŞ: hepsi tek bir kuru (45,9267) taşıyor ve aralarında 30 güne varan
@@ -42,6 +47,7 @@ import { kuyrukKarari } from "./guard-queue.js";
 import { pozisyonBulgulari, bayatKaynakBulgusu, usd0 } from "./guard-alerts.js";
 import { kayitEkle as gdKayitEkle, hukumYaz as gdHukumYaz, isabetOlc as gdIsabetOlc, HUKUMLER as GD_HUKUMLER } from "./guard-ledger.js";
 import { canliBarBindir } from "./live-bar.js";
+import { veriIslemOlustur, VeriHata } from "./yazma-kuyrugu.js";
 
 // Dış veri kaynaklarının tek kaydı — sağlık ucu buradan okur
 const KAYNAKLAR = kaynakDefteri();
@@ -286,6 +292,35 @@ async function saveData(data) {
   }
   await writeFile(DATA_FILE, JSON.stringify(data, null, 2), "utf8");
 }
+
+/* veriIslem(fn) — portföy belgesini oku→değiştir→yaz eden TEK giriş.
+ *
+ * NEDEN VAR (18 Ağu 2026, ölçüldü): her yazan uç `loadData()` → değiştir →
+ * `saveData()` yazıyordu. İki istek çakışınca ikisi de aynı eski belgeyi okur
+ * ve ikisi de TAMAMINI geri yazar → ikinci yazan birincinin eklediğini siler.
+ * Aynı sembole 5 eşzamanlı POST /api/realized2026: beşi de HTTP 200, defterde
+ * 1 kayıt. Log yok, hata yok. Sıralı isteklerde görünmüyor — yani elle test
+ * bunu asla yakalamaz. Mekanizma ve kapsam sınırı: yazma-kuyrugu.js.
+ *
+ * KURAL: portföy belgesine yazan hiçbir yer doğrudan saveData ÇAĞIRMAZ.
+ * loadData salt-okuma uçlarda serbest (yazmadıkça yarış yok).
+ *
+ *   const liste = await veriIslem(async (d) => { d.notes.push(x); return d.notes; });
+ *
+ * Erken çıkış: `throw new VeriHata(404, "...")` → yazma iptal, uç noktanın
+ * catch'i durumu res.status'a taşır. Yazmayı koşullu atlamak için ikinci
+ * argüman: `(d, islem) => { ...; islem.yazma(); }`.
+ *
+ * loadData'nın "bozuk dosyada FIRLAT" garantisi olduğu gibi duruyor — kuyruk
+ * onu sarmalıyor, yumuşatmıyor. */
+const veriIslem = veriIslemOlustur({ oku: loadData, yaz: saveData });
+
+/* Kayıt kimliği. NEDEN rastgele son ek (18 Ağu 2026, kuyruk gelince ölçüldü):
+ * eşzamanlı istekler AYNI milisaniyeyi görür — 8 eşzamanlı swing açılışı 7
+ * farklı id üretti. Kayıt KAYBOLMUYOR (kuyruk onu hallediyor) ama iki kayıt
+ * aynı id'yi taşıyor ve "id'ye göre sil/güncelle" yanlış satıra vuruyor.
+ * Kuyruk yazmayı sıraya sokar, id'yi ayırmaz — ayrı iş, ayrı çözüm. */
+const yeniId = (onek) => onek + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
 /* Genel anahtar-değer kalıcılığı (app_data tablosu) — Render free diskinin
  * GEÇİCİ olması yüzünden restart'ta kaybolan önbellekler (radar taraması,
@@ -1567,10 +1602,11 @@ app.put("/api/risk-budget", async (req, res) => {
   try {
     const pct = Number(req.body?.pct);
     if (!(pct >= 0.5 && pct <= 10)) return res.status(400).json({ error: "bütçe %0.5–10 arasında olmalı" });
-    const data = await loadData();
-    data.riskBudget = { pct: +pct.toFixed(1) };
-    await saveData(data);
-    res.json(data.riskBudget);
+    const butce = await veriIslem(async (d) => {
+      d.riskBudget = { pct: +pct.toFixed(1) };
+      return d.riskBudget;
+    });
+    res.json(butce);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -2674,9 +2710,7 @@ async function refreshSignals(symbols) {
     });
     // Diske kalıcı yaz (restart sonrası anında gösterim)
     try {
-      const data = await loadData();
-      data.signals = signalCache;
-      await saveData(data);
+      await veriIslem(async (d) => { d.signals = signalCache; });
     } catch {}
     await persistCandleCache(); // grafik mumları da kalıcı olsun
     // Sinyal Karnesi: yeni kurulumları kaydet + açık kayıtları taze mumlarla değerlendir
@@ -2905,28 +2939,6 @@ async function expectedEarningsMove(symbol, price, earnDateISO) {
  *  Resimlerdeki takip listesi temalara göre gruplanır, arka planda yenilenir.
  * ====================================================================== */
 const RADAR_FILE = join(__dirname, "radar.json");
-const RADAR_GROUPS = [
-  { key: "popular", title: "Popüler · Mega-Cap",
-    symbols: ["AAPL","TSLA","NVDA","MSFT","AMZN","META","GOOGL","NFLX","AMD","AVGO",
-              "COST","JPM","WMT","DIS","UBER","BRK.B"] },
-  { key: "ai", title: "AI · Yarı İletken & Optik",
-    symbols: ["MU","TSM","ARM","LRCX","KLAC","ADI","ANET",
-              "COHR","LITE","FN","GLW","APH","AAOI","AXTI","MTSI","SNDK","TSEM","KEYS"] },
-  { key: "tech", title: "Büyüme · Teknoloji & Yazılım",
-    symbols: ["NOW","CRM","ORCL","ADBE","CDNS","TTD","SHOP","INOD","IBM"] },
-  { key: "story", title: "Hikaye · Yüksek Beklenti & Tema",
-    symbols: ["PLTR","SMCI","COIN","RKLB","IONQ","RGTI","OKLO","SMR","ASTS",
-              "CRWD","SNOW","NET","DDOG","MDB","CELH","SOFI","AFRM","RIVN","RDDT","DKNG"] },
-  { key: "fin", title: "Finans",
-    symbols: ["MA","V","AXP","KKR","BLK","HOOD","MCO","CME","NDAQ"] },
-  { key: "other", title: "Sağlık · Sanayi & Diğer",
-    symbols: ["LLY","ISRG","JNJ","HWM","ETN","AME","WM","BWXT","HEI","NEE","ETR","AEP"] },
-];
-// İlk eşleştiren grup hisseye temasını verir (mega-cap bir hisse hem popüler hem AI
-// olabilir → "Popüler" grubu öne alındığı için orada görünür, çift sayılmaz).
-const RADAR_THEME = {};
-for (const g of RADAR_GROUPS) for (const s of g.symbols) if (!RADAR_THEME[s]) RADAR_THEME[s] = { key: g.key, title: g.title };
-const RADAR_SYMBOLS = [...new Set(RADAR_GROUPS.flatMap((g) => g.symbols))];
 
 // Hisse hikâyesi / katalizör — neden takipte olduğunu tek cümlede anlatan etiket.
 // Skoru etkilemez; yalnızca "bu hissenin hikâyesi ne?" bağlamını verir.
@@ -3279,6 +3291,74 @@ app.get("/api/radar", (_req, res) => {
     total: RADAR_SCAN_SYMBOLS.length,
     items,
   });
+});
+
+/* ===== TEMA MASASI (28 Ağu 2026) =====
+ * "Sektör / tema yoğunlaşması" paneli yalnız SENİN ağırlığını söylüyordu: "%65'in
+ * şu temada". Eksik yarısı, o temanın iyi bir yerde olup olmadığıydı — yoğunlaşma
+ * tek başına ne iyi ne kötü. Bu uç ikisini birleştirir: evrenin tema medyanları +
+ * senin ağırlığın, tek tabloda.
+ *
+ * GETİRİLER MUM ÖNBELLEĞİNDEN, radar item'ının Finnhub ret1M/ret3M'inden DEĞİL.
+ * İki kaynağı karıştırmak yasak: tema medyanı Finnhub'dan, QQQ karşılaştırması
+ * mumdan gelseydi göreli güç iki farklı yöntemin farkını ölçerdi ve fark
+ * yöntemden mi piyasadan mı geldiği anlaşılmazdı (CLAUDE.md · bir sayının iki
+ * hesabı varsa biri bozuktur). Mumu olmayan sembol ölçüme girmez; kaç sembolün
+ * girdiği `n` olarak yanıtta durur. */
+const TEMA_1A = 21, TEMA_3A = 63;   // işlem günü — ~1 ay / ~3 ay
+function temaGetiri(sym) {
+  const c = candleCache[sym]?.candles;
+  if (!c || c.length < TEMA_3A + 1) return null;
+  const kapanis = c.map((x) => x.close).filter((x) => x > 0);
+  if (kapanis.length < TEMA_3A + 1) return null;
+  const son = kapanis[kapanis.length - 1];
+  const geri = (k) => { const p = kapanis[kapanis.length - 1 - k]; return p > 0 ? ((son - p) / p) * 100 : null; };
+  return { ret1M: geri(TEMA_1A), ret3M: geri(TEMA_3A) };
+}
+
+app.get("/api/temalar", async (_req, res) => {
+  try {
+    maybeRefreshRadar();
+    const eksik = [];
+    const items = [];
+    for (const sym of RADAR_SCAN_SYMBOLS) {
+      const r = radarCache[sym];
+      if (!r?.theme?.title) continue;                 // Cuma listesi / temasız → evrene girmez
+      const g = temaGetiri(sym);
+      if (!g) { eksik.push(sym); continue; }
+      items.push({ ...r, ret1M: g.ret1M, ret3M: g.ret3M });
+    }
+    const q = temaGetiri("QQQ");
+    if (eksik.length) queueWarmCandles(eksik.slice(0, 40));   // yanıttan sonra ısıt, bir dahakine tam olsun
+
+    /* Portföy ağırlığı: hisse pozisyonlarının tema payı (altın/nakit hariç — radar
+     * evreni hisse). Adet alanı `quantity`; ham holding'de `shares` YOKTUR (o, trades
+     * kaydının alanı) — karıştırılırsa her ağırlık sessizce 0 çıkar ve tablo "senin
+     * hiçbir temada payın yok" der. fetchStocks 60 sn önbellekli, aynı sayfa yükünde
+     * /api/portfolio zaten çağırmış olur; fiyat gelmezse maliyet bazına düşülür
+     * (yaklaşık ama boş bırakmaktan iyi — ağırlık oransal bir büyüklük). */
+    const data = await loadData();
+    const hisseler = (data.holdings || []).filter((h) => h.type === "stock" && Number(h.quantity) > 0);
+    const fiyatlar = await fetchStocks(hisseler.map((h) => h.symbol)).catch(() => ({}));
+    const agirlikUSD = {};
+    let toplam = 0;
+    for (const h of hisseler) {
+      const sym = String(h.symbol || "").toUpperCase();
+      const qty = Number(h.quantity);
+      const px = Number(fiyatlar[sym]?.price) || Number(h.costUSD) || 0;
+      const mv = px * qty;
+      if (!(mv > 0)) continue;
+      const t = RADAR_THEME[sym]?.title || "Diğer / Sınıflandırılmamış";
+      agirlikUSD[t] = (agirlikUSD[t] || 0) + mv;
+      toplam += mv;
+    }
+    const agirlik = {};
+    for (const [t, v] of Object.entries(agirlikUSD)) agirlik[t] = (v / (toplam || 1)) * 100;
+
+    const sonuc = temaGucu({ items, endeks: q || {}, agirlik });
+    res.json({ ...sonuc, mumEksik: eksik.length, pencere: { ay1: TEMA_1A, ay3: TEMA_3A }, guncellendi: radarUpdated,
+      taraniyor: radarRefreshing, disiTema: agirlik["Diğer / Sınıflandırılmamış"] ? +agirlik["Diğer / Sınıflandırılmamış"].toFixed(1) : 0 });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.post("/api/radar/refresh", (_req, res) => {
@@ -4577,8 +4657,19 @@ function optionMetrics(o, underPrice) {
 // Tüm portföyü canlı fiyatlarla zenginleştirip döner
 app.get("/api/portfolio", async (_req, res) => {
   try {
-    const data = await loadData();
-    const stockSymbols = data.holdings.filter((h) => h.type === "stock").map((h) => h.symbol);
+    // let: kalıcı yazma bloğu belgeyi veriIslem içinde TAZE okur ve geri döner —
+    // yanıt o taze belgeden okunsun, yoksa yazdığımız snapshot'ı göstermeyiz.
+    let data = await loadData();
+    /* NEDEN `|| []` (19 Ağu 2026): taze kurulumda belge {} — portfolio.json
+     * gitignore'da, tek kaynak Supabase, yani taze klonda dosya YOK. O hâlde
+     * `data.holdings.filter` TypeError fırlatıyor ve ana uç 500 dönüyordu:
+     * "Cannot read properties of undefined (reading 'filter')". Uygulama ilk
+     * holding eklenene kadar hiç açılmıyordu — ama ekleme ekranına da bu uçtan
+     * geçiliyor. Handler'ın geri kalanı zaten `(data.X || [])` deseniyle
+     * çalışıyordu; holdings iki yerde ayrışmıştı (bkz. aşağıda `holdings.map`).
+     * Belgeyi DEĞİŞTİRMİYORUZ — yerel const, diske hiçbir şey yazılmıyor. */
+    const holdings = data.holdings || [];
+    const stockSymbols = holdings.filter((h) => h.type === "stock").map((h) => h.symbol);
     const watchSymbols = (data.watchlist || []).map((s) => String(s).toUpperCase());
     maybeRefreshSignals([...stockSymbols.map((s) => s.toUpperCase()), ...watchSymbols]); // arka planda tazele
     // Opsiyon dayanakları + izleme listesi de fiyat çekimine eklenir
@@ -4613,7 +4704,7 @@ app.get("/api/portfolio", async (_req, res) => {
     const gram = metals?.gram?.selling || null;
 
     const enriched = await Promise.all(
-      data.holdings.map(async (h) => {
+      holdings.map(async (h) => {
         const out = { ...h, live: null, error: null };
         try {
           if (h.type === "stock") {
@@ -4741,7 +4832,7 @@ app.get("/api/portfolio", async (_req, res) => {
     /* Swing pozisyonları (Swing Defteri) — ana toplama YALNIZ örtüşmeyen adetle dahil.
      * 16 Ağu: 14 Ağu'daki çift sayım düzeltmesi swingPositions'a ve ön yüze uygulandı
      * ama BURAYA uygulanmadı. Sonuç: sunucunun meta.totals.grandTRY'si (Net Değer KPI,
-     * günlük snapshot, raporlar) $5.207 derken ön yüzün kendi topladığı hero $4.593
+     * günlük snapshot, raporlar) bir toplam derken ön yüzün kendi topladığı hero başka
      * diyordu — aynı ekranda iki portföy değeri. Kapsam tek yerden gelir. */
     const acikSwing = (data.swingTrades || []).filter((t) => t.status === "open" && Number(t.qty) > 0);
     const totalKapsam = swingKapsam(acikSwing, data.holdings || []);
@@ -5042,70 +5133,78 @@ app.get("/api/portfolio", async (_req, res) => {
     data.intraday = data.intraday || [];
     const today = new Date().toISOString().slice(0, 10);
     if (isFinite(grandTotal) && grandTotal > 0 && usdtry && gram && !anyError && allValued) {
-      const snap = {
-        date: today,
-        total: Math.round(grandTotal * 100) / 100,
-        market: Math.round(totalMarket * 100) / 100,
-        cash: Math.round(cashTL * 100) / 100,
-        usdtry,
-      };
-      const i = data.snapshots.findIndex((s) => s.date === today);
-      if (i >= 0) data.snapshots[i] = snap;
-      else data.snapshots.push(snap);
+      /* Yarış kapısı: bu blok TAZE belgeye yazar (veriIslem içinde yeniden okunur).
+       * Eskiden yukarıda okunan `data` üstünde çalışıp saveData ile TÜM belgeyi
+       * geri yazıyordu — /api/portfolio uzun sürdüğü için arada gelen her
+       * ekleme (işlem, not, swing) sessizce siliniyordu. Bkz. yazma-kuyrugu.js. */
+      data = await veriIslem(async (d) => {
+        d.snapshots = d.snapshots || [];
+        d.intraday = d.intraday || [];
+        const snap = {
+          date: today,
+          total: Math.round(grandTotal * 100) / 100,
+          market: Math.round(totalMarket * 100) / 100,
+          cash: Math.round(cashTL * 100) / 100,
+          usdtry,
+        };
+        const i = d.snapshots.findIndex((s) => s.date === today);
+        if (i >= 0) d.snapshots[i] = snap;
+        else d.snapshots.push(snap);
 
-      // ---- Gün içi (intraday) seyir: 15 dk'lık dilimler, yalnızca bugün ----
-      const MS15 = 15 * 60 * 1000;
-      const slotISO = (t) =>
-        new Date(Math.floor(new Date(t).getTime() / MS15) * MS15).toISOString();
-      // Eski (dakikalık) ve yeni tüm bugünkü noktaları 15 dk dilimlere indir
-      const buckets = new Map();
-      for (const p of data.intraday.filter((p) => p.t.slice(0, 10) === today)) {
-        buckets.set(slotISO(p.t), p.total); // dilim içindeki en güncel değer kalır
-      }
-      buckets.set(slotISO(new Date().toISOString()), Math.round(grandTotal * 100) / 100);
-      data.intraday = [...buckets.entries()]
-        .sort((a, b) => (a[0] < b[0] ? -1 : 1))
-        .map(([t, total]) => ({ t, total }));
-      if (data.intraday.length > 200) data.intraday = data.intraday.slice(-200);
+        // ---- Gün içi (intraday) seyir: 15 dk'lık dilimler, yalnızca bugün ----
+        const MS15 = 15 * 60 * 1000;
+        const slotISO = (t) =>
+          new Date(Math.floor(new Date(t).getTime() / MS15) * MS15).toISOString();
+        // Eski (dakikalık) ve yeni tüm bugünkü noktaları 15 dk dilimlere indir
+        const buckets = new Map();
+        for (const p of d.intraday.filter((p) => p.t.slice(0, 10) === today)) {
+          buckets.set(slotISO(p.t), p.total); // dilim içindeki en güncel değer kalır
+        }
+        buckets.set(slotISO(new Date().toISOString()), Math.round(grandTotal * 100) / 100);
+        d.intraday = [...buckets.entries()]
+          .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+          .map(([t, total]) => ({ t, total }));
+        if (d.intraday.length > 200) d.intraday = d.intraday.slice(-200);
 
-      // ---- Bugünün açılış (gün başı) değeri ----
-      if (isFinite(openTotal) && openTotal > 0) {
-        data.dayOpen = { date: today, total: Math.round(openTotal * 100) / 100 };
-      }
+        // ---- Bugünün açılış (gün başı) değeri ----
+        if (isFinite(openTotal) && openTotal > 0) {
+          d.dayOpen = { date: today, total: Math.round(openTotal * 100) / 100 };
+        }
 
-      // ---- Günlük rapor (sinyaller + rejim + kâr-al + swing) ----
-      const todayReport = {
-        date: today,
-        generatedAt: new Date().toISOString(),
-        note: meta.summaryText, // günün düz Türkçe özeti — rapor tek başına okunabilsin
-        totalTRY: Math.round(grandTotal),
-        totalUSD: usdtry ? Math.round(grandTotal / usdtry) : null,
-        dayChangePct: openTotal > 0 ? ((grandTotal - openTotal) / openTotal) * 100 : null,
-        regime: regime
-          ? { vix: regime.vix, band: regime.band, advice: regime.advice, targetCash: regime.targetCash, currentCashPct: regime.currentCashPct }
-          : null,
-        stocks: enriched
-          .filter((h) => h.type === "stock" && h.sig)
-          .map((h) => ({
-            symbol: h.symbol,
-            price: h.live?.priceUSD ?? null,
-            dayChangePct: h.live?.dayChangePct ?? null,
-            rsi: h.sig.rsi ?? null,
-            signal: h.sig.signal || null,
-            reasons: h.sig.reasons || [],
-            upsidePct: h.sig.upsidePct ?? null,
-            gainPct: h.sig.gainPct ?? null,
-            profitTake: h.sig.profitTake || null,
-            swing: h.sig.swing || null,
-          })),
-      };
-      data.reports = data.reports || [];
-      const ri = data.reports.findIndex((r) => r.date === today);
-      if (ri >= 0) data.reports[ri] = todayReport;
-      else data.reports.push(todayReport);
-      if (data.reports.length > 30) data.reports = data.reports.slice(-30);
+        // ---- Günlük rapor (sinyaller + rejim + kâr-al + swing) ----
+        const todayReport = {
+          date: today,
+          generatedAt: new Date().toISOString(),
+          note: meta.summaryText, // günün düz Türkçe özeti — rapor tek başına okunabilsin
+          totalTRY: Math.round(grandTotal),
+          totalUSD: usdtry ? Math.round(grandTotal / usdtry) : null,
+          dayChangePct: openTotal > 0 ? ((grandTotal - openTotal) / openTotal) * 100 : null,
+          regime: regime
+            ? { vix: regime.vix, band: regime.band, advice: regime.advice, targetCash: regime.targetCash, currentCashPct: regime.currentCashPct }
+            : null,
+          stocks: enriched
+            .filter((h) => h.type === "stock" && h.sig)
+            .map((h) => ({
+              symbol: h.symbol,
+              price: h.live?.priceUSD ?? null,
+              dayChangePct: h.live?.dayChangePct ?? null,
+              rsi: h.sig.rsi ?? null,
+              signal: h.sig.signal || null,
+              reasons: h.sig.reasons || [],
+              upsidePct: h.sig.upsidePct ?? null,
+              gainPct: h.sig.gainPct ?? null,
+              profitTake: h.sig.profitTake || null,
+              swing: h.sig.swing || null,
+            })),
+        };
+        d.reports = d.reports || [];
+        const ri = d.reports.findIndex((r) => r.date === today);
+        if (ri >= 0) d.reports[ri] = todayReport;
+        else d.reports.push(todayReport);
+        if (d.reports.length > 30) d.reports = d.reports.slice(-30);
 
-      await saveData(data);
+        return d;
+      });
     }
 
     res.json({
@@ -5360,16 +5459,18 @@ function appendBuyTrade(data, { symbol, name, shares, priceUSD, usdtry, note }) 
     auto: true,
   };
   data.trades.push(trade);
-  // Alış nakitten düşer (tam otomatik nakit) — quick-add / varlık ekle yolu
-  const spend = (+shares) * (+priceUSD);
-  if (spend > 0) { data.cash = data.cash || {}; data.cash.usd = +(((Number(data.cash.usd) || 0) - spend)).toFixed(2); }
+  /* Alış nakitten düşer — quick-add / "+ Varlık Ekle" yolu.
+   * 21 Ağu: burası KOMİSYONU ATLIYORDU (yalnız adet×fiyat düşüyordu), oysa
+   * POST /api/trades aynı işi $1.5 ile yapıyordu. Aynı muhasebe iki yerde
+   * yazılıydı ve biri sapmıştı; ikisi de nakit-komisyon.js'e bağlandı. */
+  const delta = alisNakitDelta(shares, priceUSD);
+  if (delta) { data.cash = data.cash || {}; data.cash.usd = nakitUygula(data.cash.usd, delta); }
   return trade;
 }
 
 /* ----------------------- API: holding yönetimi ----------------------- */
 app.post("/api/holdings", async (req, res) => {
   try {
-    const data = await loadData();
     const h = req.body;
     if (!h.symbol || !h.type) {
       return res.status(400).json({ error: "symbol ve type zorunlu" });
@@ -5385,31 +5486,38 @@ app.post("/api/holdings", async (req, res) => {
     // Aynı tür+sembol (altında ayrıca aynı ayar) varsa YENİ satır açma → mevcut
     // pozisyona ekle: adet toplanır, maliyet ağırlıklı ortalama alınır. Böylece
     // "hızlı ekle" ile aynı hisseyi tekrar eklemek pozisyonu büyütür, çoğaltmaz.
-    const existing = data.holdings.find((x) =>
-      x.type === h.type && String(x.symbol).toUpperCase() === h.symbol &&
-      (h.type !== "gold" || (Number(x.ayar) || 24) === (Number(h.ayar) || 24)));
-    if (existing && h.quantity > 0) {
-      const q0 = Number(existing.quantity) || 0, q1 = h.quantity, qT = q0 + q1;
-      if (existing.costUSD != null && h.costUSD != null && qT > 0)
-        existing.costUSD = (q0 * existing.costUSD + q1 * h.costUSD) / qT;
-      else if (existing.costUSD == null && h.costUSD != null)
-        existing.costUSD = h.costUSD;
-      if (existing.costTRY != null || h.costTRY != null)
-        existing.costTRY = (Number(existing.costTRY) || 0) + (Number(h.costTRY) || 0);
-      existing.quantity = qT;
-      if (!existing.name && h.name) existing.name = h.name;
-      if (h.type === "stock" && h.costUSD > 0)
-        appendBuyTrade(data, { symbol: existing.symbol, name: existing.name, shares: q1, priceUSD: h.costUSD, usdtry: await currentUsdTry(data) });
-      await saveData(data);
-      return res.json({ ...existing, merged: true });
-    }
+    /* "Varsa birleştir" kararı OKUDUĞUN belgeye bağlı → oku ve yaz aynı işlemde
+     * olmak zorunda. Ayrıysa iki eşzamanlı ekleme ikisi de "yok" görür ve aynı
+     * hisseden iki satır açar (ya da biri diğerini siler). */
+    const sonuc = await veriIslem(async (d) => {
+      // Taze kurulumda belge {} — holdings yoksa 500 yerine boş liste (uçların
+      // geri kalanı zaten `|| []` deseniyle çalışıyor, burası ayrışmıştı).
+      d.holdings = d.holdings || [];
+      const existing = d.holdings.find((x) =>
+        x.type === h.type && String(x.symbol).toUpperCase() === h.symbol &&
+        (h.type !== "gold" || (Number(x.ayar) || 24) === (Number(h.ayar) || 24)));
+      if (existing && h.quantity > 0) {
+        const q0 = Number(existing.quantity) || 0, q1 = h.quantity, qT = q0 + q1;
+        if (existing.costUSD != null && h.costUSD != null && qT > 0)
+          existing.costUSD = (q0 * existing.costUSD + q1 * h.costUSD) / qT;
+        else if (existing.costUSD == null && h.costUSD != null)
+          existing.costUSD = h.costUSD;
+        if (existing.costTRY != null || h.costTRY != null)
+          existing.costTRY = (Number(existing.costTRY) || 0) + (Number(h.costTRY) || 0);
+        existing.quantity = qT;
+        if (!existing.name && h.name) existing.name = h.name;
+        if (h.type === "stock" && h.costUSD > 0)
+          appendBuyTrade(d, { symbol: existing.symbol, name: existing.name, shares: q1, priceUSD: h.costUSD, usdtry: await currentUsdTry(d) });
+        return { ...existing, merged: true };
+      }
 
-    h.id = h.id || h.symbol.toLowerCase() + "-" + Date.now().toString(36);
-    data.holdings.push(h);
-    if (h.type === "stock" && h.costUSD > 0)
-      appendBuyTrade(data, { symbol: h.symbol, name: h.name, shares: h.quantity, priceUSD: h.costUSD, usdtry: await currentUsdTry(data) });
-    await saveData(data);
-    res.json(h);
+      h.id = h.id || yeniId(h.symbol.toLowerCase() + "-");
+      d.holdings.push(h);
+      if (h.type === "stock" && h.costUSD > 0)
+        appendBuyTrade(d, { symbol: h.symbol, name: h.name, shares: h.quantity, priceUSD: h.costUSD, usdtry: await currentUsdTry(d) });
+      return h;
+    });
+    res.json(sonuc);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -5417,29 +5525,29 @@ app.post("/api/holdings", async (req, res) => {
 
 app.put("/api/holdings/:id", async (req, res) => {
   try {
-    const data = await loadData();
-    const i = data.holdings.findIndex((x) => x.id === req.params.id);
-    if (i === -1) return res.status(404).json({ error: "bulunamadı" });
-    const upd = { ...data.holdings[i], ...req.body, id: req.params.id };
-    upd.quantity = Number(upd.quantity) || 0;
-    if (upd.costUSD != null) upd.costUSD = Number(upd.costUSD);
-    if (upd.costTRY != null) upd.costTRY = Number(upd.costTRY);
-    if (upd.ayar != null && upd.ayar !== "") upd.ayar = Number(upd.ayar);
-    if (upd.planStop != null && upd.planStop !== "") upd.planStop = Number(upd.planStop);
-    if (upd.planTarget != null && upd.planTarget !== "") upd.planTarget = Number(upd.planTarget);
-    data.holdings[i] = upd;
-    await saveData(data);
+    const upd = await veriIslem(async (d) => {
+      d.holdings = d.holdings || [];
+      const i = d.holdings.findIndex((x) => x.id === req.params.id);
+      if (i === -1) throw new VeriHata(404, "bulunamadı");
+      const u = { ...d.holdings[i], ...req.body, id: req.params.id };
+      u.quantity = Number(u.quantity) || 0;
+      if (u.costUSD != null) u.costUSD = Number(u.costUSD);
+      if (u.costTRY != null) u.costTRY = Number(u.costTRY);
+      if (u.ayar != null && u.ayar !== "") u.ayar = Number(u.ayar);
+      if (u.planStop != null && u.planStop !== "") u.planStop = Number(u.planStop);
+      if (u.planTarget != null && u.planTarget !== "") u.planTarget = Number(u.planTarget);
+      d.holdings[i] = u;
+      return u;
+    });
     res.json(upd);
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    res.status(e.durum || 500).json({ error: e.message });
   }
 });
 
 app.delete("/api/holdings/:id", async (req, res) => {
   try {
-    const data = await loadData();
-    data.holdings = data.holdings.filter((x) => x.id !== req.params.id);
-    await saveData(data);
+    await veriIslem(async (d) => { d.holdings = (d.holdings || []).filter((x) => x.id !== req.params.id); });
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -5917,7 +6025,7 @@ app.get("/api/qm", async (_req, res) => {
   const ready = items.filter((x) => x.stage === "breaking-out" || x.stage === "setting-up");
   const watch = items.filter((x) => x.stage === "extended" || x.stage === "early");
   // Günlük QM snapshot (sistem sonuç takibi) — sadece yeni günde yazar
-  try { const data = await loadData(); if (recordQmSnapshot(data, ready)) await saveData(data); } catch {}
+  try { await veriIslem(async (d, islem) => { if (!recordQmSnapshot(d, ready)) islem.yazma(); }); } catch {}
   const ts = Object.values(signalCache).map((v) => v.t || 0);
   res.json({
     updated: ts.length ? Math.max(...ts) : 0,
@@ -5967,7 +6075,13 @@ app.get("/api/kiyas", async (_req, res) => {
     // Ana endeks QQQ: portföy teknoloji ağırlıklı ve docs/olcumler.md ölçümleri
     // (§14, kapı testleri) QQQ'ya göre yazılı — hüküm başka endekse geçerse
     // defterdeki sayılarla ekrandaki sayı ayrışır.
-    res.json({ ...sonuc, ana: "QQQ", hukum: kiyasHukum(sonuc, "QQQ") });
+    const hukum = kiyasHukum(sonuc, "QQQ");
+    /* GİRDİ DENETİMİ (28 Ağu) — hüküm kendi güvenilirliğini de yazsın.
+     * Panel "12,7 puan gerisindesin" diyordu; o rakamın 8,1 puanı 6 Tem'deki tek
+     * bir mutabakatsız nakit kaydından geliyordu. Hesap değil girdi bozuktu ve
+     * ekranda bunu söyleyen hiçbir şey yoktu (docs/olcumler §17). */
+    const mtb = mutabakat({ snaps: data.snapshots || [], trades: data.trades || [], flows: data.flows || [], baslangic: OLCUM_BASLANGIC });
+    res.json({ ...sonuc, ana: "QQQ", hukum, mutabakat: mtb.ok ? { karne: mtb.karne, gunler: mtb.gunler.filter((g) => g.ariza) } : null, mutabakatNotu: mutabakatNotu(mtb, hukum?.alfa ?? null) });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -6317,12 +6431,13 @@ app.post("/api/watchlist", async (req, res) => {
   try {
     const sym = String(req.body?.symbol || "").trim().toUpperCase();
     if (!sym) return res.status(400).json({ error: "symbol gerekli" });
-    const d = await loadData();
-    d.watchlist = d.watchlist || [];
-    if (!d.watchlist.includes(sym)) d.watchlist.push(sym);
-    await saveData(d);
+    const liste = await veriIslem(async (d) => {
+      d.watchlist = d.watchlist || [];
+      if (!d.watchlist.includes(sym)) d.watchlist.push(sym);
+      return d.watchlist;
+    });
     refreshSignals([sym]); // yeni sembolün sinyalini hemen çekmeye başla
-    res.json(d.watchlist);
+    res.json(liste);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -6331,10 +6446,11 @@ app.post("/api/watchlist", async (req, res) => {
 app.delete("/api/watchlist/:symbol", async (req, res) => {
   try {
     const sym = String(req.params.symbol || "").toUpperCase();
-    const d = await loadData();
-    d.watchlist = (d.watchlist || []).filter((s) => String(s).toUpperCase() !== sym);
-    await saveData(d);
-    res.json(d.watchlist);
+    const liste = await veriIslem(async (d) => {
+      d.watchlist = (d.watchlist || []).filter((s) => String(s).toUpperCase() !== sym);
+      return d.watchlist;
+    });
+    res.json(liste);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -6353,19 +6469,24 @@ app.post("/api/realized2026", async (req, res) => {
     const b = req.body || {};
     const amt = Number(b.amountTRY);
     if (!b.label || !isFinite(amt)) return res.status(400).json({ error: "label ve amountTRY zorunlu" });
-    const d = await loadData();
-    d.realized2026 = d.realized2026 || [];
     const date = b.date && /^\d{4}-\d{2}-\d{2}$/.test(b.date) ? b.date : null;
-    d.realized2026.push({
-      id: "r26-" + Date.now().toString(36),
-      symbol: String(b.symbol || b.label).toUpperCase().split(/\s/)[0],
-      label: String(b.label), amountTRY: amt,
-      date, year: date ? yearOf(date) : (Number(b.year) || new Date().getFullYear()),
-      source: "manual",
+    /* 18 Ağu 2026'da ölçülen yarışın kurbanı tam burasıydı: 5 eşzamanlı POST →
+     * 5×HTTP 200, defterde 1 kayıt. veriIslem oku-değiştir-yaz'ı sıraya sokar. */
+    const liste = await veriIslem(async (d) => {
+      d.realized2026 = d.realized2026 || [];
+      d.realized2026.push({
+        // Date.now() eşzamanlı isteklerde AYNI ms'i verebilir → id çakışır.
+        // Rastgele son ek: kuyruk kayıtları korur, id'ler de ayrışsın.
+        id: yeniId("r26-"),
+        symbol: String(b.symbol || b.label).toUpperCase().split(/\s/)[0],
+        label: String(b.label), amountTRY: amt,
+        date, year: date ? yearOf(date) : (Number(b.year) || new Date().getFullYear()),
+        source: "manual",
+      });
+      return d.realized2026;
     });
-    await saveData(d);
-    res.json(d.realized2026);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+    res.json(liste);
+  } catch (e) { res.status(e.durum || 500).json({ error: e.message }); }
 });
 /* Onay: pending (onay bekleyen) otomatik kaydı hesaba dahil et. Kaan aracı kurum
  * ekranıyla karşılaştırır; tutar farklıysa düzeltilmiş amountTRY gönderilir →
@@ -6373,18 +6494,19 @@ app.post("/api/realized2026", async (req, res) => {
  * zaten onaylı sayılır — bu uç yalnız data.realized2026 kayıtları içindir. */
 app.post("/api/realized2026/:id/approve", async (req, res) => {
   try {
-    const d = await loadData();
-    const rec = (d.realized2026 || []).find((x) => x.id === req.params.id);
-    if (!rec) return res.status(404).json({ error: "kayıt bulunamadı" });
-    const amt = req.body?.amountTRY;
-    if (amt != null && amt !== "" && isFinite(Number(amt)) && Number(amt) !== rec.amountTRY) {
-      rec.amountTRY = +Number(amt).toFixed(2);
-      rec.edited = true;                      // düzeltilmiş broker gerçeği — oto senkron ezemez
-    }
-    delete rec.pending;
-    await saveData(d);
+    const rec = await veriIslem(async (d) => {
+      const r = (d.realized2026 || []).find((x) => x.id === req.params.id);
+      if (!r) throw new VeriHata(404, "kayıt bulunamadı");
+      const amt = req.body?.amountTRY;
+      if (amt != null && amt !== "" && isFinite(Number(amt)) && Number(amt) !== r.amountTRY) {
+        r.amountTRY = +Number(amt).toFixed(2);
+        r.edited = true;                      // düzeltilmiş broker gerçeği — oto senkron ezemez
+      }
+      delete r.pending;
+      return r;
+    });
     res.json(rec);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { res.status(e.durum || 500).json({ error: e.message }); }
 });
 // Realize kaydı tutarını düzelt (broker yanlış hesaplarsa). Truth kalemi → realized2026Edits; manuel kayıt → kaydı güncelle.
 app.put("/api/realized2026/:id", async (req, res) => {
@@ -6392,31 +6514,32 @@ app.put("/api/realized2026/:id", async (req, res) => {
     const id = req.params.id;
     const amt = Number(req.body?.amountTRY);
     if (!isFinite(amt)) return res.status(400).json({ error: "amountTRY zorunlu" });
-    const d = await loadData();
-    if (id.startsWith("r26-truth-")) {
-      d.realized2026Edits = d.realized2026Edits || {};
-      d.realized2026Edits[id] = +amt.toFixed(2);
-    } else {
-      const rec = (d.realized2026 || []).find((x) => x.id === id);
-      if (!rec) return res.status(404).json({ error: "kayıt yok" });
-      rec.amountTRY = +amt.toFixed(2);
-    }
-    await saveData(d);
+    await veriIslem(async (d) => {
+      if (id.startsWith("r26-truth-")) {
+        d.realized2026Edits = d.realized2026Edits || {};
+        d.realized2026Edits[id] = +amt.toFixed(2);
+      } else {
+        const rec = (d.realized2026 || []).find((x) => x.id === id);
+        if (!rec) throw new VeriHata(404, "kayıt yok");
+        rec.amountTRY = +amt.toFixed(2);
+      }
+    });
     res.json({ ok: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { res.status(e.durum || 500).json({ error: e.message }); }
 });
 app.delete("/api/realized2026/:id", async (req, res) => {
   try {
     const id = req.params.id;
-    const d = await loadData();
-    if (id.startsWith("r26-truth-")) {
-      // Truth kalemi silinemez (broker'da var) → varsa düzeltmeyi geri al
-      if (d.realized2026Edits) delete d.realized2026Edits[id];
-    } else {
-      d.realized2026 = (d.realized2026 || []).filter((x) => x.id !== id);
-    }
-    await saveData(d);
-    res.json(d.realized2026 || []);
+    const liste = await veriIslem(async (d) => {
+      if (id.startsWith("r26-truth-")) {
+        // Truth kalemi silinemez (broker'da var) → varsa düzeltmeyi geri al
+        if (d.realized2026Edits) delete d.realized2026Edits[id];
+      } else {
+        d.realized2026 = (d.realized2026 || []).filter((x) => x.id !== id);
+      }
+      return d.realized2026 || [];
+    });
+    res.json(liste);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -6433,7 +6556,7 @@ function normalizeSwing(s, id) {
   const today = new Date().toISOString().slice(0, 10);
   const status = s.status === "closed" ? "closed" : "open";
   return {
-    id: id || s.id || "sw-" + Date.now().toString(36),
+    id: id || s.id || yeniId("sw-"),
     symbol: String(s.symbol || "").toUpperCase().split(/\s/)[0],
     name: s.name || "",
     entry: num(s.entry) || 0,
@@ -6510,13 +6633,14 @@ app.put("/api/swing-goal", async (req, res) => {
     const min = Math.max(0, Math.round(Number(b.min) || 0));
     const max = Math.max(min, Math.round(Number(b.max) || 0));
     if (!(max > 0)) return res.status(400).json({ error: "geçerli bir hedef gir" });
-    const data = await loadData();
-    const prev = data.swingGoal || {};
-    const capital = b.capital === "" || b.capital == null ? (prev.capital || 0) : Math.max(0, Number(b.capital) || 0);
-    const riskPct = b.riskPct == null || b.riskPct === "" ? (prev.riskPct || 1) : Math.min(10, Math.max(0.1, Number(b.riskPct) || 1));
-    data.swingGoal = { min, max, capital, riskPct };
-    await saveData(data);
-    res.json(data.swingGoal);
+    const hedef = await veriIslem(async (d) => {
+      const prev = d.swingGoal || {};
+      const capital = b.capital === "" || b.capital == null ? (prev.capital || 0) : Math.max(0, Number(b.capital) || 0);
+      const riskPct = b.riskPct == null || b.riskPct === "" ? (prev.riskPct || 1) : Math.min(10, Math.max(0.1, Number(b.riskPct) || 1));
+      d.swingGoal = { min, max, capital, riskPct };
+      return d.swingGoal;
+    });
+    res.json(hedef);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -6524,86 +6648,109 @@ app.post("/api/swing-trades", async (req, res) => {
   try {
     const b = req.body || {};
     if (!b.symbol) return res.status(400).json({ error: "sembol zorunlu" });
-    const data = await loadData();
-    data.swingTrades = data.swingTrades || [];
-    // Maliyet (entry) opsiyonel: önce toplam maliyet/adet, sonra eşleşen holding'in
-    // ortalama maliyeti (costUSD), o da yoksa hata. "İllâ maliyet yazma" akışı budur.
-    let entry = Number(b.entry);
-    const qtyN = Number(b.qty) || 0;
-    if (!(entry > 0) && Number(b.totalCost) > 0 && qtyN > 0) entry = Number(b.totalCost) / qtyN;
-    if (!(entry > 0)) {
-      const h = (data.holdings || []).find(
-        (x) => x.type === "stock" && String(x.symbol).toUpperCase() === String(b.symbol).toUpperCase());
-      if (h && Number(h.costUSD) > 0) entry = Number(h.costUSD);
-    }
-    if (!(entry > 0)) return res.status(400).json({ error: "giriş maliyeti bulunamadı — fiyat gir ya da portföyde maliyetli bir pozisyon seç" });
-    const s = normalizeSwing({ ...b, entry });
-    // Hafta Sonu Rutini: açılış haftasının planı varsa planlı/plansız işareti düş
-    // (Karar Defteri "plana uyum"u böylece kayıt olur, hafıza değil)
-    try {
-      const W = await wkndGet();
-      const yw = isoYw(s.openedAt);
-      const plan = W.plans[yw];
-      if (plan && (plan.candidates || []).length) {
-        s.planWeek = yw;
-        s.planned = plan.candidates.some((c) => c.sym === s.symbol);
+    // Hafta planı DIŞ okuma (KV) — kilidi tutarken ağ beklememek için işlem öncesi.
+    let haftaPlanlari = null;
+    try { haftaPlanlari = (await wkndGet()).plans; } catch {}
+
+    const kayit = await veriIslem(async (d) => {
+      d.swingTrades = d.swingTrades || [];
+      // Maliyet (entry) opsiyonel: önce toplam maliyet/adet, sonra eşleşen holding'in
+      // ortalama maliyeti (costUSD), o da yoksa hata. "İllâ maliyet yazma" akışı budur.
+      let entry = Number(b.entry);
+      const qtyN = Number(b.qty) || 0;
+      if (!(entry > 0) && Number(b.totalCost) > 0 && qtyN > 0) entry = Number(b.totalCost) / qtyN;
+      if (!(entry > 0)) {
+        const h = (d.holdings || []).find(
+          (x) => x.type === "stock" && String(x.symbol).toUpperCase() === String(b.symbol).toUpperCase());
+        if (h && Number(h.costUSD) > 0) entry = Number(h.costUSD);
       }
-    } catch {}
-    if (s.status === "closed" && s.exitPrice != null) {
-      if (!s.exitUsdtry) s.exitUsdtry = await currentUsdTry(data);
-      syncSwingToR26(data, s);
-    }
-    data.swingTrades.push(s);
-    await saveData(data);
-    res.json(s);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+      if (!(entry > 0)) throw new VeriHata(400, "giriş maliyeti bulunamadı — fiyat gir ya da portföyde maliyetli bir pozisyon seç");
+      const s = normalizeSwing({ ...b, entry });
+      // Hafta Sonu Rutini: açılış haftasının planı varsa planlı/plansız işareti düş
+      // (Karar Defteri "plana uyum"u böylece kayıt olur, hafıza değil)
+      try {
+        const yw = isoYw(s.openedAt);
+        const plan = haftaPlanlari?.[yw];
+        if (plan && (plan.candidates || []).length) {
+          s.planWeek = yw;
+          s.planned = plan.candidates.some((c) => c.sym === s.symbol);
+        }
+      } catch { /* plan etiketi bonus — kaydın kendisini düşürmesin (eski davranış) */ }
+      if (s.status === "closed" && s.exitPrice != null) {
+        if (!s.exitUsdtry) s.exitUsdtry = await currentUsdTry(d);
+        syncSwingToR26(d, s);
+      }
+      d.swingTrades.push(s);
+      return s;
+    });
+    res.json(kayit);
+  } catch (e) { res.status(e.durum || 500).json({ error: e.message }); }
 });
 
 app.put("/api/swing-trades/:id", async (req, res) => {
   try {
-    const data = await loadData();
-    data.swingTrades = data.swingTrades || [];
-    const i = data.swingTrades.findIndex((x) => x.id === req.params.id);
-    if (i < 0) return res.status(404).json({ error: "pozisyon bulunamadı" });
-    const prev = data.swingTrades[i];
-    const t = normalizeSwing({ ...prev, ...req.body }, req.params.id);
-    if (t.status === "closed" && t.exitPrice != null) {
-      // Yeni kapanış veya çıkış fiyatı değişimi → kapanış kuru gerekiyorsa al, Realize 2026'ya işle
-      if (!t.exitUsdtry || prev.exitPrice !== t.exitPrice) t.exitUsdtry = t.exitUsdtry || (await currentUsdTry(data));
-      syncSwingToR26(data, t);
-    } else {
-      // Açığa döndü/kapanış kalktı → bağlı Realize 2026 kaydını temizle
-      data.realized2026 = (data.realized2026 || []).filter((r) => r.swingId !== t.id);
-    }
-    data.swingTrades[i] = t;
-    await saveData(data);
+    const t = await veriIslem(async (d) => {
+      d.swingTrades = d.swingTrades || [];
+      const i = d.swingTrades.findIndex((x) => x.id === req.params.id);
+      if (i < 0) throw new VeriHata(404, "pozisyon bulunamadı");
+      const prev = d.swingTrades[i];
+      const yeni = normalizeSwing({ ...prev, ...req.body }, req.params.id);
+      if (yeni.status === "closed" && yeni.exitPrice != null) {
+        // Yeni kapanış veya çıkış fiyatı değişimi → kapanış kuru gerekiyorsa al, Realize 2026'ya işle
+        if (!yeni.exitUsdtry || prev.exitPrice !== yeni.exitPrice) yeni.exitUsdtry = yeni.exitUsdtry || (await currentUsdTry(d));
+        syncSwingToR26(d, yeni);
+      } else {
+        // Açığa döndü/kapanış kalktı → bağlı Realize 2026 kaydını temizle
+        d.realized2026 = (d.realized2026 || []).filter((r) => r.swingId !== yeni.id);
+      }
+      d.swingTrades[i] = yeni;
+      return yeni;
+    });
     res.json(t);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { res.status(e.durum || 500).json({ error: e.message }); }
 });
 
 app.delete("/api/swing-trades/:id", async (req, res) => {
   try {
-    const data = await loadData();
-    const arr = data.swingTrades || [];
-    const sw = arr.find((x) => x.id === req.params.id);
-    const hasRealized = sw && Array.isArray(sw.realizedLots) && sw.realizedLots.length > 0;
-    if (hasRealized) {
-      // Kısmi satışla GERÇEKLEŞMİŞ kâr var (ör. ana para çekme). Tamamen silersek bu kâr
-      // "bu ayki swing hedefi"nden geriye dönük düşer — yanlış. Bunun yerine "kapanmış
-      // (arşiv)" olarak işaretle: realizedLots korunur (hedef sabit kalır), kalan adet ana
-      // portföyde (holdings) zaten durur, dokunulmaz. Hayalî pnl olmasın diye qty=0/exit yok.
-      sw.status = "closed";
-      sw.qty = 0;
-      sw.exitPrice = null;
-      sw.archived = true;
-      sw.closedAt = sw.closedAt || sw.realizedLots[sw.realizedLots.length - 1].date || new Date().toISOString().slice(0, 10);
-    } else {
-      data.swingTrades = arr.filter((x) => x.id !== req.params.id);
-      // Realize edilmiş kâr yoksa bağlı otomatik Realize 2026 kaydını da kaldır
-      data.realized2026 = (data.realized2026 || []).filter((r) => r.swingId !== req.params.id);
-    }
-    await saveData(data);
-    res.json(data.swingTrades);
+    let islem = "silindi";
+    const liste = await veriIslem(async (d) => {
+      const arr = d.swingTrades || [];
+      const sw = arr.find((x) => x.id === req.params.id);
+      /* İKİ AŞAMALI SİLME (20 Ağu 2026). Önceden kısmi kârı olan kayıt SİLİNMİYOR,
+       * sessizce arşivleniyordu — ama istemci "silindi" diyordu ve satır yerinde
+       * kalıyordu. Kaan yanlış girilmiş bir TEM kaydını silmeye çalıştı, üç kez
+       * bastı, üçünde de "silindi" yazdı ve kayıt durdu: uygulama YAPMADIĞI ŞEYİ
+       * yaptım diye raporluyordu.
+       *
+       * Koruma haklıydı, kaçış yolu yoktu. Artık aşamalı:
+       *   1. tık (kısmi kârlı, arşivde değil) → ARŞİVLE, kâr korunur
+       *   2. tık (zaten arşivde)              → GERÇEKTEN SİL
+       * Böylece geçmişi kazara silmek zor, bilerek silmek mümkün. Hangisinin
+       * olduğu yanıtta dönüyor ki istemci doğruyu söyleyebilsin.
+       * Karar `swing-silme.js`'te ve testli — yıkıcı yolun kuralı uç noktanın
+       * içinde saklı kalmasın. */
+      if (silmeKarari(sw) === "arsivle") {
+        islem = "arsivlendi";
+        // Kısmi satışla GERÇEKLEŞMİŞ kâr var (ör. ana para çekme). Tamamen silersek bu kâr
+        // "bu ayki swing hedefi"nden geriye dönük düşer — yanlış. Bunun yerine "kapanmış
+        // (arşiv)" olarak işaretle: realizedLots korunur (hedef sabit kalır), kalan adet ana
+        // portföyde (holdings) zaten durur, dokunulmaz. Hayalî pnl olmasın diye qty=0/exit yok.
+        sw.status = "closed";
+        sw.qty = 0;
+        sw.exitPrice = null;
+        sw.archived = true;
+        sw.closedAt = sw.closedAt || sw.realizedLots[sw.realizedLots.length - 1].date || new Date().toISOString().slice(0, 10);
+      } else {
+        d.swingTrades = arr.filter((x) => x.id !== req.params.id);
+        /* Bağlı otomatik Realize 2026 kaydı da gider. Arşivden gelen ikinci tıkta
+         * bu ŞART: kayıt siliniyor ama realize satırı kalsaydı vergi paneli artık
+         * var olmayan bir işlemin kârını sayardı — "bir sayının iki kaynağı"nın
+         * en kötü hâli, çünkü ikinci kaynak silinmiş bir şeye işaret ediyor. */
+        d.realized2026 = (d.realized2026 || []).filter((r) => r.swingId !== req.params.id);
+      }
+      return d.swingTrades;
+    });
+    res.json({ trades: liste, islem });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -6613,36 +6760,37 @@ app.delete("/api/swing-trades/:id", async (req, res) => {
 // Tez: belirli kâra ulaşınca ana parayı çek, kalan adet sıfır maliyetle binsin.
 app.post("/api/swing-trades/:id/sell", async (req, res) => {
   try {
-    const data = await loadData();
-    const sw = (data.swingTrades || []).find((x) => x.id === req.params.id);
-    if (!sw) return res.status(404).json({ error: "pozisyon bulunamadı" });
-    const exitPrice = Number(req.body.exitPrice) || 0;
-    // Satış YALNIZ bu swing kaydının adediyle sınırlı — uzun vade payına ve diğer swinglere dokunamaz.
-    const hPool = (data.holdings || []).find((x) => x.symbol === String(sw.symbol).toUpperCase() && x.type === "stock");
-    const sell = Math.min(Number(req.body.shares) || 0, sw.qty, hPool ? hPool.quantity : sw.qty);
-    if (!(sell > 0) || !(exitPrice > 0)) return res.status(400).json({ error: "geçerli adet ve çıkış fiyatı gir" });
-    const date = /^\d{4}-\d{2}-\d{2}$/.test(req.body.date || "") ? req.body.date : new Date().toISOString().slice(0, 10);
-    let usdtry = await currentUsdTry(data);
-    // Gerçek satış işle (holding + işlem geçmişi + vergi). Maliyet = swing girişi. src=swing → ayrı değerlendirilir.
-    const { trade, sync } = applyTrade(data, {
-      symbol: sw.symbol, kind: "sell", shares: sell, sellUSD: exitPrice, buyUSD: sw.entry,
-      date, note: "swing ana para çekme", r26Label: `${+sell.toFixed(4)} adet swing satış`,
-      src: "swing", swingId: sw.id,
-    }, usdtry);
-    // Swing'e realize lot ekle + kalan adedi düş
-    sw.realizedLots = sw.realizedLots || [];
-    // pnlUSD Midas satış komisyonu ($1.5) düşülmüş NET — swing getirisi gerçek eline geçen
-    sw.realizedLots.push({ shares: sell, exitPrice, pnlUSD: +(((exitPrice - sw.entry) * sell) - MIDAS_FEE).toFixed(2), date, tradeId: trade.id, feeUSD: MIDAS_FEE });
-    sw.qty = +(sw.qty - sell).toFixed(9);
-    if (sw.qty <= 1e-6) {
-      sw.status = "closed"; sw.closedAt = date; sw.exitPrice = exitPrice;
-      // Karar Defteri: tam kapanışta plana-uyum self-tag (varsa) kalıcılaşır
-      if (["yes", "partial", "no"].includes(req.body.planFollow)) sw.planFollow = req.body.planFollow;
-      if (req.body.mistakeTag != null) sw.mistakeTag = String(req.body.mistakeTag).slice(0, 40) || null;
-    }
-    await saveData(data);
-    res.json({ ok: true, sync, swing: sw, tradeId: trade.id });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+    const cikti = await veriIslem(async (d) => {
+      const sw = (d.swingTrades || []).find((x) => x.id === req.params.id);
+      if (!sw) throw new VeriHata(404, "pozisyon bulunamadı");
+      const exitPrice = Number(req.body.exitPrice) || 0;
+      // Satış YALNIZ bu swing kaydının adediyle sınırlı — uzun vade payına ve diğer swinglere dokunamaz.
+      const hPool = (d.holdings || []).find((x) => x.symbol === String(sw.symbol).toUpperCase() && x.type === "stock");
+      const sell = Math.min(Number(req.body.shares) || 0, sw.qty, hPool ? hPool.quantity : sw.qty);
+      if (!(sell > 0) || !(exitPrice > 0)) throw new VeriHata(400, "geçerli adet ve çıkış fiyatı gir");
+      const date = /^\d{4}-\d{2}-\d{2}$/.test(req.body.date || "") ? req.body.date : new Date().toISOString().slice(0, 10);
+      let usdtry = await currentUsdTry(d);
+      // Gerçek satış işle (holding + işlem geçmişi + vergi). Maliyet = swing girişi. src=swing → ayrı değerlendirilir.
+      const { trade, sync } = applyTrade(d, {
+        symbol: sw.symbol, kind: "sell", shares: sell, sellUSD: exitPrice, buyUSD: sw.entry,
+        date, note: "swing ana para çekme", r26Label: `${+sell.toFixed(4)} adet swing satış`,
+        src: "swing", swingId: sw.id,
+      }, usdtry);
+      // Swing'e realize lot ekle + kalan adedi düş
+      sw.realizedLots = sw.realizedLots || [];
+      // pnlUSD Midas satış komisyonu ($1.5) düşülmüş NET — swing getirisi gerçek eline geçen
+      sw.realizedLots.push({ shares: sell, exitPrice, pnlUSD: +(((exitPrice - sw.entry) * sell) - MIDAS_FEE).toFixed(2), date, tradeId: trade.id, feeUSD: MIDAS_FEE });
+      sw.qty = +(sw.qty - sell).toFixed(9);
+      if (sw.qty <= 1e-6) {
+        sw.status = "closed"; sw.closedAt = date; sw.exitPrice = exitPrice;
+        // Karar Defteri: tam kapanışta plana-uyum self-tag (varsa) kalıcılaşır
+        if (["yes", "partial", "no"].includes(req.body.planFollow)) sw.planFollow = req.body.planFollow;
+        if (req.body.mistakeTag != null) sw.mistakeTag = String(req.body.mistakeTag).slice(0, 40) || null;
+      }
+      return { ok: true, sync, swing: sw, tradeId: trade.id };
+    });
+    res.json(cikti);
+  } catch (e) { res.status(e.durum || 500).json({ error: e.message }); }
 });
 
 /* ----------------------- API: opsiyon yönetimi ----------------------- */
@@ -6668,7 +6816,7 @@ function applyOptionCash(data, o, phase) {
 function normalizeAlert(a, id) {
   const type = ["below", "above", "pct_move"].includes(a.type) ? a.type : "above";
   return {
-    id: id || a.id || "al-" + Date.now().toString(36),
+    id: id || a.id || yeniId("al-"),
     symbol: String(a.symbol || "").toUpperCase().split(/\s/)[0],
     type, value: Number(a.value) || 0,
     note: a.note || "",
@@ -6695,7 +6843,7 @@ function evalAlert(a, q) {
 
 function normalizeOption(o, id) {
   return {
-    id: id || o.id || "opt-" + Date.now().toString(36),
+    id: id || o.id || yeniId("opt-"),
     underlying: String(o.underlying || "").toUpperCase(),
     kind: o.kind === "put" ? "put" : "call",
     direction: o.direction === "short" ? "short" : "long",
@@ -6716,19 +6864,14 @@ app.get("/api/alerts", async (_req, res) => {
 app.post("/api/alerts", async (req, res) => {
   try {
     if (!req.body.symbol) return res.status(400).json({ error: "sembol zorunlu" });
-    const data = await loadData();
-    data.alerts = data.alerts || [];
     const a = normalizeAlert(req.body);
-    data.alerts.push(a);
-    await saveData(data);
+    await veriIslem(async (d) => { d.alerts = d.alerts || []; d.alerts.push(a); });
     res.json(a);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 app.delete("/api/alerts/:id", async (req, res) => {
   try {
-    const data = await loadData();
-    data.alerts = (data.alerts || []).filter((x) => x.id !== req.params.id);
-    await saveData(data);
+    await veriIslem(async (d) => { d.alerts = (d.alerts || []).filter((x) => x.id !== req.params.id); });
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -6765,31 +6908,27 @@ app.get("/api/notes", async (_req, res) => {
 app.post("/api/notes", async (req, res) => {
   try {
     if (!String(req.body?.text || "").trim()) return res.status(400).json({ error: "not metni boş olamaz" });
-    const data = await loadData();
-    data.notes = data.notes || [];
     const n = normalizeNote(req.body);
-    data.notes.unshift(n); // en yeni üstte
-    await saveData(data);
+    await veriIslem(async (d) => { d.notes = d.notes || []; d.notes.unshift(n); }); // en yeni üstte
     res.json(n);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 app.put("/api/notes/:id", async (req, res) => {
   try {
-    const data = await loadData();
-    data.notes = data.notes || [];
-    const i = data.notes.findIndex((x) => x.id === req.params.id);
-    if (i < 0) return res.status(404).json({ error: "not bulunamadı" });
     if (req.body?.text != null && !String(req.body.text).trim()) return res.status(400).json({ error: "not metni boş olamaz" });
-    data.notes[i] = normalizeNote({ ...data.notes[i], ...req.body }, req.params.id);
-    await saveData(data);
-    res.json(data.notes[i]);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+    const not = await veriIslem(async (d) => {
+      d.notes = d.notes || [];
+      const i = d.notes.findIndex((x) => x.id === req.params.id);
+      if (i < 0) throw new VeriHata(404, "not bulunamadı");
+      d.notes[i] = normalizeNote({ ...d.notes[i], ...req.body }, req.params.id);
+      return d.notes[i];
+    });
+    res.json(not);
+  } catch (e) { res.status(e.durum || 500).json({ error: e.message }); }
 });
 app.delete("/api/notes/:id", async (req, res) => {
   try {
-    const data = await loadData();
-    data.notes = (data.notes || []).filter((x) => x.id !== req.params.id);
-    await saveData(data);
+    await veriIslem(async (d) => { d.notes = (d.notes || []).filter((x) => x.id !== req.params.id); });
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -6979,16 +7118,16 @@ app.post("/api/ai/thesis", async (req, res) => {
     const symbol = String(req.body?.symbol || "").toUpperCase().replace(/[^A-Z0-9.\-]/g, "").slice(0, 12);
     if (!symbol) return res.status(400).json({ error: "sembol zorunlu" });
     const data = await loadData();
-    data.aiTheses = data.aiTheses || {};
-    const cached = data.aiTheses[symbol];
+    const cached = (data.aiTheses || {})[symbol];
     if (cached && !req.body?.force && Date.now() - new Date(cached.at).getTime() < 24 * 3600_000) {
       return res.json({ ...cached, cached: true });
     }
     const ctx = await buildThesisContext(data, symbol);
+    // Claude çağrısı SANİYELER sürer — kilidin DIŞINDA. veriIslem yalnız yazmayı
+    // sarar, yoksa tek bir AI isteği tüm portföy yazmalarını bekletirdi.
     const { result, model, usage } = await askClaude({ system: AI_THESIS_SYSTEM, payload: ctx, schema: AI_THESIS_SCHEMA });
     const rec = { symbol, at: new Date().toISOString(), model, usage, result };
-    data.aiTheses[symbol] = rec;
-    await saveData(data);
+    await veriIslem(async (d) => { d.aiTheses = d.aiTheses || {}; d.aiTheses[symbol] = rec; });
     res.json(rec);
   } catch (e) { res.status(500).json({ error: aiErrMsg(e) }); }
 });
@@ -7011,8 +7150,7 @@ app.post("/api/ai/day-review", async (req, res) => {
     const islemler = Array.isArray(req.body?.islemler) ? req.body.islemler.slice(0, 15) : [];
     if (!islemler.length) return res.status(400).json({ error: "değerlendirilecek işlem yok" });
     const data = await loadData();
-    data.aiDayReviews = data.aiDayReviews || {};
-    const cached = data.aiDayReviews[date];
+    const cached = (data.aiDayReviews || {})[date];
     if (cached && !req.body?.force) return res.json({ ...cached, cached: true });
     const payload = {
       tarih: date,
@@ -7029,22 +7167,22 @@ app.post("/api/ai/day-review", async (req, res) => {
     };
     const { result, model, usage } = await askClaude({ system: AI_DAY_SYSTEM, payload, schema: AI_DAY_SCHEMA });
     const rec = { date, at: new Date().toISOString(), model, usage, input: payload, result };
-    data.aiDayReviews[date] = rec;
-    await saveData(data);
+    // Yazma kilidi Claude çağrısından SONRA — bkz. /api/ai/thesis'teki not.
+    await veriIslem(async (d) => { d.aiDayReviews = d.aiDayReviews || {}; d.aiDayReviews[date] = rec; });
     res.json(rec);
   } catch (e) { res.status(500).json({ error: aiErrMsg(e) }); }
 });
 
 app.post("/api/options", async (req, res) => {
   try {
-    const data = await loadData();
-    data.options = data.options || [];
     if (!req.body.underlying) return res.status(400).json({ error: "dayanak (underlying) zorunlu" });
     const o = normalizeOption(req.body);
-    data.options.push(o);
-    // Nakit: long açılış primi öder (−), short açılış kredi alır (+) — adet × prim × 100
-    applyOptionCash(data, o, "open");
-    await saveData(data);
+    await veriIslem(async (d) => {
+      d.options = d.options || [];
+      d.options.push(o);
+      // Nakit: long açılış primi öder (−), short açılış kredi alır (+) — adet × prim × 100
+      applyOptionCash(d, o, "open");
+    });
     res.json(o);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -7053,26 +7191,27 @@ app.post("/api/options", async (req, res) => {
 
 app.put("/api/options/:id", async (req, res) => {
   try {
-    const data = await loadData();
-    data.options = data.options || [];
-    const i = data.options.findIndex((x) => x.id === req.params.id);
-    if (i === -1) return res.status(404).json({ error: "bulunamadı" });
-    data.options[i] = normalizeOption({ ...data.options[i], ...req.body }, req.params.id);
-    await saveData(data);
-    res.json(data.options[i]);
+    const opsiyon = await veriIslem(async (d) => {
+      d.options = d.options || [];
+      const i = d.options.findIndex((x) => x.id === req.params.id);
+      if (i === -1) throw new VeriHata(404, "bulunamadı");
+      d.options[i] = normalizeOption({ ...d.options[i], ...req.body }, req.params.id);
+      return d.options[i];
+    });
+    res.json(opsiyon);
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    res.status(e.durum || 500).json({ error: e.message });
   }
 });
 
 app.delete("/api/options/:id", async (req, res) => {
   try {
-    const data = await loadData();
-    const o = (data.options || []).find((x) => x.id === req.params.id);
-    data.options = (data.options || []).filter((x) => x.id !== req.params.id);
-    // Nakit: kapanış — long pozisyonu güncel değerden tahsil (+), short geri alım (−)
-    if (o) applyOptionCash(data, o, "close");
-    await saveData(data);
+    await veriIslem(async (d) => {
+      const o = (d.options || []).find((x) => x.id === req.params.id);
+      d.options = (d.options || []).filter((x) => x.id !== req.params.id);
+      // Nakit: kapanış — long pozisyonu güncel değerden tahsil (+), short geri alım (−)
+      if (o) applyOptionCash(d, o, "close");
+    });
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -7081,10 +7220,11 @@ app.delete("/api/options/:id", async (req, res) => {
 
 app.put("/api/cash", async (req, res) => {
   try {
-    const data = await loadData();
-    data.cash = { ...data.cash, ...req.body };
-    await saveData(data);
-    res.json(data.cash);
+    const nakit = await veriIslem(async (d) => {
+      d.cash = { ...d.cash, ...req.body };
+      return d.cash;
+    });
+    res.json(nakit);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -7103,9 +7243,8 @@ app.get("/api/trades", async (_req, res) => {
 
 // İşlem (alış/satış) uygula: holding güncelle + işlem geçmişi + satışta realize2026.
 // POST /api/trades ve swing kısmi-satış aynı mantığı paylaşsın diye ayrıştırıldı.
-// Midas her emirde (alış VE satış) sabit $1.5 komisyon keser. Nakit her iki yönde
-// −$1.5 düşer; satış realize'ı (vergi) net gösterilir ($300 satış → $298.5).
-const MIDAS_FEE = 1.5;
+// Midas her emirde (alış VE satış) sabit ücret keser; MIDAS_FEE ve nakit
+// aritmetiği artık nakit-komisyon.js'te (tek kaynak, testli).
 
 // Aynı semboldeki AÇIK swing kayıtlarına kilitli toplam adet (satış korumasında kullanılır)
 function swingLockedQty(data, sym, excludeId) {
@@ -7142,8 +7281,8 @@ function applyTrade(data, t, usdtry) {
     }
     // Satış geliri nakde geçer (USD hisse → cash.usd): "satınca para elime geçer"
     // Midas $1.5 komisyonu gelirden düşülür → elime geçen net.
-    const proceeds = soldShares * (Number(t.sellUSD) || 0);
-    if (proceeds > 0) { data.cash = data.cash || {}; data.cash.usd = +(((Number(data.cash.usd) || 0) + proceeds - MIDAS_FEE)).toFixed(2); }
+    const gelir = satisNakitDelta(soldShares, t.sellUSD);
+    if (gelir) { data.cash = data.cash || {}; data.cash.usd = nakitUygula(data.cash.usd, gelir); }
   } else {
     const px = Number(t.buyUSD) || 0;
     if (h) {
@@ -7153,12 +7292,12 @@ function applyTrade(data, t, usdtry) {
       h.quantity = +newQty.toFixed(9);
       sync = `${sym}: adet ${h.quantity}, ort. maliyet $${h.costUSD} olarak güncellendi.`;
     } else {
-      data.holdings.push({ id: sym.toLowerCase() + "-" + Date.now().toString(36), symbol: sym, name: t.name || "", type: "stock", quantity: shares, costUSD: px, costTRY: usdtry ? +(px * shares * usdtry).toFixed(2) : null });
+      data.holdings.push({ id: yeniId(sym.toLowerCase() + "-"), symbol: sym, name: t.name || "", type: "stock", quantity: shares, costUSD: px, costTRY: usdtry ? +(px * shares * usdtry).toFixed(2) : null });
       sync = `${sym} Varlıklar'a eklendi (${shares} adet @ $${px}).`;
     }
-    // Alış nakitten düşer (tam otomatik nakit): maliyet = adet × alış fiyatı + $1.5 komisyon
-    const spend = shares * px;
-    if (spend > 0) { data.cash = data.cash || {}; data.cash.usd = +(((Number(data.cash.usd) || 0) - spend - MIDAS_FEE)).toFixed(2); }
+    // Alış nakitten düşer: maliyet = adet × alış fiyatı + emir komisyonu
+    const delta = alisNakitDelta(shares, px);
+    if (delta) { data.cash = data.cash || {}; data.cash.usd = nakitUygula(data.cash.usd, delta); }
   }
   const trade = {
     id: "t-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
@@ -7185,43 +7324,47 @@ function applyTrade(data, t, usdtry) {
 
 app.post("/api/trades", async (req, res) => {
   try {
-    const data = await loadData();
     const t = req.body;
     if (!t.symbol) return res.status(400).json({ error: "symbol zorunlu" });
     if (!(Number(t.shares) > 0)) return res.status(400).json({ error: "adet 0'dan büyük olmalı" });
     if (t.kind !== "sell" && !(Number(t.buyUSD) > 0)) return res.status(400).json({ error: "alış fiyatı zorunlu" });
-    // Uzun vade satış koruması: açık swing'e KİLİTLİ adetler normal satışla satılamaz.
-    // (Swing'i kapatmak istiyorsan Swing sekmesindeki Sat akışını kullan — o kendi kaydını düşer.)
-    if (t.kind === "sell" && t.src !== "swing") {
-      const sym = String(t.symbol).toUpperCase();
-      const h = (data.holdings || []).find((x) => x.symbol === sym && x.type === "stock");
-      const locked = swingLockedQty(data, sym);
-      const free = Math.max(0, (h?.quantity || 0) - locked);
-      if (Number(t.shares) > free + 1e-6) {
-        return res.status(400).json({
-          error: `${sym}: ${+locked.toFixed(4)} adet açık swing'e kilitli — uzun vadeden satılabilir serbest adet ${+free.toFixed(4)}. Swing payını satmak için Swing sekmesindeki "Sat / Ana Para Çek"i kullan.`,
-          lockedQty: +locked.toFixed(4), freeQty: +free.toFixed(4),
-        });
+    // Kur çekimi ağ işi → kilidin dışında. Yedeği (son snapshot) işlem içinde okunur.
+    let fxNow = null;
+    try { fxNow = Number((await fetchMetals())?.usd?.selling) || null; } catch {}
+
+    /* Serbest adet kontrolü OKUNAN belgeye bağlı: ayrı okusaydık iki eşzamanlı
+     * satış da "yeterli adet var" görüp toplamda portföyde olmayan adedi satardı. */
+    const cikti = await veriIslem(async (d) => {
+      // Uzun vade satış koruması: açık swing'e KİLİTLİ adetler normal satışla satılamaz.
+      // (Swing'i kapatmak istiyorsan Swing sekmesindeki Sat akışını kullan — o kendi kaydını düşer.)
+      if (t.kind === "sell" && t.src !== "swing") {
+        const sym = String(t.symbol).toUpperCase();
+        const h = (d.holdings || []).find((x) => x.symbol === sym && x.type === "stock");
+        const locked = swingLockedQty(d, sym);
+        const free = Math.max(0, (h?.quantity || 0) - locked);
+        if (Number(t.shares) > free + 1e-6) {
+          const hata = new VeriHata(400, `${sym}: ${+locked.toFixed(4)} adet açık swing'e kilitli — uzun vadeden satılabilir serbest adet ${+free.toFixed(4)}. Swing payını satmak için Swing sekmesindeki "Sat / Ana Para Çek"i kullan.`);
+          hata.govde = { lockedQty: +locked.toFixed(4), freeQty: +free.toFixed(4) };
+          throw hata;
+        }
       }
-    }
-    let usdtry = null;
-    try { usdtry = Number((await fetchMetals())?.usd?.selling) || null; } catch {}
-    if (!usdtry) usdtry = Number((data.snapshots || []).slice(-1)[0]?.usdtry) || null;
-    const { trade, realizedRec, sync } = applyTrade(data, t, usdtry);
-    await saveData(data);
-    res.json({ ...trade, sync, realized: realizedRec });
+      const usdtry = fxNow || Number((d.snapshots || []).slice(-1)[0]?.usdtry) || null;
+      const { trade, realizedRec, sync } = applyTrade(d, t, usdtry);
+      return { ...trade, sync, realized: realizedRec };
+    });
+    res.json(cikti);
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    res.status(e.durum || 500).json({ error: e.message, ...(e.govde || {}) });
   }
 });
 
 app.delete("/api/trades/:id", async (req, res) => {
   try {
-    const data = await loadData();
-    data.trades = (data.trades || []).filter((t) => t.id !== req.params.id);
-    // Bu işlemden otomatik üretilmiş realize kaydı varsa onu da kaldır.
-    data.realized2026 = (data.realized2026 || []).filter((r) => r.tradeId !== req.params.id);
-    await saveData(data);
+    await veriIslem(async (d) => {
+      d.trades = (d.trades || []).filter((t) => t.id !== req.params.id);
+      // Bu işlemden otomatik üretilmiş realize kaydı varsa onu da kaldır.
+      d.realized2026 = (d.realized2026 || []).filter((r) => r.tradeId !== req.params.id);
+    });
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -7233,31 +7376,37 @@ app.delete("/api/trades/:id", async (req, res) => {
 // tradeId eşleşmesiyle çift kayıt önlenir.
 app.post("/api/realized2026/sync-trades", async (_req, res) => {
   try {
-    const data = await loadData();
-    data.trades = data.trades || [];
-    data.realized2026 = data.realized2026 || [];
-    const linked = new Set(data.realized2026.map((r) => r.tradeId).filter(Boolean));
+    // Kur çekimi ağ işi → kilidin dışında.
     let fxNow = null;
     try { fxNow = Number((await fetchMetals())?.usd?.selling) || null; } catch {}
-    const fxFallback = fxNow || Number((data.snapshots || []).slice(-1)[0]?.usdtry) || null;
-    let added = 0;
-    for (const t of data.trades) {
-      if (t.kind !== "sell" || linked.has(t.id)) continue;
-      if (!(t.sellUSD > 0 && t.buyUSD > 0 && t.shares > 0)) continue;
-      const rate = Number(t.usdtry) || fxFallback;
-      if (!rate) continue;
-      const amountTRY = +((t.sellUSD - t.buyUSD) * t.shares * rate).toFixed(2);
-      data.realized2026.push({
-        id: "r26-" + Date.now().toString(36) + "-" + added,
-        symbol: t.symbol,
-        label: `${+t.shares.toFixed(4)} adet satış`,
-        date: t.date,
-        amountTRY, year: yearOf(t.date), auto: true, pending: true, tradeId: t.id,
-      });
-      added++;
-    }
-    if (added) await saveData(data);
-    res.json({ added, total: data.realized2026.length, realized2026: data.realized2026 });
+
+    /* "Hangi satış defterde yok" sorusu okunan belgeye bağlı — okuma ile yazma
+     * ayrıysa iki eşzamanlı senkron aynı satışı İKİ KEZ ekler (çift sayım). */
+    const cikti = await veriIslem(async (d, islem) => {
+      d.trades = d.trades || [];
+      d.realized2026 = d.realized2026 || [];
+      const linked = new Set(d.realized2026.map((r) => r.tradeId).filter(Boolean));
+      const fxFallback = fxNow || Number((d.snapshots || []).slice(-1)[0]?.usdtry) || null;
+      let added = 0;
+      for (const t of d.trades) {
+        if (t.kind !== "sell" || linked.has(t.id)) continue;
+        if (!(t.sellUSD > 0 && t.buyUSD > 0 && t.shares > 0)) continue;
+        const rate = Number(t.usdtry) || fxFallback;
+        if (!rate) continue;
+        const amountTRY = +((t.sellUSD - t.buyUSD) * t.shares * rate).toFixed(2);
+        d.realized2026.push({
+          id: "r26-" + Date.now().toString(36) + "-" + added,
+          symbol: t.symbol,
+          label: `${+t.shares.toFixed(4)} adet satış`,
+          date: t.date,
+          amountTRY, year: yearOf(t.date), auto: true, pending: true, tradeId: t.id,
+        });
+        added++;
+      }
+      if (!added) islem.yazma();   // eklenecek bir şey yoktu → belgeye dokunma
+      return { added, total: d.realized2026.length, realized2026: d.realized2026 };
+    });
+    res.json(cikti);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -7277,14 +7426,12 @@ app.get("/api/flows", async (_req, res) => {
 
 app.post("/api/flows", async (req, res) => {
   try {
-    const data = await loadData();
-    data.flows = data.flows || [];
     const f = req.body;
     const amount = Number(f.amount) || 0;
     if (!amount) return res.status(400).json({ error: "tutar zorunlu" });
     const currency = ["TL", "USD", "EUR"].includes(f.currency) ? f.currency : "TL";
     const flow = {
-      id: "f-" + Date.now().toString(36),
+      id: yeniId("f-"),
       type: f.type === "withdraw" ? "withdraw" : "deposit",
       date: f.date || new Date().toISOString().slice(0, 10),
       currency,
@@ -7293,13 +7440,15 @@ app.post("/api/flows", async (req, res) => {
       amountTRY: f.amountTRY != null ? Number(f.amountTRY) : (currency === "TL" ? amount : 0),
       note: f.note || "",
     };
-    data.flows.push(flow);
-    // Tam otomatik nakit: yatır → nakde ekle, çek → nakitten düş (kendi para birimi kovasına)
-    data.cash = data.cash || {};
-    const bucket = currency === "USD" ? "usd" : currency === "EUR" ? "eur" : "tl";
-    const sign = flow.type === "deposit" ? 1 : -1;
-    data.cash[bucket] = +(((Number(data.cash[bucket]) || 0) + sign * amount)).toFixed(2);
-    await saveData(data);
+    await veriIslem(async (d) => {
+      d.flows = d.flows || [];
+      d.flows.push(flow);
+      // Tam otomatik nakit: yatır → nakde ekle, çek → nakitten düş (kendi para birimi kovasına)
+      d.cash = d.cash || {};
+      const bucket = currency === "USD" ? "usd" : currency === "EUR" ? "eur" : "tl";
+      const sign = flow.type === "deposit" ? 1 : -1;
+      d.cash[bucket] = +(((Number(d.cash[bucket]) || 0) + sign * amount)).toFixed(2);
+    });
     res.json(flow);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -7308,17 +7457,17 @@ app.post("/api/flows", async (req, res) => {
 
 app.delete("/api/flows/:id", async (req, res) => {
   try {
-    const data = await loadData();
-    const f = (data.flows || []).find((x) => x.id === req.params.id);
-    // Nakit etkisini geri al (yatır silinince nakit düşer, çek silinince geri gelir)
-    if (f) {
-      data.cash = data.cash || {};
-      const bucket = f.currency === "USD" ? "usd" : f.currency === "EUR" ? "eur" : "tl";
-      const sign = f.type === "deposit" ? 1 : -1;
-      data.cash[bucket] = +(((Number(data.cash[bucket]) || 0) - sign * (Number(f.amount) || 0))).toFixed(2);
-    }
-    data.flows = (data.flows || []).filter((x) => x.id !== req.params.id);
-    await saveData(data);
+    await veriIslem(async (d) => {
+      const f = (d.flows || []).find((x) => x.id === req.params.id);
+      // Nakit etkisini geri al (yatır silinince nakit düşer, çek silinince geri gelir)
+      if (f) {
+        d.cash = d.cash || {};
+        const bucket = f.currency === "USD" ? "usd" : f.currency === "EUR" ? "eur" : "tl";
+        const sign = f.type === "deposit" ? 1 : -1;
+        d.cash[bucket] = +(((Number(d.cash[bucket]) || 0) - sign * (Number(f.amount) || 0))).toFixed(2);
+      }
+      d.flows = (d.flows || []).filter((x) => x.id !== req.params.id);
+    });
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: e.message });

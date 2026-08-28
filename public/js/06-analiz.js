@@ -87,36 +87,106 @@ function renderHeatmap() {
     b.addEventListener("click", () => openPositionDetail(b.dataset.pos)));
 }
 
-function renderSector() {
+// Tema ölçümü bir kez çekilir, sekme her açılışta yeniden istenmez (radar 6 saatte tazelenir).
+let TEMA = { veri: null, yukleniyor: false };
+
+/* ===== TEMA MASASI (28 Ağu 2026) — eski "Sektör / tema yoğunlaşması" panelinin yerine.
+ *
+ * Eski panel yalnız ağırlığı söylüyordu: "%65'in şu temada, riski dağıtmayı düşün."
+ * Bu tek başına eylem üretmiyor, çünkü yoğunlaşma ne iyi ne kötü — endeksi yenen bir
+ * temada yoğunlaşmak ile geride kalan bir temada yoğunlaşmak aynı şey değil. Panel
+ * artık ikinci yarıyı da ölçüyor: temanın evrendeki medyan getirisi ve QQQ farkı.
+ *
+ * 28 Ağu ölçümü (84 sembol · 6 tema): Finans endeksin +15,0 puan önünde ve orada hiç
+ * pozisyon yok; AI · Yarı İletken −8,4 puan geride ve en büyük ağırlık (%37) orada.
+ * "Endeksin gerisindeyim" sorusunun cevaplarından biri burada duruyor.
+ *
+ * NE İDDİA ETMEZ: "önümüzdeki dönemde şu gidecek". 28 Ağu'da bu ÖLÇÜLDÜ
+ * (scripts/olcum-tema.mjs · docs/olcumler §19) ve cevap net çıktı: lider tema
+ * sonraki ayda tema seçmemeyi +5,6 puan yeniyor GİBİ görünüyor, ama AI · Yarı
+ * İletken evrenden çıkarılınca +0,75'e düşüyor — liderliğin %77'si zaten o
+ * temadaydı. Ölçülen şey tema momentumu değil, tek bir temanın 17 aylık yükselişi.
+ * Üstelik o tema BUGÜN evrenin en zayıfı. Panel bu yüzden sıralar ve susar. */
+async function renderSector() {
   const el = $("#sectorBox"); if (!el) return;
-  const stocks = (STATE?.holdings || []).filter((h) => h.type === "stock" && h.live?.marketValueTRY > 0);
-  const totalStock = stocks.reduce((s, h) => s + h.live.marketValueTRY, 0);
-  if (!totalStock) { el.innerHTML = `<div class="radar-empty">Hisse pozisyonu yok.</div>`; return; }
-  const map = {};
-  for (const h of stocks) {
-    const key = h.theme?.title || "Diğer / Sınıflandırılmamış";
-    (map[key] = map[key] || { value: 0, syms: [] });
-    map[key].value += h.live.marketValueTRY;
-    map[key].syms.push(h.symbol);
+  if (!TEMA.veri) {
+    if (TEMA.yukleniyor) return;
+    TEMA.yukleniyor = true;
+    el.innerHTML = `<div class="radar-empty">↻ Tema evreni ölçülüyor…</div>`;
+    try { TEMA.veri = await (await fetch("/api/temalar")).json(); }
+    catch { TEMA.veri = { ok: false, hata: "ag" }; }
+    finally { TEMA.yukleniyor = false; }
   }
-  const rows = Object.entries(map).map(([title, v]) => ({ title, ...v, pct: (v.value / totalStock) * 100 }))
-    .sort((a, b) => b.value - a.value);
-  const top = rows[0];
-  const PALETTE = ["#2f8f57", "#3fa7b8", "#d9a92b", "#8b7fd6", "#cf7a3d", "#5b8def", "#9aa394"];
-  const warn = top && top.pct >= 40
-    ? `<div class="sector-warn">Yoğunlaşma: portföy hisselerinin <b>%${top.pct.toFixed(0)}</b>'i tek temada (<b>${top.title}</b>). Riski dağıtmayı düşün.</div>`
-    : top && top.pct >= 30
-      ? `<div class="sector-warn soft">En büyük tema <b>${top.title}</b> · %${top.pct.toFixed(0)}. Dengeli görünüyor.</div>` : "";
-  el.innerHTML = warn + rows.map((r, i) => `
-    <div class="sector-row">
-      <div class="sector-top">
-        <span class="sector-name">${r.title}</span>
-        <span class="sector-pct">%${r.pct.toFixed(1)} · ${fmtTRY0(r.value)}</span>
-      </div>
-      <div class="sector-bar"><span style="width:${r.pct.toFixed(1)}%;background:${PALETTE[i % PALETTE.length]}"></span></div>
-      <div class="sector-syms">${r.syms.join(" · ")}</div>
-    </div>`).join("");
+  const T = TEMA.veri;
+  if (!T?.ok) {
+    el.innerHTML = `<div class="radar-empty">${T?.taraniyor
+      ? "Radar evreni taranıyor — tema ölçümü tarama bitince gelir."
+      : "Tema ölçümü için yeterli mum verisi yok. Radar'ı bir kez açıp bekle."}</div>`;
+    return;
+  }
+
+  const p1 = (v, d = 1) => (v == null || !isFinite(v) ? "—" : `${v >= 0 ? "+" : "−"}%${Math.abs(v).toFixed(d)}`);
+  const rs = (v) => (v == null ? "—" : `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(1)}`);
+
+  const h = T.hukum;
+  const hukum = h ? `<p class="tm-hukum ${h.ton}">${h.metin}</p>` : "";
+
+  /* Ağırlık şeridi: paranın dağılımı bir bakışta. Renk YOK — dağılım bilgidir,
+   * eylem değil; eylem hükümde ve satırdaki RS'te (tasarım kuralı 3). */
+  const tutulan = T.satirlar.filter((r) => r.portfoyPct > 0).sort((a, b) => b.portfoyPct - a.portfoyPct);
+  const disi = T.disiTema || 0;
+  const serit = (tutulan.length || disi) ? `<div class="tm-serit">
+    ${tutulan.map((r) => `<i style="width:${r.portfoyPct.toFixed(1)}%" title="${r.title} · %${r.portfoyPct.toFixed(0)}" class="${r.rs3M != null && r.rs3M < 0 ? "zayif" : ""}"></i>`).join("")}
+    ${disi ? `<i style="width:${disi.toFixed(1)}%" class="disi" title="Radar evreninde olmayan pozisyonlar · %${disi.toFixed(0)}"></i>` : ""}
+  </div>
+  <div class="tm-serit-lej">${tutulan.map((r) => `<span><b>${r.title}</b> %${r.portfoyPct.toFixed(0)}</span>`).join("")}
+    ${disi ? `<span class="disi"><b>Evren dışı</b> %${disi.toFixed(0)}</span>` : ""}</div>` : "";
+
+  /* Tablo. Sıralama göreli güce göre: en güçlü tema üstte, senin ağırlığın nerede
+   * olursa olsun. Ağırlığı olan satır işaretlenir — göz kendi parasını bulsun. */
+  const satir = (r) => {
+    const seninki = r.portfoyPct > 0;
+    const kotuVeAgir = seninki && r.rs3M != null && r.rs3M < 0 && r.portfoyPct >= 25;
+    return `<tr class="${seninki ? "tm-seninki" : ""}${kotuVeAgir ? " tm-uyari" : ""}">
+      <td class="l tm-ad">
+        <b>${r.title}</b>
+        <i class="tm-n">${r.n} sembol${r.zayifKanit ? " · zayıf kanıt" : ""}</i>
+      </td>
+      <td class="tm-med">${p1(r.medyan3M)}</td>
+      <td class="tm-rs ${r.rs3M == null ? "" : r.rs3M >= 0 ? "pos" : "neg"}">${rs(r.rs3M)}</td>
+      <td class="tm-sen">${seninki ? `<b>%${r.portfoyPct.toFixed(0)}</b>` : `<span class="tm-yok">—</span>`}</td>
+      <td class="l tm-lider">${r.lider.map((l) =>
+        `<button class="tm-chip${l.owned ? " var" : ""}" data-tsym="${l.sym}" title="${l.ad || l.sym}${l.story ? " — " + l.story : ""}${l.owned ? " · portföyünde var" : ""}">
+          ${l.sym}<i class="${l.ret3M >= 0 ? "pos" : "neg"}">${p1(l.ret3M, 0)}</i></button>`).join("")}</td>
+    </tr>`;
+  };
+
+  const tablo = `<div class="tbl-wrap"><table class="tm-tablo">
+    <thead><tr>
+      <th class="l">Tema</th>
+      <th title="Temadaki sembollerin 3 aylık getirilerinin medyanı">3A medyan</th>
+      <th title="Medyan eksi QQQ — temanın endekse göre fazlası, puan">QQQ farkı</th>
+      <th title="Hisse pozisyonlarının bu temadaki payı">Ağırlığın</th>
+      <th class="l">Temayı taşıyanlar · 3A</th>
+    </tr></thead>
+    <tbody>${T.satirlar.map(satir).join("")}</tbody></table></div>`;
+
+  const not = `<p class="tm-not">
+    ${T.n} sembol · ${T.temaSayisi} tema · QQQ 3 ayda ${p1(T.endeks?.ret3M)} · getiriler mum önbelleğinden (tema ve endeks aynı yöntemle).
+    ${disi ? `Portföyünün <b>%${disi.toFixed(0)}</b> kadarı radar evreninde olmayan sembollerde — o kısım bu tabloda ölçülmüyor.` : ""}
+    <b>Bu tablo lidere geçmeni söylemez</b> — ölçüldü (28 Ağu): lider tema sonraki ayda tema seçmemeyi
+    <b>+5,6 puan</b> yeniyor görünüyor, ama tek bir temayı (AI · Yarı İletken) evrenden çıkarınca
+    <b>+0,75'e</b> düşüyor; liderliğin %77'si zaten oradaydı ve o tema bugün evrenin en zayıfı.
+    Yani ölçülen şey tema momentumu değil, bir temanın 17 aylık hikâyesiydi.
+    <b>Öteki yanlılıklar:</b> evren bugünün listesi (çöküp listeden düşen isimler medyanı iyi gösterir);
+    az sembollü temaların medyanı kırılgandır (satırda <i>zayıf kanıt</i> yazar).
+  </p>`;
+
+  el.innerHTML = hukum + serit + tablo + not;
+  el.querySelectorAll("[data-tsym]").forEach((b) =>
+    b.addEventListener("click", () => openChartModal(b.dataset.tsym)));
 }
+
 
 async function renderWeekly() {
   const el = $("#weeklyBox"); if (!el) return;
@@ -164,9 +234,15 @@ function renderAnalizSummary() {
   }
   const topTheme = Object.entries(themeMap).sort((a, b) => b[1] - a[1])[0];
   const topPct = topTheme && totalStock ? (topTheme[1] / totalStock) * 100 : 0;
-  // Realize K/Z — yalnızca satışlar
-  const trades = (STATE?.trades || []).filter((t) => t.kind !== "buy");
-  const realizedUSD = trades.reduce((s, t) => s + t.shares * (t.sellUSD - t.buyUSD), 0);
+  /* Realize K/Z — TEK KAYNAK: realizedBySym (sunucu).
+   * 28 Ağu: bu KPI kendi hesabını yapıyordu — ham trades üzerinden
+   * shares×(sellUSD−buyUSD), tarih filtresiz ve swing ayrımsız. Aynı sekmenin
+   * altındaki "Realize özeti" paneli realizedBySym okuyordu. İki panel yan yana
+   * $77,33 ve $41,57 yazıyordu; farkın $28,27'si portföy kuruluşundan (8 Haz)
+   * önceki tek satış, kalanı swing satışlarının çift sayımıydı. CLAUDE.md:
+   * "bir sayının iki hesabı varsa biri bozuktur" — hesap tekilleştirildi. */
+  const realizedUSD = Object.values(STATE?.realizedBySym || {}).reduce((s, v) => s + (v || 0), 0);
+  const realizeSym = Object.values(STATE?.realizedBySym || {}).filter((v) => Math.abs(v) >= 0.005).length;
   // Günlük en iyi/kötü (anlık)
   const withDc = stocks.filter((h) => h.live?.dayChangePct != null);
   withDc.sort((a, b) => b.live.dayChangePct - a.live.dayChangePct);
@@ -183,7 +259,7 @@ function renderAnalizSummary() {
     stat("Bugün En İyi", best ? best.symbol : "—", best ? fmtPct(best.live.dayChangePct) : "—", best ? cls(best.live.dayChangePct) : "") +
     stat("Bugün En Kötü", worst ? worst.symbol : "—", worst ? fmtPct(worst.live.dayChangePct) : "—", worst ? cls(worst.live.dayChangePct) : "") +
     // fmtUSD0 negatifi "$-240" basar; işaret rakamın önüne gelmeli (CLAUDE.md küçük kurallar)
-    stat("Realize K/Z", (realizedUSD < 0 ? "−" : "") + fmtUSD0(Math.abs(realizedUSD)), `${trades.length} satış`, cls(realizedUSD));
+    stat("Realize K/Z", (realizedUSD < 0 ? "−" : "") + fmtUSD0(Math.abs(realizedUSD)), `${realizeSym} sembol · 8 Haz'dan beri`, cls(realizedUSD));
 }
 
 /* ===== Realize Özeti — sembol başına net K/Z (aracı kurum "Yatırım geliri" birebir) ===== */
@@ -775,6 +851,24 @@ async function renderKiyas() {
     <p class="ky-hukum ${h?.ton || ""}">${h?.metin || "Hüküm için yeterli veri yok."}</p>
   </div>`;
 
+  /* ---- 1b. GİRDİ DENETİMİ (28 Ağu). Hükmün hemen altında durur, çünkü hükmü
+   *      nitelendiriyor: hesap doğru olsa da girdi mutabık değilse sayı yanlıştır.
+   *      Ölçülen bir günde portföy sert düştü; o gün hisseler yükselmişti ve
+   *      piyasa tarafı günün tek alımını doğru yansıtmıştı — nakitten fazladan
+   *      para çıkmıştı, ne satış ne akış olarak. O tek gün alfanın büyük bir
+   *      bölümünü üretiyordu. Bunu yazmayan panel okuyucuya olduğundan emin bir
+   *      sayı verir (CLAUDE.md · kanıtı olmayan bölüm var gibi davranmaz). */
+  const mn = K.mutabakatNotu;
+  const mk = K.mutabakat?.karne;
+  const mutSatir = !mn || mn.ton === "ok" ? "" : `<div class="ky-mutabakat ${mn.ton}">
+    <div class="ky-mut-h">${mn.ton === "bad" ? "Bu sayıya tam güvenme — girdi mutabık değil" : "Girdide kayıt uyuşmazlığı var"}</div>
+    <p>${mn.metin.replace(/\d{4}-\d{2}-\d{2}/g, (g) => tar(g))}</p>
+    ${(K.mutabakat?.gunler || []).filter((g) => g.ariza === "deger-acigi").slice(0, 4).map((g) =>
+      `<div class="ky-mut-g"><span>${tar(g.d)}</span><b class="${g.cashAcik < 0 ? "neg" : "pos"}">${g.cashAcik < 0 ? "−" : "+"}$${Math.abs(g.cashAcik).toFixed(0)}</b>
+        <i>net değere ${s2(g.sahteGetiri, 1)} · ${g.semboller.length ? g.semboller.join(", ") : "o gün kayıtlı işlem yok"}</i></div>`).join("")}
+    <p class="ky-mut-n">Düzeltmek için: o günün gerçek para hareketini <b>Pano → Para giriş/çıkış</b>'a kaydet ya da eksik işlemi ekle. Kayıt girildiği anda bu panel yeniden hesaplar${mk?.acikGun ? ` — düzelme ${Math.abs(mk.bilesikEtkiPuan).toFixed(1)} puana kadar olabilir` : ""}.</p>
+  </div>`;
+
   /* ---- 2. YARIŞ. Üç seri 100'e normalize; portföy dolu, endeksler ince.
    *      Aynı sayıyı tablo da yazıyor — grafik SIRALAMAYI ve yolu gösterir,
    *      okuma değerini değil. */
@@ -883,7 +977,7 @@ async function renderKiyas() {
     <b>Yanlılık:</b> pencere kısa ve tek rejim; bu panel "bu dönemde ne oldu"yu söyler, "strateji iyi mi"yi değil.
   </p>`;
 
-  el.innerHTML = hero + grafik + tablo +
+  el.innerHTML = hero + mutSatir + grafik + tablo +
     `<div class="ky-alt">${adlar.map(kart).join("")}${sonBlok}</div>` + not;
 }
 

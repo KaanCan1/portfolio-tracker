@@ -72,7 +72,12 @@ const ALLOC_COLORS = {
   fund: "#3fa7b8",    // fon — turkuaz
   gold: "#d9a92b",    // altın — altın sarısı
   option: "#8b7fd6",  // opsiyon — mor
-  cash: "#9aa394",    // nakit — adaçayı grisi
+  /* 20 Ağu: #9aa394 idi ve cam kartın üstünde kayboluyordu — saydam beyaz zeminde
+     değeri kart kenarına çok yakın düşüyor, dilim yerine BOŞLUK gibi okunuyordu.
+     Ton korundu (adaçayı), yalnız değer koyulaştırıldı: nakit bilerek nötr bir
+     kalem (eylem gerektirmiyor), doygunlaştırıp öne çıkarmak tasarım dilini
+     bozardı — görünür olması yeter, bağırması değil. */
+  cash: "#78857c",    // nakit — adaçayı grisi (camda ayrışan değer)
 };
 const ALLOC_LABELS = { stock: "Hisse", fund: "Fon", gold: "Altın", option: "Opsiyon", cash: "Nakit" };
 
@@ -90,7 +95,7 @@ function donutSVG(segs) {
     return `<circle data-alloc-key="${s.key}" cx="21" cy="21" r="${R}" fill="none" stroke="${s.color}" stroke-width="5.5" stroke-dasharray="${dash}" stroke-dashoffset="${off}" />`;
   }).join("");
   return `<svg viewBox="0 0 42 42" class="donut">
-    <circle cx="21" cy="21" r="${R}" fill="none" stroke="var(--bg2)" stroke-width="5.5"/>
+    <circle cx="21" cy="21" r="${R}" fill="none" stroke="rgba(18,20,15,.07)" stroke-width="5.5"/>
     <g class="donut-arcs">${arcs}</g>
   </svg>`;
 }

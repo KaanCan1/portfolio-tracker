@@ -2,7 +2,7 @@
  *
  * 14 Ağu: Kaan LITE ve ONDS'u önce Varlıklar'a ekledi (horizon=swing), sonra Swing
  * Defteri'nde "Portföyden seç" ile AYNI adetleri kaydetti. swingPositions portföy
- * toplamına koşulsuz ekleniyordu → aynı $607 iki kez sayıldı (hero toplamı, dağılım
+ * toplamına koşulsuz ekleniyordu → aynı tutar iki kez sayıldı (hero toplamı, dağılım
  * donut'ı, Analiz "uydu" kovası) ve ana sayfada iki ayrı tabloda göründü. Kayıtta
  * "bu ayrı bir alım mı, yoksa mevcut pozisyonun planı mı" bilgisi hiç yoktu.
  *

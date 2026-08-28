@@ -50,7 +50,7 @@ export function swingRealizedLots(trades, fee = 1.5) {
 }
 
 /* ===== Kanıtlanmış Aylık Katkı — "hedef" değil, ÖLÇÜM ==============================
- * Aylık hedef çubuğu ($600–700) bir dilekti; bu, defterin GERÇEKTE ne ürettiğidir.
+ * Aylık hedef çubuğu bir dilekti; bu, defterin GERÇEKTE ne ürettiğidir.
  * Örneklem = son N takvim ayında kapanmış lot'lar. Nokta tahmin = toplam / geçen ay.
  * Üstüne bootstrap: aylık katkının %90 aralığı. Aralık 0'ı içeriyorsa katkı
  * gürültüden ayırt EDİLEMEZ ve kart bunu açıkça yazar. Küçük örneklemde (n<5)

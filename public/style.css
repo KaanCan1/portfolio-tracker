@@ -349,8 +349,14 @@ tr.opt-detail .muted { color: var(--muted); }
 .card.alloc { display: flex; flex-direction: column; padding: 13px 16px; }
 .alloc-head { display: flex; align-items: center; justify-content: space-between; }
 .alloc-body { display: flex; align-items: center; gap: 22px; margin-top: 6px; flex: 1; }
-.donut-wrap { position: relative; width: 150px; height: 150px; flex-shrink: 0; }
-.donut { width: 150px; height: 150px; display: block; animation: donutIn .7s cubic-bezier(.22,1,.36,1) both; }
+/* 20 Ağu: 150px (mobilde 128px) idi ve merkez yazısı halkaya DEĞİYORDU.
+   Geometri: iç boşluk = (2R − kalınlık)/42 × boy. 128px'te 80px iç boşluk kalıyor,
+   "₺206.820" ise ~85px — metin halkanın altına giriyordu. 168px'te boşluk 105px.
+   Kart da bu sayede dolduruluyor: mobilde donut 128px'ken ~330px'lik kartın iki
+   yanında geniş bir hiç kalıyordu. .donut artık kabı doldurur, iki yerde iki
+   farklı boy tutulmaz. */
+.donut-wrap { position: relative; width: 168px; height: 168px; flex-shrink: 0; }
+.donut { width: 100%; height: 100%; display: block; animation: donutIn .7s cubic-bezier(.22,1,.36,1) both; }
 .donut circle { transition: stroke-width .2s ease; }
 .donut-arcs circle { cursor: pointer; }
 .donut .donut-arcs circle:hover { stroke-width: 7.2; }
@@ -1146,8 +1152,11 @@ svg.ic-xs { width: 13px; height: 13px; display: inline-block; vertical-align: -2
   .content { padding: 16px 16px 50px; overflow-x: clip; }
   .menu-toggle {
     display: inline-flex; align-items: center; justify-content: center; width: 42px; height: 42px;
-    border-radius: 11px; border: 1px solid var(--line); background: var(--card); color: var(--ink);
-    font-size: 18px; cursor: pointer; margin-bottom: 14px; box-shadow: var(--shadow);
+    border-radius: 13px; border: 1px solid rgba(18,20,15,.08); color: var(--ink);
+    font-size: 18px; cursor: pointer; margin-bottom: 14px;
+    background: rgba(250,249,245,.72);
+    -webkit-backdrop-filter: blur(20px) saturate(180%); backdrop-filter: blur(20px) saturate(180%);
+    box-shadow: 0 1px 0 rgba(255,255,255,.7) inset, 0 4px 14px -6px rgba(18,20,15,.28);
   }
 }
 
@@ -1302,15 +1311,83 @@ svg.ic-xs { width: 13px; height: 13px; display: inline-block; vertical-align: -2
 .hm-leg-ends b { font-weight: 600; color: var(--ink); }
 
 /* Sektör / tema dağılımı */
-.sector-warn { background: var(--red-bg); color: var(--red); border-radius: 10px; padding: 10px 13px; font-size: 13px; font-weight: 600; margin-bottom: 14px; }
-.sector-warn.soft { background: var(--bg2); color: var(--ink); font-weight: 500; }
-.sector-row { margin-bottom: 13px; }
-.sector-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 13.5px; }
-.sector-name { font-weight: 700; }
-.sector-pct { font-family: var(--mono); color: var(--muted); font-size: 12.5px; }
-.sector-bar { height: 8px; border-radius: 5px; background: var(--bg2); overflow: hidden; margin: 5px 0 4px; }
-.sector-bar span { display: block; height: 100%; border-radius: 5px; }
-.sector-syms { font-size: 11.5px; color: var(--muted); }
+/* ════════ Tema masası (28 Ağu) ════════
+   Eski .sector-* şeritleri buradan kaldırıldı: panel artık yalnız ağırlık değil,
+   ağırlık + tema gücü + taşıyan isimler gösteriyor ve yerleşimi tablo (arşiv), üstünde
+   hüküm (karar). Kart değil tablo, çünkü burada bir şey "seçilmiyor" — okunuyor. */
+.tm-hukum { margin: 0 0 14px; font-size: 13.5px; line-height: 1.55; color: var(--ink2);
+  padding-left: 16px; position: relative; }
+.tm-hukum b { color: var(--ink); }
+.tm-hukum i { font-style: normal; color: var(--muted); font-size: 12px; }
+.tm-hukum::before { content: ""; position: absolute; left: 0; top: .52em; width: 7px; height: 7px;
+  border-radius: 50%; background: var(--muted); }
+.tm-hukum.ok::before { background: var(--green); }
+.tm-hukum.bad::before { background: var(--red); }
+
+/* Ağırlık şeridi — dağılım bilgidir, eylem değil: renk taşımaz, yalnız zayıf temalar
+   soluk tarama alır ve evren dışı pay ayrı doku ile ayrılır. */
+.tm-serit { display: flex; height: 9px; border-radius: 5px; overflow: hidden; background: var(--bg2);
+  margin-bottom: 7px; }
+.tm-serit i { display: block; height: 100%; background: var(--ink2); }
+.tm-serit i + i { border-left: 1px solid var(--bg); }
+.tm-serit i.zayif { background: color-mix(in srgb, var(--ink2) 45%, var(--bg2)); }
+.tm-serit i.disi { background: repeating-linear-gradient(45deg, var(--line-strong) 0 3px, var(--bg2) 3px 6px); }
+.tm-serit-lej { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 11.5px; color: var(--muted);
+  margin-bottom: 16px; }
+.tm-serit-lej b { color: var(--ink2); font-weight: 600; }
+.tm-serit-lej .disi b { color: var(--muted); }
+
+.tm-tablo { width: 100%; border-collapse: collapse; font-size: 13px; }
+.tm-tablo th { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px;
+  color: var(--muted); text-align: right; padding: 0 10px 8px; border-bottom: 1px solid var(--line);
+  white-space: nowrap; }
+.tm-tablo th.l, .tm-tablo td.l { text-align: left; }
+.tm-tablo td { padding: 10px; border-bottom: 1px solid var(--line); text-align: right;
+  font-variant-numeric: tabular-nums; vertical-align: middle; }
+.tm-tablo tr:last-child td { border-bottom: 0; }
+.tm-ad b { font-weight: 650; display: block; line-height: 1.3; }
+.tm-n { font-style: normal; font-size: 11px; color: var(--muted); }
+.tm-med { color: var(--ink2); }
+.tm-rs { font-weight: 700; }
+.tm-rs.pos { color: var(--green-d); } .tm-rs.neg { color: var(--red-d); }
+.tm-sen b { font-weight: 700; }
+.tm-yok { color: var(--line-strong); }
+/* Kendi paranın olduğu satır bulunsun diye işaretlenir; ağırlığı büyük VE tema
+   geride ise kenar çubuğu kırmızıya döner — burada bir şey yapman gerekiyor. */
+.tm-seninki { background: var(--bg2); }
+.tm-seninki .tm-ad b { position: relative; }
+.tm-seninki .tm-ad b::before { content: ""; position: absolute; left: -10px; top: 1px; bottom: 1px;
+  width: 3px; border-radius: 2px; background: var(--ink2); }
+.tm-uyari .tm-ad b::before { background: var(--red); }
+
+.tm-lider { white-space: nowrap; }
+.tm-chip { display: inline-flex; align-items: baseline; gap: 4px; margin: 2px 5px 2px 0; padding: 3px 7px;
+  border: 1px solid var(--line); border-radius: 7px; background: var(--bg); cursor: pointer;
+  font-size: 11.5px; font-weight: 600; color: var(--ink2); font-variant-numeric: tabular-nums; }
+.tm-chip:hover { border-color: var(--line-strong); }
+.tm-chip.var { border-color: color-mix(in srgb, var(--ink2) 40%, var(--line)); }
+.tm-chip i { font-style: normal; font-weight: 500; font-size: 11px; }
+.tm-chip i.pos { color: var(--green-d); } .tm-chip i.neg { color: var(--red-d); }
+.tm-not { margin: 14px 0 0; font-size: 11.5px; line-height: 1.6; color: var(--muted); }
+.tm-not b { color: var(--ink2); }
+
+@media (max-width: 760px) {
+  /* Dar ekranda "taşıyanlar" sütunu satırı 700px'e itiyordu; çipler alta iner. */
+  /* Global `table { min-width: 700px }` (satır 563) mobilde bu tabloyu da 700px'te
+     tutuyordu ve .tbl-wrap yatay kayıyordu — satır zaten bloklara açıldığı için
+     yatay kaydırmanın anlamı kalmıyor. Sıfırlanmazsa kart görünümü boşa gider. */
+  .tm-tablo { min-width: 0; }
+  .tm-tablo, .tm-tablo tbody, .tm-tablo tr, .tm-tablo td { display: block; width: 100%; }
+  .tm-tablo thead { display: none; }
+  .tm-tablo tr { padding: 11px 0; border-bottom: 1px solid var(--line); }
+  .tm-tablo td { border: 0; padding: 1px 0; text-align: left; }
+  .tm-tablo .tm-med::before { content: "3A medyan "; color: var(--muted); font-size: 11px; }
+  .tm-tablo .tm-rs::before { content: "QQQ farkı "; color: var(--muted); font-size: 11px; font-weight: 400; }
+  .tm-tablo .tm-sen::before { content: "ağırlığın "; color: var(--muted); font-size: 11px; }
+  .tm-tablo .tm-med, .tm-tablo .tm-rs, .tm-tablo .tm-sen { display: inline-block; width: auto; margin-right: 14px; }
+  .tm-lider { white-space: normal; margin-top: 5px !important; }
+  .tm-seninki { padding-left: 9px; margin-left: -9px; border-radius: 8px; }
+}
 
 /* Vergi tablosu */
 /* Dar içerik tabloları: global `table { min-width:700px }` kuralından MUAF —
@@ -2821,6 +2898,12 @@ button.sw-goal-target:hover { background: var(--bg2); border-color: var(--line);
 
 /* ── 2026 Realize: satır aksiyonları (düzelt/sıfırla/sil) + düzeltildi rozeti ── */
 .r26-acts { display: inline-flex; align-items: center; gap: 6px; justify-content: flex-end; }
+/* Satır içi "+" — ✎ ile aynı kabuk, yalnız glif daha ağır. Ayrı bir renk
+   VERİLMEDİ: tasarım dili rengi eylem gerektiren yere saklıyor ve "kayıt
+   ekleyebilirsin" bir uyarı değil, bir imkân. Vurgu hover'da geliyor. */
+.rz-add { font-size: 16px; font-weight: 600; }
+.r26-table .rz-add { font-size: 15px; }
+.fld-note { display: block; margin-top: 4px; font-size: 11px; color: var(--ink-soft); font-weight: 500; }
 .r26-edited { color: var(--green-d) !important; background: var(--green-soft) !important; border-color: var(--green-line) !important; }
 .r26-table .rz-edit { width: 26px; height: 26px; font-size: 12px; }
 
@@ -2956,9 +3039,9 @@ button.sw-goal-target:hover { background: var(--bg2); border-color: var(--line);
 .mini-top {
   position: fixed; top: 0; left: 244px; right: 0; z-index: 60;
   display: flex; align-items: center; gap: 13px; height: 46px; padding: 0 22px;
-  background: color-mix(in srgb, var(--card) 90%, transparent);
-  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-  border-bottom: 1px solid var(--line);
+  background: rgba(250, 249, 245, .70);
+  backdrop-filter: blur(28px) saturate(180%); -webkit-backdrop-filter: blur(28px) saturate(180%);
+  border-bottom: 1px solid rgba(18, 20, 15, .07);
   transform: translateY(-100%); opacity: 0; pointer-events: none;
   transition: transform .22s cubic-bezier(.22,1,.36,1), opacity .22s;
 }
@@ -2973,10 +3056,19 @@ button.sw-goal-target:hover { background: var(--bg2); border-color: var(--line);
 .mt-sub { color: var(--ink-soft); font-size: 13px; font-variant-numeric: tabular-nums; }
 body.mini-on .view-jump { top: 46px; }
 @media (max-width: 760px) {
-  .mini-top { left: 0; padding: 0 13px; height: 44px; gap: 10px; }
+  /* GÜVENLİ ALAN (19 Ağu 2026): şerit `top: 0` ile sabitti ve safe-area
+     hesaba katılmıyordu — ana ekrana eklenmiş PWA'da iOS durum çubuğunun
+     ALTINA giriyor, saatin ve pil göstergesinin üstüne biniyordu. Ekran
+     görüntüsünde "08:57" ile "₺220.735" iç içe geçmişti.
+     Yükseklik inset kadar büyür, içerik inset kadar aşağı iner. */
+  .mini-top {
+    left: 0; padding: 0 13px; gap: 10px;
+    height: calc(44px + env(safe-area-inset-top));
+    padding-top: env(safe-area-inset-top);
+  }
   .mt-val { font-size: 15px; }
   .mt-sub { display: none; }
-  body.mini-on .view-jump { top: 44px; }
+  body.mini-on .view-jump { top: calc(44px + env(safe-area-inset-top)); }
 }
 
 /* ════════ Genel Bakış kısaltma: yoğunluk + çok kolon ════════ */
@@ -3293,14 +3385,21 @@ ul.sw-qm-list li b { font-weight: 700; color: var(--ink); }
 .chl-t.entry { width: 12px; height: 12px; border-radius: 3px; background: var(--ink); transform: translate(-50%, -50%) rotate(45deg); box-shadow: 0 0 0 3px var(--card); }
 .chl-t.tp { background: color-mix(in srgb, var(--green-d) 40%, var(--card)); }
 .chl-t.tp.done { width: 4px; background: var(--green-d); box-shadow: 0 0 0 3px color-mix(in srgb, var(--green-d) 25%, transparent); }
-.chl-now { position: absolute; top: -30px; transform: translateX(-50%); white-space: nowrap; z-index: 3; }
+/* Sarmalayıcı GERÇEK fiyat noktasında ve genişliği sıfır — işaret çizgisi ona
+   bağlı, kaydırma yalnız baloncuğa uygulanır (chNowKaydir). Eskiden sarmalayıcı
+   translateX(-50%) alıyordu ve kenarda balon karttan taşıyordu. */
+.chl-now { position: absolute; top: -30px; width: 0; white-space: nowrap; z-index: 3; }
 .chl-now b { display: inline-block; font-family: var(--mono); font-size: 12px; font-weight: 700; color: #fff; padding: 3px 9px; border-radius: 7px; box-shadow: 0 4px 12px -4px rgba(16, 30, 22, .4); }
-.chl-now::after { content: ""; position: absolute; left: 50%; bottom: -16px; width: 2px; height: 16px; transform: translateX(-50%); }
+.chl-now::after { content: ""; position: absolute; left: 0; bottom: -16px; width: 2px; height: 16px; transform: translateX(-50%); }
 .chl-now.up b { background: var(--green-d); } .chl-now.up::after { background: var(--green-d); }
 .chl-now.dn b { background: var(--red-d); } .chl-now.dn::after { background: var(--red-d); }
-.chl-lg { display: flex; justify-content: space-between; gap: 6px; margin-top: 13px; }
-.chl-l { display: flex; flex-direction: column; gap: 1px; align-items: center; }
-.chl-l:first-child { align-items: flex-start; } .chl-l:last-child { align-items: flex-end; }
+/* Etiketler çubuktaki GERÇEK fiyat konumunda durur — eskiden space-between ile
+   eşit aralıklıydı ve çubuğun kendisiyle çelişiyordu (19 Ağu 2026, chLadderEtiketler).
+   Konum JS'ten geliyor; buradaki iş yalnız kenar taşmasını ve iki satırı taşımak. */
+.chl-lg { position: relative; margin-top: 13px; }   /* yükseklik JS'ten: satır sayısı kadar */
+.chl-l { position: absolute; top: 0; transform: translateX(-50%); display: flex; flex-direction: column; gap: 1px; align-items: center; white-space: nowrap; }
+.chl-l.at-start { transform: none; align-items: flex-start; }
+.chl-l.at-end { left: auto; transform: none; align-items: flex-end; }
 .chl-l i { font-style: normal; color: var(--muted); font-size: 10px; font-weight: 600; letter-spacing: .2px; }
 .chl-l b { font-family: var(--mono); font-size: 12.5px; color: var(--ink); }
 .chl-l.stop b { color: var(--red-d); } .chl-l.tp b { color: var(--green-d); }
@@ -3827,7 +3926,7 @@ svg.fx-pop { animation: fxPop .7s cubic-bezier(.22,1,.36,1) both; transform-orig
 
   /* ── 3) Varlık dağılımı lejantı: min-genişlikler sıfırlanır, sıkı tipografi ── */
   .alloc-body { gap: 12px; }
-  .donut-wrap { width: 128px; }
+  /* mobil daraltma KALDIRILDI: 128px'te merkez yazısı halkaya giriyordu (bkz. .donut-wrap) */
   .lg-item { gap: 7px; font-size: 12.5px; }
   .lg-val { min-width: 0; font-size: 12px; }
   .lg-usd { min-width: 0; font-size: 11.5px; }
@@ -3852,24 +3951,60 @@ svg.fx-pop { animation: fxPop .7s cubic-bezier(.22,1,.36,1) both; transform-orig
   .btn.sm { min-height: 34px; }
   .btn.icon { min-height: 34px; }
 
-  /* ── 7) Alt sekme çubuğu ── */
+  /* ── 7) Alt sekme çubuğu — YÜZEN CAM KAPSÜL ────────────────────────────
+     19 Ağu 2026: çubuk ekranın altına YAPIŞIKTI (left/right/bottom: 0) ve tam
+     genişlikte bir şeritti. Apple Music'in referansındaki fark yalnız bulanıklık
+     değil, AYRIK olması: kapsül kenarlardan içeride duruyor, altından içerik
+     geçiyor ve bu yüzden cam olduğu görülüyor. Yapışık bir şerit ne kadar saydam
+     olursa olsun "cam" okunmaz, çünkü kenarı yok — kenar olmadan malzeme olmaz.
+
+     Üç katman birlikte cam yapar:
+       1. saydam zemin + blur + saturate  → malzemenin kendisi
+       2. içeriden beyaz vurgu çizgisi     → camın üst kenarındaki ışık
+       3. yumuşak dış gölge                → yüzdüğünü söyleyen şey
+     Üçünden biri eksikse plastik görünür. */
   .mnav {
-    display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: var(--z-sticky);
+    display: flex; position: fixed; z-index: var(--z-sticky);
+    left: 12px; right: 12px; bottom: calc(9px + env(safe-area-inset-bottom));
     justify-content: space-around; align-items: stretch; gap: 2px;
-    background: rgba(252, 251, 247, .92); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
-    border-top: 1px solid var(--line);
-    padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
+    padding: 6px 7px;
+    border-radius: 26px;
+    background: rgba(250, 249, 245, .62);
+    -webkit-backdrop-filter: blur(32px) saturate(190%);
+    backdrop-filter: blur(32px) saturate(190%);
+    border: 1px solid rgba(255, 255, 255, .55);
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, .85) inset,      /* cam kenarındaki ışık */
+      0 -1px 0 rgba(18, 20, 15, .04) inset,
+      0 10px 30px -8px rgba(18, 20, 15, .22),      /* yüzme gölgesi */
+      0 2px 8px -2px rgba(18, 20, 15, .10);
   }
+  /* Etiket iOS ölçüsünde: küçük, ORTA kalınlıkta, harf aralığı sıfır. Mobilde
+     bold küçük metin "sıkışmış" okunur; Apple etiketi ince tutup vurguyu RENGE
+     bırakır. */
   .mnav .nav-item {
     flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
-    padding: 5px 4px; border-radius: 12px; background: none;
-    color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .2px;
+    padding: 7px 4px 5px; border-radius: 19px; background: none;
+    color: var(--muted); font-size: 10px; font-weight: 600; letter-spacing: 0;
+    -webkit-tap-highlight-color: transparent;
+    transition: color .18s ease, background-color .18s ease, transform .14s cubic-bezier(.22,1,.36,1);
   }
-  .mnav .nav-item:hover { background: var(--bg2); color: var(--ink); }
-  .mnav .nav-item.active { background: var(--green-soft); color: var(--green-d); }
+  /* Mobilde :hover dokunmada tetiklenip YAPIŞIK kalıyor — o yüzden hover zemin
+     boyamıyor, yalnız renk değiştiriyor. Geri bildirim :active'te. */
+  .mnav .nav-item:hover { background: none; color: var(--ink2); }
+  .mnav .nav-item:active { transform: scale(.9); }
+  /* Aktif sekme: referanstaki gibi DOLU kapsül, ama opak değil — camın içinde
+     duran ikinci bir cam. Opak bir kutu malzemeyi deler. */
+  .mnav .nav-item.active {
+    color: var(--green-d); font-weight: 700;
+    background: rgba(255, 255, 255, .72);
+    box-shadow: 0 1px 0 rgba(255,255,255,.9) inset, 0 2px 6px -2px rgba(18,20,15,.14);
+  }
   .mnav .nav-item.active::before { display: none; }   /* sidebar'ın sol ray göstergesi burada yok */
-  .mnav .ni-ic { width: 22px; height: 22px; }
-  .mnav .ni-ic svg { width: 22px; height: 22px; stroke: currentColor; }
+  .mnav .ni-ic { width: 24px; height: 24px; }
+  .mnav .ni-ic svg { width: 24px; height: 24px; stroke: currentColor; transition: stroke-width .18s ease; }
+  /* iOS'ta seçili sekme ikonu "dolu"; bizim ikonlar stroke olduğu için karşılığı kalınlık. */
+  .mnav .nav-item.active .ni-ic svg { stroke-width: 2.4; }
   .mnav .nav-item.active .ni-ic { transform: none; }
   .content { padding-bottom: calc(92px + env(safe-area-inset-bottom)); }
   /* Çekmece sidebar'ın alt butonları (Yenile/Çıkış) alt sekme çubuğunun arkasında kalmasın */
@@ -4131,6 +4266,25 @@ svg.fx-pop { animation: fxPop .7s cubic-bezier(.22,1,.36,1) both; transform-orig
 .ky-hukum.warn::before { background: var(--amber); }
 .ky-hukum.bad::before { background: var(--red); }
 
+/* Girdi denetimi (28 Ağu) — hükmün ALTINDA, grafiğin ÜSTÜNDE durur: okuyucu
+   sayıya bakmadan önce sayının ne kadar sağlam olduğunu görsün. Uyarı rengi
+   burada hak edilmiştir; bir şey YAPMAN gerekiyor (eksik kaydı gir). */
+.ky-mutabakat { margin: 14px 0 2px; padding: 12px 14px; border-radius: 12px;
+  border: 1px solid var(--line); background: var(--bg2); }
+.ky-mutabakat.bad { border-color: color-mix(in srgb, var(--red) 34%, var(--line));
+  background: color-mix(in srgb, var(--red) 5%, var(--bg2)); }
+.ky-mut-h { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px;
+  color: var(--red-d); margin-bottom: 6px; }
+.ky-mutabakat.warn .ky-mut-h { color: var(--amber-d); }
+.ky-mutabakat p { margin: 0; font-size: 12.5px; line-height: 1.55; color: var(--ink2); }
+.ky-mut-g { display: flex; align-items: baseline; gap: 8px; margin-top: 7px; font-size: 12px;
+  font-variant-numeric: tabular-nums; }
+.ky-mut-g span { color: var(--muted); min-width: 52px; }
+.ky-mut-g b { font-weight: 700; }
+.ky-mut-g i { font-style: normal; color: var(--muted); font-size: 11.5px; }
+.ky-mut-n { margin-top: 9px !important; font-size: 11.5px !important; color: var(--muted) !important;
+  border-top: 1px solid var(--line); padding-top: 8px; }
+
 /* Yarış grafiği: portföy dolu ve accent, endeksler susturulmuş referans çizgisi */
 .ky-grafik { position: relative; margin: 16px 0 6px; padding-right: 4px; }
 .ky-grafik svg { display: block; width: 100%; height: 170px; }
@@ -4197,3 +4351,132 @@ svg.fx-pop { animation: fxPop .7s cubic-bezier(.22,1,.36,1) both; transform-orig
 .rk-cross { margin-top: 12px; padding: 9px 12px; background: var(--bg2); border: 1px solid var(--line);
   border-radius: 10px; font-size: 11.5px; line-height: 1.55; color: var(--muted); }
 .rk-cross b { color: var(--ink2); }
+
+/* İşlem Geçmişi alt notundaki çapraz gönderme (28 Ağu). Aynı satırın devamı —
+   .rk-cross gibi kutu DEĞİL, çünkü alt notun kendisi zaten küçük bir şerit. */
+.ts-cross { color: var(--muted); }
+.ts-cross b { color: var(--ink2); }
+
+/* ════════ Cam malzeme: yedekler ════════
+   İki durumda saydamlık BIRAKILIR, çünkü ikisinde de zarar veriyor:
+   1. backdrop-filter desteklenmiyorsa (eski WebView) saydam zemin arkasındaki
+      metnin üstüne biner ve okunmaz olur — bulanıklık yoksa saydamlık da olmaz.
+   2. Kullanıcı "saydamlığı azalt" demişse. Apple'ın kendi ayarı bu; malzemeyi
+      taklit edip erişilebilirlik tercihini yok saymak taklidin kötü yarısı olur. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .mnav, .mini-top { background: var(--bg); }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .mnav, .mini-top {
+    background: var(--bg);
+    backdrop-filter: none; -webkit-backdrop-filter: none;
+  }
+  .mnav .nav-item.active { background: var(--green-soft); }
+}
+
+
+/* ════════════════════════════════════════════════════════════════════════
+   CAM YÜZEYLER — DENEME (19 Ağu 2026, yalnız Genel Bakış)
+   ════════════════════════════════════════════════════════════════════════
+   Kaan: "Apple'ın glassy dediğini uygula — önce tek sayfada, beğenirsek hepsine."
+   Bu yüzden kurallar `.cam` sınıfına bağlı ve sınıf TEK bir görünümde duruyor
+   (#view-genel). Yaymak = başka görünümlere aynı sınıfı eklemek; geri almak =
+   sınıfı silmek. Yüzey kurallarını doğrudan .panel/.card'a yazsaydım deneme
+   diye bir şey kalmazdı, ilk yazışta tüm site değişirdi.
+
+   CAMIN ARKASINDA BİR ŞEY OLMAK ZORUNDA. Sayfa zemini düz sıcak kağıttı
+   (--bg, dekoratif gradyan yok — open-design kararı). Düz zemin üstünde
+   bulanıklık HİÇBİR ŞEY göstermez: blur'un işi arkadaki şeyi dağıtmak, arkada
+   tek renk varsa çıktı da o tek renk olur ve pahalı bir hiç elde edilir.
+   O yüzden `.cam` aktifken sayfaya çok yumuşak bir renk ortamı seriliyor.
+   Ortam MARKA renklerinden türetiliyor (yeşil/amber/mavi) ve %13'ü geçmiyor —
+   tasarım dilinin "renk yalnız eylem gerektiren yerde" kuralı duruyor: bu
+   dekoratif katman EYLEM TAŞIMIYOR, o yüzden okunur eşiğin altında kalmalı.
+   Bir çip ya da hüküm cümlesi hâlâ ondan daha yüksek sesle konuşuyor. */
+body:has(.cam.view.active)::before {
+  content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background:
+    radial-gradient(58% 46% at 12% 6%,  rgba(27, 106, 64, .09), transparent 68%),
+    radial-gradient(48% 38% at 88% 20%, rgba(201, 135, 31, .07), transparent 70%),
+    radial-gradient(64% 44% at 52% 98%, rgba(70, 104, 138, .07), transparent 72%);
+}
+
+/* Üç katman birlikte cam yapar: saydam zemin + blur/saturate, içeriden beyaz
+   vurgu (camın üst kenarındaki ışık), yumuşak dış gölge. Biri eksikse plastik. */
+/* 20 Ağu: %58 saydamlıkta kartlar DONUK okunuyordu — cam etkisi vardı ama yüzey
+   kendi içeriğini taşıyacak kadar oturmuyordu. %72'de malzeme hâlâ görünür
+   (arkadaki içerik geçiyor) ama kart bir yüzey gibi duruyor. Saydamlık bir amaç
+   değil, derinlik aracı: okunurluğu düşürdüğü noktada fazla demektir. */
+.cam .panel,
+.cam .card:not(.hero),
+.cam .asum {
+  background: rgba(255, 255, 255, .72);
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  backdrop-filter: blur(22px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, .62);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, .8) inset,
+    0 6px 20px -10px rgba(18, 20, 15, .18);
+}
+.cam .card:not(.hero):hover { border-color: rgba(255, 255, 255, .85); }
+
+/* Panel içindeki İKİNCİL yüzeyler (inset, çip zemini, tablo başlığı) camın
+   üstünde ikinci bir cam olur — opak --bg2 kullansalardı deldiler. */
+.cam .r26-stat, .cam .ch-kpi, .cam .rk-cell, .cam .sw2-sec-body > .panel,
+.cam .db-card, .cam .hc-seg, .cam .lg-item {
+  background: rgba(255, 255, 255, .55);
+  border-color: rgba(255, 255, 255, .5);
+}
+
+/* Hero KASITLI opak kalıyor: sayfanın tek focal yüzeyi o ve cam olsaydı
+   arkasındaki ortamla yarışırdı. Camın işi hero'yu öne çıkarmak, ona katılmak
+   değil. Yalnız kenarına ışık ekleniyor ki aynı malzeme ailesinden görünsün. */
+.cam .card.hero {
+  box-shadow: 0 1px 0 rgba(255,255,255,.14) inset, 0 14px 40px -16px rgba(12, 22, 16, .45);
+}
+
+/* Bölüm rayının hairline'ı camda kaybolur — biraz daha görünür yapılıyor,
+   çünkü ray bu sayfadaki tek hiyerarşi taşıyıcısı (TASARIM DİLİ §1). */
+.cam .sw2-sec-rule { background: rgba(18, 20, 15, .10); }
+
+/* YEDEKLER — malzeme yoksa saydamlık da yok.
+   1. backdrop-filter desteklenmiyorsa saydam zemin arkadaki metnin üstüne biner
+      ve okunmaz olur; bulanıklık yoksa saydamlık da olmamalı.
+   2. Kullanıcı "saydamlığı azalt" demişse. Apple'ın kendi erişilebilirlik
+      ayarını yok sayıp malzemesini taklit etmek, taklidin kötü yarısı olur. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .cam .panel, .cam .card:not(.hero), .cam .asum { background: var(--card); border-color: var(--line); }
+  body:has(.cam.view.active)::before { display: none; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .cam .panel, .cam .card:not(.hero), .cam .asum {
+    background: var(--card); border-color: var(--line);
+    backdrop-filter: none; -webkit-backdrop-filter: none;
+  }
+  .cam .r26-stat, .cam .ch-kpi, .cam .rk-cell, .cam .db-card, .cam .hc-seg, .cam .lg-item {
+    background: var(--bg2); border-color: var(--line);
+  }
+  body:has(.cam.view.active)::before { display: none; }
+}
+
+
+/* ════════ Güvenli alan — KAZANAN kural, dosyanın en sonunda ════════
+   19 Ağu 2026, ikinci deneme. Birincisi `@media (max-width:860px)` içindeki
+   `.content` shorthand'ine yazılmıştı ve İŞE YARAMADI: aynı seçici dosyada üç
+   kez daha shorthand ile yeniden yazılıyor (satır ~1126 taban, ~2944 "kompakt
+   yoğunluk", ~2950 `@media 760`). Sonuncusu telefonda kazanıyor ve
+   padding-top'u 12px'e geri çekiyordu — düğme yine saatin altında kaldı.
+
+   Ders: aynı özgüllükte bir shorthand'e yazmak, SIRAYA bağımlı olmaktır.
+   Longhand + dosya sonu bu bağımlılığı kaldırır. `viewport-fit=cover` ve
+   `status-bar-style: black-translucent` zaten ayarlı (index.html), yani inset
+   gerçek cihazda dolu gelir; tarayıcıda 0 olduğu için orada hiçbir şey değişmez.
+
+   Dolgu düğmeye DEĞİL içeriğe veriliyor: yalnız düğmeye verseydim o kurtulur,
+   altındaki ilk kart yine çubuğa girerdi. */
+@media (max-width: 860px) {
+  .content { padding-top: calc(16px + env(safe-area-inset-top)); }
+}
+@media (max-width: 760px) {
+  .content { padding-top: calc(12px + env(safe-area-inset-top)); }
+}

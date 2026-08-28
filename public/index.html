@@ -132,7 +132,9 @@
       </section>
 
       <!-- ===== Görünüm: Genel Bakış ===== -->
-      <section class="view active" id="view-genel">
+      <!-- `cam`: cam yüzey DENEMESİ, yalnız bu görünümde (style.css "CAM YÜZEYLER").
+           Beğenilirse diğer görünümlere de aynı sınıf eklenir. -->
+      <section class="view active cam" id="view-genel">
         <div class="view-head"><h2 class="view-title">Genel Bakış</h2></div>
 
         <section id="feedStrip" hidden></section>
@@ -275,7 +277,7 @@
               <select id="r26Year" class="r26-year-sel" title="Vergi yılı seç"></select>
               <button class="btn ghost sm" id="exportR26Btn" title="Seçili yılın beyan özeti + CSV çıktısı">Beyan</button>
               <button class="btn ghost sm" id="syncR26Btn" title="İşlem Geçmişi'ndeki tüm satışları (henüz eklenmemiş olanları) bu listeye yaz">↻ Satışları senkronla</button>
-              <button class="btn primary sm" id="addR26Btn">+ Kayıt Ekle</button>
+              <button class="btn primary sm" id="addR26Btn" title="Herhangi bir kalem ekle — sembol listede, hatta portföyde olmasa da olur. Bir sembolün yanındaki + ise o sembole ekler.">+ Kayıt Ekle</button>
             </div>
           </div>
           <div id="realized2026" class="panel-body"></div>
@@ -440,8 +442,8 @@
 
         <section class="panel">
           <div class="panel-head">
-            <div><h2>Sektör / tema yoğunlaşması <span class="tip" data-tip="İpucu: Aynı temadaki hisseler aynı haberle birlikte düşer. Tek tema %40'ı aşarsa Kural 1 Bekçisi uyarır — çeşitlendirme bedava sigortadır.">?</span></h2>
-              <span class="chart-sub">Tek tema %40'ı aşarsa çeşitlendirme kalmamış demektir</span></div>
+            <div><h2>Tema masası <span class="tip" data-tip="İki soru tek tabloda: paran hangi temada yoğunlaşmış (aynı temadakiler aynı haberle birlikte düşer, %40 üstü çeşitlendirme kalmamış demektir) ve o tema iyi bir yerde mi. Tema gücü = radar evrenindeki sembollerin MEDYAN 3 aylık getirisi eksi QQQ; medyan, çünkü ortalamayı tek bir uçuş taşır. Getiriler mum önbelleğinden — tema ve endeks aynı yöntemle ölçülür. Bu tablo 'ne gidecek' demez, 'ne gitti'yi ölçer.">?</span></h2>
+              <span class="chart-sub">Ağırlığın nerede · o tema endeksin neresinde · içinde kim taşıyor</span></div>
           </div>
           <div id="sectorBox"></div>
         </section>
@@ -975,11 +977,12 @@
   <!-- 2026 realize kazanç kaydı modal -->
   <div class="modal-bg" id="r26ModalBg" hidden>
     <div class="modal">
-      <h3>Realize Kaydı</h3>
+      <h3 id="r26ModalTitle">Realize Kaydı</h3>
       <p class="modal-note">Broker'ın “Yatırım geliri” sayfasındaki bir kalemi gir: açıklama + realize tutar (₺). Zarar için eksi (−) yaz. Tarih, kaydın vergi yılını belirler.</p>
       <form id="r26Form">
         <label>Açıklama / Sembol
           <input name="label" placeholder="örn. MU veya SOFI $28 Call 30/01/26" required />
+          <small class="fld-note">Portföyde olmayan bir sembol de yazabilirsin. İlk kelime sembol sayılır.</small>
         </label>
         <label>Realize Tutar (₺)
           <input name="amountTRY" type="number" step="any" placeholder="örn. 29776.76 veya -10213.34" required />

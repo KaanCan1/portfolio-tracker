@@ -428,6 +428,155 @@ function chExitWhy(p) {
   return `<b>Çıkış — neden?</b><ul class="ch-ev">${evs}</ul><b>Sonuç: ${verdict}</b> — net ${p.realized >= 0 ? "+" : ""}${fmtUSD0(p.realized)} (${pct >= 0 ? "+" : ""}${pct.toFixed(1)}% · ${p.R >= 0 ? "+" : ""}${p.R}R${p.fees ? ` · $${(+p.fees).toFixed(2)} komisyon düşülmüş` : ""}).`;
 }
 
+/* Merdiven etiketleri — çubuktaki GERÇEK fiyat konumuna oturur.
+ * 19 Ağu 2026: etiketler `justify-content: space-between` ile EŞİT aralıklıydı,
+ * çubuktaki işaretler ise doğrusal fiyat ölçeğinde. İkisi aynı kartta çelişiyordu:
+ * MSFT'de canlı fiyat $481,63, TP1 $473,66 — çubukta şimdi (%33,8) TP1'in (%25,0)
+ * SAĞINDAYDI ve doğruydu, ama etiket satırında TP1 fiyatın sağında görünüyordu.
+ * Kaan haklı olarak "TP1 fiyatın solunda olmalı" dedi. Bir kart kendi içinde
+ * çelişirse hangi yarısına inanılacağı belirsizdir — çubuk ölçüm, etiket ölçümün adı.
+ *
+ * İki tuzak var ve ikisi de KURAL, istisna değil:
+ *   1. Stop ile giriş tipik olarak birbirine yakın (risk, hedefe olan mesafeden
+ *      küçük) → etiketler çakışır. Eşit fiyata düşenler BİRLEŞTİRİLİR (stop
+ *      başa-başa çekilince tam bu olur), yakın olanlar ikinci satıra iner.
+ *   2. %1,5 ve %98,5'teki etiket ortalanırsa karttan taşar → kenarlarda
+ *      ortalama bırakılır, sola/sağa yapıştırılır. */
+/* Etiket genişliği ÖLÇÜLMEZ, TAHMİN EDİLİR — ve tahmin en dar kaba göre yapılır.
+ * Konumlar yüzde, etiketler piksel: ikisini uzlaştırmak için bir kap genişliği
+ * varsayımı şart. 330px mobildeki en dar kart. Geniş ekranda bu varsayım fazladan
+ * bir satır ürettirir (yer varken alta iner) — ama ASLA üst üste bindirmez.
+ * Ters tercih (geniş varsay) mobilde etiketleri iç içe geçirirdi ki bu düzeltmenin
+ * çıkış noktası tam olarak o hataydı. */
+const CHL_KAP = 330;
+const CHL_SATIR = 33;   // px — etiket 30,5px (10px ad + 12,5px fiyat + boşluk); 33 nefes payı bırakır
+
+/* Merdiven etiketleri — çubuktaki GERÇEK fiyat konumuna oturur.
+ * 19 Ağu 2026: etiketler `justify-content: space-between` ile EŞİT aralıklıydı,
+ * çubuktaki işaretler ise doğrusal fiyat ölçeğinde. İkisi aynı kartta çelişiyordu:
+ * MSFT'de canlı fiyat $481,63, TP1 $473,66 — çubukta şimdi (%33,8) TP1'in (%25,0)
+ * SAĞINDAYDI ve doğruydu, ama etiket satırında TP1 fiyatın sağında görünüyordu.
+ * Bir kart kendi içinde çelişirse hangi yarısına inanılacağı belirsizdir; çubuk
+ * ölçüm, etiket ölçümün adıdır.
+ *
+ * İki tuzak KURAL, istisna değil:
+ *   1. Stop ile giriş birbirine yakın (risk, hedefe olan mesafeden küçük) →
+ *      etiketler çakışır. Eşit fiyata düşenler BİRLEŞİR (stop başa-başa
+ *      çekilince tam bu olur), sığmayanlar alt satıra iner.
+ *   2. Kenardaki etiket ortalanırsa karttan taşar → sola/sağa yapıştırılır.
+ *
+ * Çakışma ARALIKLA değil GENİŞLİKLE ölçülür: ilk deneme sabit %15 eşiğiydi ve
+ * birleşik "STOP · ◆ GİRİŞ" etiketi tek etiketten iki kat geniş olduğu için
+ * TP1'in üstüne bindi ("GİRİŞTP1" diye okundu). Birleştirmek genişletir; eşik
+ * bunu bilmiyorsa kendi çözdüğü sorunu geri getirir. */
+/* Canlı fiyat balonu kenarda TAŞIYOR — etiketlerdeki hatanın aynısı, bu kez
+ * tek öğede. Balon `translateX(-50%)` ile çubuktaki fiyat noktasına ortalanıyor;
+ * nokta %1,5'teyse balonun yarısı kartın DIŞINDA kalıyor ve kırpılıyor
+ * (fiyat stopun altına sarktığında görülür — 19 Ağu 2026 ekran görüntüsü).
+ *
+ * Çözüm balonu KAYDIRMAK, çubuktaki noktayı değil: sarmalayıcı gerçek fiyat
+ * konumunda ve genişliği sıfır, işaret çizgisi ona bağlı; içindeki baloncuk
+ * kenara sığacak kadar kayıyor. Konumu clamp etmek daha kolaydı ama o zaman
+ * işaret çizgisi yanlış fiyatı gösterirdi — bu düzeltmenin tam tersi. */
+function chNowKaydir(pos) {
+  const W = 78, K = CHL_KAP;               // balon ~78px ("$481.63" + dolgu, mono 12px)
+  const capa = (pos / 100) * K;            // çubuktaki gerçek fiyat noktası
+  // İdeal: balon çapaya ortalı. Sığmıyorsa kenara yapışır — çapa YERİNDE kalır.
+  const sol = Math.max(2, Math.min(K - W - 2, capa - W / 2));
+  // transform yüzdesi balonun KENDİ genişliğine göre, o yüzden px farkı W'ye bölünür
+  return `translateX(${((sol - capa) / W * 100).toFixed(1)}%)`;
+}
+
+function chLadderEtiketler(liste) {
+  const enPct = (ad, fiyat) => {
+    // ad ~10px/600, fiyat ~12.5px mono → karakter genişlikleri farklı
+    const px = Math.max(ad.length * 5.8, fiyat.length * 7.6) + 8;
+    return (px / CHL_KAP) * 100;
+  };
+  // Aynı fiyat = tek etiket. "STOP · ◆ GİRİŞ $451.10" iki üst üste $451.10'dan
+  // dürüst: orada gerçekten tek seviye var ve stop başa-başa kilitlenmiş demektir.
+  const birlesik = [];
+  for (const e of [...liste].sort((a, b) => a.pos - b.pos)) {
+    const son = birlesik.at(-1);
+    if (son && Math.abs(son.fiyat - e.fiyat) < 0.005) { son.ad += ` · ${e.ad}`; continue; }
+    birlesik.push({ ...e });
+  }
+  const satirSag = [];          // her satırın şu ana kadar dolduğu en sağ nokta (%)
+  let enAltSatir = 0;
+  const html = birlesik.map((e) => {
+    const metin = fmtUSD(e.fiyat);
+    const w = enPct(e.ad, metin);
+    const kenar = e.pos <= w / 2 ? "at-start" : e.pos >= 100 - w / 2 ? "at-end" : "";
+    const sol = kenar === "at-start" ? 0 : kenar === "at-end" ? 100 - w : e.pos - w / 2;
+    let satir = satirSag.findIndex((sag) => sol >= sag + 1);
+    if (satir === -1) { satir = satirSag.length; satirSag.push(0); }
+    satirSag[satir] = sol + w;
+    if (satir > enAltSatir) enAltSatir = satir;
+    const yer = kenar === "at-start" ? "left:0" : kenar === "at-end" ? "right:0" : `left:${e.pos.toFixed(1)}%`;
+    return `<span class="chl-l ${e.cls} ${kenar}" data-pos="${e.pos.toFixed(3)}" style="${yer};top:${satir * CHL_SATIR}px"><i>${e.ad}</i><b>${metin}</b></span>`;
+  }).join("");
+  return { html, yukseklik: (enAltSatir + 1) * CHL_SATIR + 2 };
+}
+
+
+/* ÖLÇÜM GEÇİŞİ — tahmini gerçekle değiştirir.
+ * chLadderEtiketler kap genişliğini 330px (en dar mobil kart) VARSAYAR, çünkü
+ * HTML metin olarak kuruluyor ve o an ölçecek bir DOM yok. Varsayım muhafazakâr:
+ * asla bindirmez ama geniş ekranda yer varken alt satır açar — masaüstünde
+ * kartın 854px olduğu yerde TP1 gereksizce aşağı iniyordu.
+ *
+ * Bu geçiş DOM'a girdikten SONRA gerçek genişlikleri ölçüp satırları yeniden
+ * dağıtır. Tahmin YEDEK olarak kalıyor: ölçüm koşmasa bile (gözlemci yoksa,
+ * öğe gizliyse) yerleşim doğrudur — yalnız gereğinden ferah. Ölçümü tek kaynak
+ * yapıp tahmini atmak, ölçüm koşana kadar üst üste binmiş bir kart demekti. */
+const chlSonKap = new WeakMap();
+function chlYerlestir(lg, zorla) {
+  const kap = lg.clientWidth;
+  if (!kap) return;                       // gizli sekme: ResizeObserver görünür olunca tekrar çağırır
+  /* DÖNGÜ KIRICI: bu fonksiyon lg'nin YÜKSEKLİĞİNİ değiştiriyor ve lg gözleniyor
+   * → her yerleşim yeni bir resize doğurur. Tarayıcı bunu döngü sayıp bildirimleri
+   * BASTIRIYOR ("ResizeObserver loop"), sonuç olarak sonraki gerçek genişlik
+   * değişimi hiç gelmiyordu (ölçüldü: kap 284→854 oldu, yerleşim 68px'te kaldı).
+   * Yalnız GENİŞLİK değiştiğinde çalış — yükseklik geri beslemesi burada ölür. */
+  if (!zorla && chlSonKap.get(lg) === kap) return;
+  chlSonKap.set(lg, kap);
+  const ler = [...lg.querySelectorAll(".chl-l")]
+    .map((e) => ({ e, pos: parseFloat(e.dataset.pos), w: e.offsetWidth }))
+    .filter((o) => Number.isFinite(o.pos) && o.w > 0)
+    .sort((a, b) => a.pos - b.pos);
+  if (!ler.length) return;
+  const satirSag = [];
+  let enAlt = 0;
+  for (const o of ler) {
+    const capa = (o.pos / 100) * kap;
+    let sol = capa - o.w / 2, kenar = "";
+    if (sol < 0) { sol = 0; kenar = "at-start"; }
+    else if (sol + o.w > kap) { sol = kap - o.w; kenar = "at-end"; }
+    // 6px görsel nefes payı — bitişik iki etiket "tek kelime" gibi okunmasın
+    let satir = satirSag.findIndex((sag) => sol >= sag + 6);
+    if (satir === -1) { satir = satirSag.length; satirSag.push(0); }
+    satirSag[satir] = sol + o.w;
+    if (satir > enAlt) enAlt = satir;
+    o.e.classList.toggle("at-start", kenar === "at-start");
+    o.e.classList.toggle("at-end", kenar === "at-end");
+    o.e.style.left = kenar === "at-end" ? "auto" : kenar === "at-start" ? "0px" : `${o.pos.toFixed(1)}%`;
+    o.e.style.right = kenar === "at-end" ? "0px" : "";
+    o.e.style.top = `${satir * CHL_SATIR}px`;
+  }
+  lg.style.minHeight = `${(enAlt + 1) * CHL_SATIR + 2}px`;
+}
+
+/* Gözlemci: ilk yerleşim, sekme değişimi (gizliyken genişlik 0), pencere
+ * yeniden boyutlandırma ve kenar çubuğu açılıp kapanması — hepsi kabın
+ * genişliğini değiştirir, hepsi aynı olayla yakalanır. */
+const chlGozlemci = typeof ResizeObserver === "function"
+  ? new ResizeObserver((girisler) => girisler.forEach((g) => chlYerlestir(g.target)))
+  : null;
+function chlBagla(kok) {
+  const hepsi = (kok || document).querySelectorAll(".chl-lg");
+  hepsi.forEach((lg) => { chlYerlestir(lg); chlGozlemci?.observe(lg); });
+}
+
 // Açık pozisyon için görsel fiyat merdiveni — stop · giriş · TP1 · TP2 tek eksende, canlı fiyat işaretçisi kayar.
 // Sol (kırmızı) = risk bölgesi (giriş→stop), sağ (yeşil) = ödül bölgesi (giriş→hedefler). Vurulan hedefler ✓ ile işaretli.
 function chLadder(p) {
@@ -435,6 +584,12 @@ function chLadder(p) {
   const at = (x) => Math.max(1.5, Math.min(98.5, ((x - lo) / span) * 100));
   const sA = at(p.stop), eA = at(p.entry), t1 = at(p.tp1), t2 = at(p.tp2), mA = at(p.mark);
   const up = p.mark >= p.entry, done1 = p.tp1hit, done2 = p.tp2hit;
+  const et = chLadderEtiketler([
+    { pos: sA, cls: "stop", ad: "STOP", fiyat: p.stop },
+    { pos: eA, cls: "entry", ad: "◆ GİRİŞ", fiyat: p.entry },
+    { pos: t1, cls: "tp", ad: `TP1${done1 ? " ✓" : ` +%${CHALLENGE.tp1}`}`, fiyat: p.tp1 },
+    { pos: t2, cls: "tp", ad: `TP2${done2 ? " ✓" : ` +%${CHALLENGE.tp2}`}`, fiyat: p.tp2 },
+  ]);
   return `<div class="chl">
     <div class="chl-bar">
       <div class="chl-seg risk" style="left:${sA}%;width:${(eA - sA).toFixed(1)}%"></div>
@@ -443,14 +598,9 @@ function chLadder(p) {
       <span class="chl-t entry" style="left:${eA}%"></span>
       <span class="chl-t tp ${done1 ? "done" : ""}" style="left:${t1}%"></span>
       <span class="chl-t tp ${done2 ? "done" : ""}" style="left:${t2}%"></span>
-      <span class="chl-now ${up ? "up" : "dn"}" style="left:${mA}%"><b>$${p.mark.toFixed(2)}</b></span>
+      <span class="chl-now ${up ? "up" : "dn"}" style="left:${mA}%"><b style="transform:${chNowKaydir(mA)}">$${p.mark.toFixed(2)}</b></span>
     </div>
-    <div class="chl-lg">
-      <span class="chl-l stop"><i>STOP</i><b>${fmtUSD(p.stop)}</b></span>
-      <span class="chl-l entry"><i>◆ GİRİŞ</i><b>${fmtUSD(p.entry)}</b></span>
-      <span class="chl-l tp"><i>TP1${done1 ? " ✓" : ` +%${CHALLENGE.tp1}`}</i><b>${fmtUSD(p.tp1)}</b></span>
-      <span class="chl-l tp"><i>TP2${done2 ? " ✓" : ` +%${CHALLENGE.tp2}`}</i><b>${fmtUSD(p.tp2)}</b></span>
-    </div>
+    <div class="chl-lg" style="min-height:${et.yukseklik}px">${et.html}</div>
   </div>`;
 }
 
@@ -466,6 +616,12 @@ function chLadderMini(p) {
     const cl = (e.k === "tp1" || e.k === "tp2") ? "win" : (e.k === "stop" || e.k === "gap") ? "loss" : e.pnl > 0.5 ? "win" : e.pnl < -0.5 ? "loss" : "neu";
     return `<span class="chlm-x ${cl}" style="left:${at(e.px)}%" title="${e.k} · $${e.px.toFixed(2)} (${e.pnl >= 0 ? "+" : ""}${fmtUSD0(e.pnl)})"></span>`;
   }).join("");
+  const etm = chLadderEtiketler([
+    { pos: sA, cls: "stop", ad: "STOP", fiyat: p.stop },
+    { pos: eA, cls: "entry", ad: "◆ GİRİŞ", fiyat: p.entry },
+    { pos: t1, cls: "tp", ad: `TP1${p.tp1hit ? " ✓" : ""}`, fiyat: p.tp1 },
+    { pos: t2, cls: "tp", ad: `TP2${p.tp2hit ? " ✓" : ""}`, fiyat: p.tp2 },
+  ]);
   return `<div class="chl chl-mini">
     <div class="chl-bar">
       <div class="chl-seg risk" style="left:${sA}%;width:${(eA - sA).toFixed(1)}%"></div>
@@ -476,12 +632,7 @@ function chLadderMini(p) {
       <span class="chl-t tp ${p.tp2hit ? "done" : ""}" style="left:${t2}%"></span>
       ${evX}
     </div>
-    <div class="chl-lg">
-      <span class="chl-l stop"><i>STOP</i><b>${fmtUSD(p.stop)}</b></span>
-      <span class="chl-l entry"><i>◆ GİRİŞ</i><b>${fmtUSD(p.entry)}</b></span>
-      <span class="chl-l tp"><i>TP1${p.tp1hit ? " ✓" : ""}</i><b>${fmtUSD(p.tp1)}</b></span>
-      <span class="chl-l tp"><i>TP2${p.tp2hit ? " ✓" : ""}</i><b>${fmtUSD(p.tp2)}</b></span>
-    </div>
+    <div class="chl-lg" style="min-height:${etm.yukseklik}px">${etm.html}</div>
   </div>`;
 }
 
@@ -781,6 +932,8 @@ async function renderChallenge() {
     }).join("")}</div>` : ""}
 
     <div class="ch-note">Oyun parasıdır, gerçek portföyden bağımsızdır, <b>kâr garantisi değildir</b>. Hesap <b>bugün $${CHALLENGE.startCapital} ile başlar</b> ve ileriye doğru işler: kurallar sağlanınca (tetik) pozisyon açılır, <b>her işlemde stop vardır</b>, riske göre boyutlanır; hedef→sat, stop→kes, nakit serbest kalınca yeni işlem. Kazanç da kayıp da dürüst gösterilir.</div>`;
+  // Merdiven etiketlerini GERÇEK genişlikle yeniden yerleştir (tahmin yedekte kalır)
+  chlBagla(el);
 }
 
 /* ===== Alfa Avı tetik şeridi — ana sayfada kuruluma yaklaşan hisseler (sekmeye girmeden haber) ===== */

@@ -163,7 +163,7 @@ function renderDailyBoard() {
   /* GÜNLÜK DEĞİŞİM TEK KAYNAKTAN (16 Ağu). Bu KPI günlük yüzdeyi kendi hesaplıyordu:
    * yalnız HİSSELERİN prevClose'undan, altın ve fon gün içi hareketi dışarıda. Kenar
    * çubuğu ve hero ise sunucunun dayOpen'ını kullanıyor. Aynı ekranda %+4,0 ve %+4,14
-   * okunuyordu — aynı sabah düzelttiğimiz $4.593/$5.207 hatasının küçük kardeşi.
+   * okunuyordu — aynı sabah düzelttiğimiz iki-farklı-toplam hatasının küçük kardeşi.
    * Artık üçü de dayOpen'dan gelir; sunucu vermezse eski hesaba düşer (tüm varlıklar
    * yerine yalnız hisse — eksik ama tutarsız değil).
    * assetTRY/fxTRY aşağıdaki "hisse hareketi vs kur etkisi" dökümünde kalmaya devam
@@ -338,13 +338,19 @@ function renderRealized2026() {
   const mf = STATE?.midasFees || null; // Midas işlem ücreti özeti (her emir $1.5)
   if (sub) sub.textContent = `${R26_YEAR} · ${grouped.length} sembol · ${kesin.length} kayıt · net ${fmtTRY0(net)}${bekleyen.length ? ` · ⏳ ${bekleyen.length} onayda` : ""}`;
   // Aksiyon hücresi: ✎ düzelt her satırda; truth kalemi düzeltilmişse ↺ geri al, manuel kayıtta 🗑 sil
-  const actCell = (r) => {
+  /* "+" YALNIZ sembol başına bir kez: tek satırlı sembolde satırın kendisinde,
+   * çok işlemli sembolde grup başlığında. Alt satırlara da koymak aynı sembol için
+   * 3-4 özdeş düğme demekti — hangisine bassan aynı şeyi yapan bir sürü düğme,
+   * kullanıcıya "bunlar farklı şeyler mi" diye sordurur. */
+  const addBtn = (sym) => `<button class="rz-edit rz-add" data-r26addsym="${sym}" title="${sym} için yeni realize kalemi ekle">+</button>`;
+  const actCell = (r, sym) => {
+    const add = sym ? addBtn(sym) : "";
     const edit = `<button class="rz-edit" data-r26edit="${r.id}" data-r26cur="${Math.round(Number(r.amountTRY) || 0)}" title="Tutarı düzelt">✎</button>`;
     const isTruth = String(r.id).startsWith("r26-truth-");
     const extra = isTruth
       ? (r.edited ? `<button class="rz-edit rz-reset" data-r26reset="${r.id}" title="Broker değerine geri dön">↺</button>` : "")
       : `<button class="btn icon" data-delr26="${r.id}" title="Sil">${svgIcon("trash","ic-sm")}</button>`;
-    return `<span class="r26-acts">${edit}${extra}</span>`;
+    return `<span class="r26-acts">${add}${edit}${extra}</span>`;
   };
   const flag = (r) => r.edited ? `<span class="r26-auto r26-edited" title="Elle düzeltildi">✓ düzeltildi</span>` : r.auto ? `<span class="r26-auto" title="Satış işleminden otomatik">oto</span>` : "";
   const subRow = (r, key) => `<tr class="r26-sub" data-sub="${key}" hidden>
@@ -367,7 +373,7 @@ function renderRealized2026() {
         ${only.date ? `<div class="tnote">${fmtDate(only.date)}</div>` : ""}
       </td>
       <td class="${cls(g.total)}">${fmtTRY(g.total)}</td>
-      <td>${actCell(only)}</td>
+      <td>${actCell(only, g.sym)}</td>
     </tr>`;
     }
     return `<tr class="r26-grp" data-grp="${g.key}">
@@ -376,7 +382,7 @@ function renderRealized2026() {
         <span class="r26-cnt">${g.recs.length} işlem</span>
       </td>
       <td class="${cls(g.total)}">${fmtTRY(g.total)}</td>
-      <td></td>
+      <td><span class="r26-acts">${addBtn(g.sym)}</span></td>
     </tr>` + g.recs.slice().sort((a, b) => b.amountTRY - a.amountTRY)
       .map((r) => subRow(r, g.key)).join("");
   }).join("");
@@ -506,8 +512,18 @@ function renderAllTrades() {
 
   const totPct = totProceeds - totUSD ? (totUSD / (totProceeds - totUSD)) * 100 : 0;
   const rangeLbl = { "1w": "son 7 gün", "1m": "son 30 gün", "3m": "son 3 ay", "1y": "son 1 yıl", all: "tüm zamanlar" }[TRADE_RANGE];
+  /* Alt not NE ÖLÇTÜĞÜNÜ yazar (28 Ağu). Bu toplam yukarıdaki TABLONUN satırlarının
+   * toplamıdır: seçili aralık, tarih filtresi yok, swing ayrımı yok. Portföyün resmî
+   * realize'i bu değil — o realizedBySym (8 Haz'dan itibaren, swing çift sayılmadan).
+   * İkisi farklı olduğunda farkı burada YAZ; sessiz bırakırsan iki panel iki sayı
+   * söyler ve hangisinin doğru olduğu okuyucuya kalır (CLAUDE.md · bir panel bir ölçümdür). */
+  const resmi = Object.values(REALIZED_USD || {}).reduce((a, b) => a + (b || 0), 0);
+  const fark = TRADE_RANGE === "all" ? totUSD - resmi : null;
+  const capraz = fark != null && Math.abs(fark) >= 0.5
+    ? ` <span class="ts-cross">· portföy realize'i <b>${fmtUSD(resmi)}</b> — aradaki ${fmtUSD(Math.abs(fark))} kuruluş öncesi satışlar ve swing defterine yazılan satışlardan (Analiz → Realize özeti)</span>`
+    : "";
   $("#tradesSub").innerHTML = trades.length
-    ? `${rangeLbl} · ${trades.length} işlem (${sellCount} satış) · Realize K/Z <b class="${cls(totUSD)}">${fmtUSD(totUSD)}</b> (${fmtPct(totPct)}) ≈ <b class="${cls(totUSD)}">${fmtTRY0(totUSD * usdtry)}</b>`
+    ? `${rangeLbl} · ${trades.length} işlem (${sellCount} satış) · bu satırların toplamı <b class="${cls(totUSD)}">${fmtUSD(totUSD)}</b> (${fmtPct(totPct)}) ≈ <b class="${cls(totUSD)}">${fmtTRY0(totUSD * usdtry)}</b>${capraz}`
     : `${rangeLbl} · işlem yok`;
 
   box.querySelectorAll("[data-delalltrade]").forEach((b) =>
@@ -697,7 +713,20 @@ flowForm.addEventListener("submit", async (e) => {
 /* ---- 2026 realize kazanç kaydı: modal + ekle/sil ---- */
 const r26ModalBg = $("#r26ModalBg");
 const r26Form = $("#r26Form");
-$("#addR26Btn")?.addEventListener("click", () => { r26Form.reset(); r26ModalBg.hidden = false; setTimeout(() => r26Form.label.focus(), 50); });
+/* Modal iki yerden açılıyor: üstteki "+ Kayıt Ekle" (sembol serbest — listede
+ * olmayan, hatta portföyde hiç bulunmayan bir hisse de girilebilir) ve satır
+ * başındaki "+" (sembol belli). Tek açıcı, çünkü iki ayrı akış er geç ayrışır.
+ * Sembol biliniyorsa odak TUTAR alanına gider: bilinen bir alana imleç koyup
+ * kullanıcıya tab attırmak, kısayolun kendisini iptal eder. */
+function r26Ac(sym = "") {
+  r26Form.reset();
+  const bas = $("#r26ModalTitle");
+  if (bas) bas.textContent = sym ? `${sym} · Realize Kaydı` : "Realize Kaydı";
+  if (sym) r26Form.label.value = sym;
+  r26ModalBg.hidden = false;
+  setTimeout(() => (sym ? r26Form.amountTRY : r26Form.label).focus(), 50);
+}
+$("#addR26Btn")?.addEventListener("click", () => r26Ac());
 $("#syncR26Btn")?.addEventListener("click", async () => {
   const btn = $("#syncR26Btn");
   btn.disabled = true; btn.textContent = "↻ Senkronlanıyor…";
@@ -725,6 +754,9 @@ r26Form?.addEventListener("submit", async (e) => {
 // Vergi yılı değişimi
 $("#r26Year")?.addEventListener("change", (e) => { R26_YEAR = Number(e.target.value) || R26_YEAR; renderRealized2026(); });
 $("#realized2026")?.addEventListener("click", async (e) => {
+  // Satır başındaki "+" → o sembol için modal (tutar alanı odakta)
+  const addSym = e.target.closest("[data-r26addsym]");
+  if (addSym) { r26Ac(addSym.dataset.r26addsym); return; }
   // ✓ Onayla: bekleyen otomatik kaydı (gerekirse düzeltilmiş tutarla) hesaba kat
   const okBtn = e.target.closest("[data-r26approve]");
   if (okBtn) {
