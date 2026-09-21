@@ -26,12 +26,16 @@ async function loadSwingDeck() {
   const el = $("#swingDeck");
   if (el && !SWINGDECK._loaded) el.innerHTML = `<div class="radar-empty">↻ Swing defteri yükleniyor…</div>`;
   try {
-    const d = await (await fetch("/api/swing-trades")).json();
-    SWINGDECK = { trades: d.trades || [], live: d.live || {}, goal: d.goal || { min: 600, max: 700 }, proven: d.proven || null, _loaded: true };
-  } catch { SWINGDECK._loaded = true; }
+    const r = await fetch("/api/swing-trades");
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const d = await r.json();
+    if (!Array.isArray(d?.trades)) throw new Error("Geçersiz swing yanıtı");
+    SWINGDECK = { trades: d.trades, live: d.live || {}, goal: d.goal || { min: 600, max: 700 }, proven: d.proven || null, _loaded: true, _valid: true };
+  } catch { SWINGDECK = { ...SWINGDECK, _loaded: true, _valid: false }; }
   renderSwingDeck();
   renderDailyBoard(); // home "Swing Nöbeti" şeridi güncel swing verisiyle yenilensin
   loadWeeklyPlan();   // Hafta Sonu Rutini paneli (sekme tepesi) — hafif KV okuması
+  window.PortfolioDesk?.refresh?.();
 }
 
 // Tek pozisyon için türetilmiş metrikler

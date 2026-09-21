@@ -1,0 +1,65 @@
+.desk-three-toggle {
+  order: 2;
+  min-height: 36px;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.desk-three-toggle[aria-pressed="true"] {
+  border-color: var(--desk-accent, #096e75);
+  color: var(--desk-accent, #096e75);
+  background: var(--desk-accent-soft, #e7f3f2);
+}
+
+.desk-three-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.desk-three-canvas canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.desk-allocation-stage[data-three-ready="true"] .desk-three-canvas {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.desk-allocation-stage[data-three-ready="true"] .desk-allocation-fallback {
+  visibility: hidden;
+}
+
+.desk-three-state {
+  position: absolute;
+  z-index: 2;
+  right: 10px;
+  bottom: 8px;
+  left: 10px;
+  color: var(--desk-muted, #687585);
+  font-size: 11px;
+  line-height: 1.35;
+  text-align: center;
+  pointer-events: none;
+}
+
+.desk-allocation-list > div.is-three-active {
+  border-radius: 7px;
+  background: var(--desk-accent-soft, #e7f3f2);
+}
+
+@media (max-width: 640px), (prefers-reduced-motion: reduce) {
+  .desk-three-toggle,
+  .desk-three-canvas,
+  .desk-three-state {
+    display: none;
+  }
+
+  .desk-allocation-stage[data-three-ready="true"] .desk-allocation-fallback {
+    visibility: visible;
+  }
+}

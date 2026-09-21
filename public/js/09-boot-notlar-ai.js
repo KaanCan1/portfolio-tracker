@@ -266,8 +266,19 @@ function qmSizeLine(qm) {
   return `<div class="cm-qm-size"><b>Boyut:</b> ${parts}${cashWarn}</div>`;
 }
 
-const VIEWS = ["notlar", "genel", "swingdefteri", "buyume", "radar", "analiz", "challenge", "raporlar"];
+const VIEWS = ["notlar", "genel", "pozisyonlar", "swingdefteri", "buyume", "radar", "analiz", "challenge", "raporlar"];
 const SWING_SEGS = ["swingdefteri", "buyume"]; // ⚡ Swing hub segmentleri (tek nav altında)
+const DESK_VIEW_META = {
+  genel: ["Genel bakış", "Portföyün, planların ve bugünün öncelikleri.", "+ Varlık ekle"],
+  pozisyonlar: ["Pozisyonlar", "Varlıkların, nakdin ve işlem geçmişin.", "+ Varlık ekle"],
+  notlar: ["Karar günlüğü", "Yatırım fikirlerini bağlamıyla kaydet ve değerlendir.", "+ Not ekle"],
+  swingdefteri: ["Swing", "Açık planların, pozisyonların ve haftalık takibin.", "+ Swing planı"],
+  buyume: ["Büyüme", "Ana para geri alımı ve uzun vadeli ilerleme.", "Pozisyonlara git"],
+  radar: ["Radar", "Kurulumları kanıtı, yaşı ve risk bağlamıyla incele.", "Radarı yenile"],
+  analiz: ["Risk & analiz", "Performansı, yoğunlaşmayı ve risk kapsamını gör.", "Pozisyonlara git"],
+  challenge: ["Deneyler", "Sanal sermayeli Alfa Avı ve strateji laboratuvarı.", "Deneyleri yenile"],
+  raporlar: ["Günlük raporlar", "Karar karnesi ve geçmiş sinyaller.", "Bugüne git"],
+};
 // Eski hash'ler (yer imi/paylaşılan link) → birleşik Radar + ilgili filtre
 let pendingRadarFilter = null;
 const RADAR_ALIASES = { firsat: "swing", hisse: "all", swing: "swing", tarama: "all", cuma: "cuma", sinyal: "swing", leopold: null };
@@ -300,6 +311,24 @@ function showView(name) {
   // Nav: Swing hub (data-view=swingdefteri) 3 segmentin (defter/qm/büyüme) hepsinde aktif kalır
   document.querySelectorAll(".nav-item").forEach((b) =>
     b.classList.toggle("active", b.dataset.view === name || (b.dataset.view === "swingdefteri" && SWING_SEGS.includes(name))));
+  document.querySelectorAll(".nav-item[data-view]").forEach((b) => {
+    const current = b.dataset.view === name || (b.dataset.view === "swingdefteri" && SWING_SEGS.includes(name));
+    if (current) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
+  });
+  const meta = DESK_VIEW_META[name] || DESK_VIEW_META.genel;
+  const title = document.getElementById("deskPageTitle");
+  const subtitle = document.getElementById("deskPageSubtitle");
+  const primary = document.getElementById("deskPrimaryAction");
+  if (title) title.textContent = meta[0];
+  if (subtitle) subtitle.textContent = meta[1];
+  if (primary) { primary.textContent = meta[2]; primary.dataset.actionView = name; }
+  const more = document.getElementById("menuToggle");
+  const coreViews = ["genel", "pozisyonlar", "radar", "swingdefteri", "buyume"];
+  if (more) {
+    const moreActive = !coreViews.includes(name);
+    more.classList.toggle("active", moreActive);
+    if (moreActive) more.setAttribute("aria-current", "page"); else more.removeAttribute("aria-current");
+  }
   // Swing segment bar'larını senkronla
   if (SWING_SEGS.includes(name)) {
     document.querySelectorAll(".swing-seg .seg").forEach((b) => b.classList.toggle("active", b.dataset.swseg === name));
@@ -308,7 +337,7 @@ function showView(name) {
   if (("#" + name) !== location.hash) history.replaceState(null, "", "#" + name);
   sw2BosBolumleriGizle(document.querySelector("#view-" + name) || document);
   window.scrollTo(0, 0);
-  $("#sidebar")?.classList.remove("open"); const _bd = $("#navBackdrop"); if (_bd) _bd.hidden = true; // mobilde menüyü kapat
+  setNav(false); // mobil/tablet menüsünü kapat
   if (name === "notlar") loadNotes();
   if (name === "analiz") renderAnaliz();
   if (name === "challenge") { renderChallenge(); labInit(); }
@@ -392,6 +421,10 @@ $("#nav")?.addEventListener("click", (e) => {
   // ⚡ Swing nav → HER ZAMAN Defter açılır (segment bar'dan Büyüme'ye geçilebilir)
   showView(b.dataset.view);
 });
+$("#mnav")?.addEventListener("click", (e) => {
+  const b = e.target.closest(".nav-item[data-view]");
+  if (b) showView(b.dataset.view);
+});
 // Swing hub segment bar (Defter / Qullamaggie / Büyüme)
 document.addEventListener("click", (e) => {
   const b = e.target.closest(".swing-seg .seg");
@@ -399,18 +432,107 @@ document.addEventListener("click", (e) => {
 });
 window.addEventListener("hashchange", () => showView((location.hash || "").slice(1)));
 // Mobil menü: hamburger açar/kapar; backdrop'a tıkla → kapat
+const deskCompactNav = window.matchMedia("(max-width: 1023px)");
+let deskNavReturnFocus = null;
 function setNav(open) {
-  $("#sidebar")?.classList.toggle("open", open);
+  const sidebar = $("#sidebar");
+  const compact = deskCompactNav.matches;
+  if (!sidebar) return;
+  if (open && compact) {
+    deskNavReturnFocus = document.activeElement;
+    sidebar.inert = false;
+    sidebar.removeAttribute("aria-hidden");
+    sidebar.setAttribute("role", "dialog");
+    sidebar.setAttribute("aria-modal", "true");
+    sidebar.setAttribute("aria-label", "Ana menü");
+    sidebar.classList.add("open");
+    $("#navClose")?.focus();
+    document.querySelector(".content")?.setAttribute("inert", "");
+    document.getElementById("mnav")?.setAttribute("inert", "");
+  } else {
+    document.querySelector(".content")?.removeAttribute("inert");
+    document.getElementById("mnav")?.removeAttribute("inert");
+    if (compact && sidebar.contains(document.activeElement) && deskNavReturnFocus?.isConnected) deskNavReturnFocus.focus();
+    sidebar.classList.remove("open");
+    sidebar.removeAttribute("role");
+    sidebar.removeAttribute("aria-modal");
+    sidebar.removeAttribute("aria-label");
+    sidebar.inert = compact;
+    if (compact) sidebar.setAttribute("aria-hidden", "true");
+    else sidebar.removeAttribute("aria-hidden");
+  }
   const bd = $("#navBackdrop"); if (bd) bd.hidden = !open;
+  $("#deskMenuToggle")?.setAttribute("aria-expanded", open ? "true" : "false");
 }
-$("#menuToggle")?.addEventListener("click", () => setNav(!$("#sidebar")?.classList.contains("open")));
+deskCompactNav.addEventListener?.("change", () => setNav(false));
+let deskMoreReturnFocus = null;
+function setMoreSheet(open) {
+  const sheet = $("#deskMoreSheet"); const bd = $("#deskMoreBackdrop"); const toggle = $("#menuToggle");
+  if (!sheet || !bd || !toggle) return;
+  if (open) {
+    deskMoreReturnFocus = document.activeElement;
+    sheet.hidden = false; bd.hidden = false; toggle.setAttribute("aria-expanded", "true");
+    document.querySelector(".layout")?.setAttribute("inert", "");
+    document.getElementById("mnav")?.setAttribute("inert", "");
+    document.body.classList.add("desk-sheet-open");
+    requestAnimationFrame(() => sheet.focus());
+  } else {
+    sheet.hidden = true; bd.hidden = true; toggle.setAttribute("aria-expanded", "false");
+    document.querySelector(".layout")?.removeAttribute("inert");
+    document.getElementById("mnav")?.removeAttribute("inert");
+    document.body.classList.remove("desk-sheet-open");
+    if (deskMoreReturnFocus?.isConnected) deskMoreReturnFocus.focus();
+  }
+}
+$("#menuToggle")?.addEventListener("click", () => setMoreSheet($("#deskMoreSheet")?.hidden !== false));
+$("#deskMoreClose")?.addEventListener("click", () => setMoreSheet(false));
+$("#deskMoreBackdrop")?.addEventListener("click", () => setMoreSheet(false));
+$("#deskMoreSheet")?.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-sheet-view]");
+  if (!b) return;
+  setMoreSheet(false); showView(b.dataset.sheetView);
+});
+$("#deskMoreSheet")?.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") { e.preventDefault(); setMoreSheet(false); return; }
+  if (e.key !== "Tab") return;
+  const focusable = [...e.currentTarget.querySelectorAll('button:not([disabled]), [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')];
+  if (!focusable.length) return;
+  const first = focusable[0], last = focusable[focusable.length - 1];
+  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+});
+$("#deskMenuToggle")?.addEventListener("click", () => setNav(!$("#sidebar")?.classList.contains("open")));
+$("#navClose")?.addEventListener("click", () => setNav(false));
 $("#navBackdrop")?.addEventListener("click", () => setNav(false));
+$("#sidebar")?.addEventListener("keydown", (e) => {
+  if (!deskCompactNav.matches || !$("#sidebar")?.classList.contains("open")) return;
+  if (e.key === "Escape") { e.preventDefault(); setNav(false); return; }
+  if (e.key !== "Tab") return;
+  const focusable = [...e.currentTarget.querySelectorAll('button:not([disabled]), [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')]
+    .filter((el) => el.offsetParent !== null);
+  if (!focusable.length) { e.preventDefault(); e.currentTarget.focus(); return; }
+  const first = focusable[0], last = focusable[focusable.length - 1];
+  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+});
 $("#logoutBtn")?.addEventListener("click", async () => {
   try { await fetch("/api/logout", { method: "POST" }); } catch {}
   window.location.href = "/login";
 });
 
 $("#refreshBtn").addEventListener("click", load);
+$("#deskSheetRefresh")?.addEventListener("click", () => { setMoreSheet(false); $("#refreshBtn")?.click(); });
+$("#deskSheetLogout")?.addEventListener("click", () => $("#logoutBtn")?.click());
+$("#deskPrimaryAction")?.addEventListener("click", (e) => {
+  const view = e.currentTarget.dataset.actionView || "genel";
+  if (view === "notlar") { showView("notlar"); $("#noteText")?.focus(); return; }
+  if (view === "swingdefteri" && typeof openSwingModal === "function") { openSwingModal(); return; }
+  if (view === "radar") { loadRadarBoard(); return; }
+  if (view === "challenge") { renderChallenge(); return; }
+  if (view === "raporlar") { showView("raporlar"); return; }
+  if (["buyume", "analiz"].includes(view)) { showView("pozisyonlar"); return; }
+  showView("pozisyonlar"); $("#addBtn")?.click();
+});
 $("#addWatchBtn").addEventListener("click", addWatch);
 $("#watchInput").addEventListener("keydown", (e) => { if (e.key === "Enter") addWatch(); });
 
@@ -420,21 +542,30 @@ $("#watchInput").addEventListener("keydown", (e) => { if (e.key === "Enter") add
    alınır. render her çizimde yeniden uygular. */
 const PM_SEL = [
   ".card.hero .value", ".card.hero .hero-usd", ".card.hero .meta",
-  "#sbVal", "#sbUsd", // sol menü nabız kartı da gizlilik modunda maskelenir
+  "#sbVal", "#sbDay", "#sbUsd", // sol menü nabız kartı da gizlilik modunda maskelenir
+  ".mini-top .mt-val", ".mini-top .mt-day", ".mini-top .mt-sub",
   ".hero-compare .hc-v",
   ".cards-metrics .card .value", ".cards-metrics .card .meta",
   ".alloc .lg-val", ".alloc .lg-usd", ".alloc .lg-pct",
   ".alloc .dc-main", ".alloc .dc-sub", ".alloc .dc-pct",
   ".mover-card .mv-pct",
-  ".cash-item .v",
+  ".cash-item .v", ".cash-item .sub",
+  "#flowsSub", "#tradesSub", "#r26Sub", "#alertsSub",
   "#chartSub", ".chart-ylabels span",
   "#tables tbody td:not(.l):not(.spark-col)", "#tables tfoot td:not(.l)",
   "#allTrades tbody td:not(.l)", "#allTrades tfoot td:not(.l)",
   "#realized2026 tbody td:not(.l)", "#realized2026 .r26-stat > b",
   ".trade-table td:not(.l)", ".ts-item b",
+  ".desk-sensitive", ".desk-total-delta", ".desk-metric-strip article > span",
+  ".desk-priority em", ".desk-risk-list b",
 ].join(", ");
 function maskEl(el) {
-  if (el.dataset.pm === "1") return;
+  if (el.dataset.pm === "1") {
+    // Arka plan yenilemesi maskeli düğümün metnini değiştirdiyse yeni değeri
+    // yeniden yakala. Aksi halde `data-pm` kalırken güncel rakam görünür olurdu.
+    if (![...el.childNodes].some((node) => node.nodeType === Node.TEXT_NODE && /[0-9]/.test(node.nodeValue || "")) && !/[0-9]/.test(el.textContent || "")) return;
+    delete el.dataset.pm; el._pmOrig = null;
+  }
   const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
   const nodes = []; while (w.nextNode()) nodes.push(w.currentNode);
   el._pmOrig = nodes.map((n) => n.nodeValue);
@@ -459,13 +590,33 @@ function applyPrivacy(on) {
   try { localStorage.setItem("privacy", on ? "1" : "0"); } catch {}
   const b = document.getElementById("privacyToggle");
   if (b) { b.textContent = on ? "🙈" : "👁"; b.classList.toggle("on", on); }
+  const desk = document.getElementById("deskPrivacy");
+  if (desk) {
+    desk.setAttribute("aria-pressed", on ? "true" : "false");
+    desk.setAttribute("aria-label", on ? "Tutarları göster" : "Tutarları gizle");
+    desk.textContent = on ? "Tutarları göster" : "Gizlilik";
+  }
   applyMask(on);
 }
 // Buton her render'da yeniden oluşuyor → delege dinleyici (tek sefer)
 document.addEventListener("click", (e) => {
   if (e.target.closest("#privacyToggle")) applyPrivacy(!document.body.classList.contains("privacy"));
 });
-try { if (localStorage.getItem("privacy") === "1") document.body.classList.add("privacy"); } catch {}
+window.addEventListener("portfolio:updated", () => {
+  // Genel bakış dinleyicisi aynı olayda DOM'u yeniler; mikro görev yeni düğümler
+  // yerleştikten sonra çalışarak arka plan yenilemesinde rakam sızmasını önler.
+  queueMicrotask(() => { if (document.body.classList.contains("privacy")) applyMask(true); });
+});
+try {
+  const initialPrivacy = localStorage.getItem("privacy") === "1";
+  document.body.classList.toggle("privacy", initialPrivacy);
+  const desk = document.getElementById("deskPrivacy");
+  if (desk) {
+    desk.setAttribute("aria-pressed", initialPrivacy ? "true" : "false");
+    desk.setAttribute("aria-label", initialPrivacy ? "Tutarları göster" : "Tutarları gizle");
+    desk.textContent = initialPrivacy ? "Tutarları göster" : "Gizlilik";
+  }
+} catch { document.body.classList.remove("privacy"); }
 
 showView("genel"); // açılış HER ZAMAN Genel Bakış (hash oturum içi gezinmede çalışmaya devam eder)
 sbGreeting(); sbMarket(); // sol menü selamlama + NYSE durumu ilk boyada hazır olsun
@@ -590,6 +741,7 @@ function resetNoteForm() {
   const sub = $("#noteSubmit"); if (sub) sub.textContent = "Not ekle";
   const cancel = $("#noteCancel"); if (cancel) cancel.hidden = true;
   const hint = $("#noteHint"); if (hint) hint.textContent = "Enter ile kaydet · Shift+Enter yeni satır · not anındaki fiyat otomatik damgalanır";
+  const error = $("#noteError"); if (error) { error.hidden = true; error.textContent = ""; }
 }
 $("#noteMore")?.addEventListener("click", () => {
   const ex = $("#noteExtra"); if (!ex) return;
@@ -608,12 +760,31 @@ $("#noteForm")?.addEventListener("submit", async (e) => {
     url: $("#noteUrl")?.value || "",
   };
   const sub = $("#noteSubmit"); if (sub) sub.disabled = true;
+  const error = $("#noteError"); if (error) { error.hidden = true; error.textContent = ""; }
   try {
     const url = NOTE_EDIT_ID ? `/api/notes/${NOTE_EDIT_ID}` : "/api/notes";
-    await fetch(url, { method: NOTE_EDIT_ID ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const response = await fetch(url, { method: NOTE_EDIT_ID ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    if (!response.ok) {
+      let detail = "";
+      try {
+        const payload = await response.json();
+        detail = payload?.error || payload?.message || "";
+      } catch {}
+      const message = response.status === 401
+        ? "Oturumun sona ermiş olabilir. Taslağın korundu; yeniden giriş yaptıktan sonra tekrar dene."
+        : response.status >= 500
+          ? "Sunucu notu kaydedemedi. Taslağın korundu; biraz sonra tekrar dene."
+          : detail || `Not kaydedilemedi (${response.status}). Alanları kontrol edip tekrar dene.`;
+      throw Object.assign(new Error(message), { handled: true });
+    }
     resetNoteForm();
     await loadNotes();
-  } catch {} finally { if (sub) sub.disabled = false; }
+  } catch (err) {
+    if (error) {
+      error.textContent = err?.handled ? err.message : "Bağlantı kurulamadı. Taslağın korundu; bağlantıyı kontrol edip tekrar dene.";
+      error.hidden = false;
+    }
+  } finally { if (sub) sub.disabled = false; }
 });
 $("#noteText")?.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("#noteForm")?.requestSubmit(); }

@@ -205,10 +205,19 @@ const assetVer = (f) => { try { return Math.floor(statSync(join(__dirname, "publ
 app.get(["/", "/index.html"], (_req, res) => {
   try {
     const html = readFileSync(join(__dirname, "public", "index.html"), "utf8")
-      .replace(/(href|src)="((?:js\/)?[\w.-]+\.(?:css|js))"/g, (_m, attr, file) => `${attr}="${file}?v=${assetVer(file)}"`);
+      .replace(/(href|src)="((?:(?:js|css)\/)?[\w.-]+\.(?:css|js))"/g, (_m, attr, file) => `${attr}="${file}?v=${assetVer(file)}"`);
     res.set("Cache-Control", "no-cache").type("html").send(html);
   } catch { res.sendFile(join(__dirname, "public", "index.html")); }
 });
+
+// Three.js yalnız kullanıcı 3B dağılım görünümünü açtığında yüklenir. Paketi
+// node_modules içinden dar bir yol altında sunarak CDN bağımlılığı ve sürüm
+// kayması yaratmayız; package.json exact sürümü kilitler.
+app.use("/vendor/three/0.180.0", express.static(join(__dirname, "node_modules", "three", "build"), {
+  immutable: true,
+  maxAge: "1y",
+  fallthrough: false,
+}));
 
 // CSS/JS: her istekte ETag ile doğrulat (no-cache) — sürümlü URL değişmese bile
 // bayat kopya yaşayamaz; içerik aynıysa 304 döner, maliyeti yok denecek kadar az.

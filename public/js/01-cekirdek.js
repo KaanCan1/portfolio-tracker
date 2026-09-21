@@ -200,6 +200,7 @@ function korCarpanNotu() {
 
 async function load() {
   $("#updated").innerHTML = '<span class="spin">↻</span> yükleniyor…';
+  window.dispatchEvent(new CustomEvent("portfolio:loading"));
   PRORISK = null; // her yüklemede taze risk hesabı
   try {
     const r = await fetch("/api/portfolio");
@@ -214,6 +215,7 @@ async function load() {
     korCarpaniYukle();
   } catch (e) {
     $("#updated").textContent = "Bağlantı hatası";
+    window.dispatchEvent(new CustomEvent("portfolio:error", { detail: { message: "Portföy verisine ulaşılamadı." } }));
   }
 }
 
@@ -502,6 +504,7 @@ async function loadSentiment() {
  * Sunucudaki olay defteri (bekçi/sinyal/rejim/Alfa) + cihazlar-arası "gördüm"
  * imleci. Yeni olay yoksa kart hiç çizilmez — sayfa temiz kalır. */
 let FEEDDATA = null;
+let FEED_STATUS = "loading";
 let FEED_OPENALL = false;
 const FEED_ICON = { pos: "shield", sig: "zap", mkt: "activity", alfa: "trophy", plan: "calendar" };
 const FEED_NAV = { sig: "radar", alfa: "challenge", plan: "swingdefteri" }; // satır tıklaması ilgili sekmeye götürür
@@ -664,7 +667,29 @@ function feedDrawerClose() {
   setTimeout(() => { bg.hidden = true; }, 240);
 }
 async function loadFeed() {
-  try { FEEDDATA = await (await fetch("/api/feed")).json(); renderFeed(); } catch {}
+  if (!FEEDDATA) FEED_STATUS = "loading";
+  try {
+    const r = await fetch("/api/feed");
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const d = await r.json();
+    if (!d || !Array.isArray(d.events)) throw new Error("Geçersiz feed yanıtı");
+    FEEDDATA = d;
+    FEED_STATUS = "ready";
+    renderFeed();
+    if (window.PortfolioDeskSnapshot) {
+      window.PortfolioDeskSnapshot.feed = { status: "ready", events: feedNewEvents().map((item) => ({ ...item })) };
+      window.dispatchEvent(new CustomEvent("portfolio:feed", { detail: window.PortfolioDeskSnapshot.feed }));
+    }
+  } catch {
+    FEED_STATUS = "error";
+    if (window.PortfolioDeskSnapshot) {
+      window.PortfolioDeskSnapshot.feed = {
+        status: "error",
+        events: Array.isArray(window.PortfolioDeskSnapshot.feed?.events) ? window.PortfolioDeskSnapshot.feed.events : [],
+      };
+      window.dispatchEvent(new CustomEvent("portfolio:feed", { detail: window.PortfolioDeskSnapshot.feed }));
+    }
+  }
 }
 $("#feedStrip")?.addEventListener("click", (e) => {
   if (e.target.closest("[data-fdopen]")) feedDrawerOpen();
@@ -784,6 +809,51 @@ function render() {
         meta.noSignalYet?.length ? `↻ İlk tarama bekleyen: ${meta.noSignalYet.join(", ")}.` : "",
       ].filter(Boolean)
     : [];
+
+  /* Yeni Genel Bakış bu sözleşmeyi tüketir; finansal toplamları tekrar hesaplamaz.
+   * canonical muhasebe değeri, display ise eksik veri durumunda son güvenilir
+   * snapshot değeridir. Kopyalanmış küçük diziler, görünümün ana STATE'i yanlışlıkla
+   * değiştirmesini önler. */
+  const dayCompare = buildCompare(STATE.history, grandTotal, STATE.dayOpen?.total);
+  const dayPct = dayCompare.find((item) => item.label === "Gün")?.pct ?? null;
+  window.PortfolioDeskSnapshot = {
+    canonicalGrandTotalTRY: grandTotal,
+    grandTotalTRY: grandTotal,
+    displayTotalTRY: heroTotal,
+    healthy: !!healthy,
+    allocation: {
+      segs: segs.map((item) => ({ ...item })),
+      total: allocTotal,
+      usdtry: fx.usdtry || 0,
+    },
+    holdings: holdings.map((holding) => ({ ...holding })),
+    fx: { ...fx },
+    updatedAt: STATE.updatedAt || new Date().toISOString(),
+    healthIssues: [...healthIssues],
+    metrics: {
+      totalMarketTRY: totalMarket,
+      totalCostTRY: totalCost,
+      cashTRY: cashTL,
+      profitTRY: profit,
+      profitPct,
+      realizedUSD,
+      realizedTRY,
+      netInvestedTRY: netInvested,
+      realProfitTRY: realProfit,
+      realPct,
+      dayPct,
+    },
+    alerts: Array.isArray(STATE.alerts) ? STATE.alerts.map((item) => ({ ...item })) : [],
+    feed: {
+      status: FEED_STATUS,
+      events: feedNewEvents().map((item) => ({ ...item })),
+    },
+    earnings: holdings
+      .filter((holding) => holding.type === "stock" && holding.earnings?.daysLeft != null)
+      .map((holding) => ({ symbol: holding.symbol, horizon: holding.horizon, ...holding.earnings }))
+      .sort((a, b) => a.daysLeft - b.daysLeft),
+  };
+  window.dispatchEvent(new CustomEvent("portfolio:updated", { detail: window.PortfolioDeskSnapshot }));
   $("#cardsTop").innerHTML = `
       <div class="card hero">
         <button class="privacy-toggle" id="privacyToggle" type="button" title="Tutarları gizle/göster (gizlilik modu)" aria-label="Gizlilik modu">${
@@ -1356,4 +1426,3 @@ $("#rangeTabs").addEventListener("click", (e) => {
   document.querySelectorAll(".rt").forEach((x) => x.classList.toggle("active", x === b));
   if (STATE) drawChart();
 });
-
