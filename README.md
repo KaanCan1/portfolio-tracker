@@ -2,7 +2,7 @@
 
 **Self-hosted stock portfolio & swing-trading discipline dashboard** — built end-to-end as a solo project: product, design, backend, data pipelines and AI integration.
 
-Vanilla JavaScript SPA · Express · PostgreSQL · Claude API · MCP
+Vanilla JavaScript SPA · Three.js · Express · PostgreSQL · Claude API · MCP
 
 ![Node](https://img.shields.io/badge/Node-%E2%89%A520-339933?logo=node.js&logoColor=white)
 ![Express](https://img.shields.io/badge/Express-4-000000?logo=express&logoColor=white)
@@ -11,7 +11,14 @@ Vanilla JavaScript SPA · Express · PostgreSQL · Claude API · MCP
 ![MCP](https://img.shields.io/badge/MCP-server-6C47FF)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-![Overview](docs/screenshots/overview.png)
+![Portfolio Tracker desktop overview with allocation, priorities and portfolio summary](docs/screenshots/overview.png)
+
+<details>
+  <summary>Mobile overview</summary>
+  <img src="docs/screenshots/overview-mobile.png" alt="Mobile overview with portfolio summary, today's priorities and bottom navigation" width="390">
+</details>
+
+*Screenshots use the local mock server and sample data.*
 
 > **Why it exists** — I wanted one place that enforces my own trading discipline instead of just charting prices: *Rule #1: don't lose money.* Positions without a stop plan get flagged, new entries are blocked when the market regime is off, profits trigger "pull your initial capital, let the profit ride for free" suggestions. The app is my daily driver; the UI is Turkish because it was built for me first.
 
@@ -20,7 +27,7 @@ Vanilla JavaScript SPA · Express · PostgreSQL · Claude API · MCP
 ## Features
 
 **Portfolio core**
-- Live portfolio (US stocks, funds, gold, options) with day/week/month/YTD returns, allocation donut, benchmark compare and a privacy mode that masks every number
+- Live portfolio (US stocks, funds, gold, options) with day/week/month/YTD returns, allocation donut with an optional 3D desktop view, benchmark compare and a privacy mode that masks every number
 - Price alerts, transaction ledger with realized P/L, TL/USD dual accounting, tax view
 - **Notes** — a labeled journal (*to buy / watching / to sell / thesis*) so every trade idea leaves a paper trail
 
@@ -43,11 +50,11 @@ Vanilla JavaScript SPA · Express · PostgreSQL · Claude API · MCP
 
 | Radar | Thesis Desk (Claude) |
 |---|---|
-| ![Radar](docs/screenshots/radar.png) | ![Thesis](docs/screenshots/analiz-ai.png) |
+| ![Radar setup cards and scan results](docs/screenshots/radar.png) | ![Claude thesis desk with bull and bear cases](docs/screenshots/analiz-ai.png) |
 
 | Swing journal | Notes |
 |---|---|
-| ![Swing](docs/screenshots/swing.png) | ![Notes](docs/screenshots/notes.png) |
+| ![Swing journal and measured monthly contribution](docs/screenshots/swing.png) | ![Decision journal and notes](docs/screenshots/notes.png) |
 
 ---
 
@@ -74,7 +81,7 @@ What the diagram leaves out, for node-budget reasons:
 - **Dev/prod parity** — `scripts/mock-swing-server.js` serves the real SPA against realistic fake data and stubbed AI endpoints
 
 **Engineering choices I'd defend in a review**
-- **No frontend framework, no build step.** One hand-rolled SPA talking to one Express file. For a single-user tool, the absence of tooling *is* the feature: instant deploys, zero dependency churn, 3 runtime deps total (`express`, `pg`, `@anthropic-ai/sdk`).
+- **No frontend framework, no build step.** One vanilla-JS SPA talking to Express. The 2D allocation view works by default; Three.js loads on demand for the optional 3D desktop view.
 - **Deterministic first, LLM second.** The rule engine produces the evidence; Claude interprets it. AI output is schema-constrained, cached, persisted and feature-flagged — if the key is missing the panels hide themselves and nothing else breaks.
 - **Provider-agnostic data layer.** Every external call goes through a TTL cache sized to free-tier quotas; the app stays fully usable when a provider throttles (stale-but-shown beats blank).
 - **Honest measurement.** The paper-trading ledger is append-only, the day audit stores its inputs alongside the verdict, and realized P/L can be overridden with broker ground truth — the app is designed to prevent me from lying to myself.
