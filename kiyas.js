@@ -18,6 +18,8 @@
  *  · Çakışan pencereler → günlük getiriler örtüşmez, sorun yok.
  */
 
+import { akisUSD as akisTutarUSD } from "./performans.js";
+
 const g10 = (x) => String(x ?? "").slice(0, 10);
 const ORT = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0);
 
@@ -174,11 +176,12 @@ export function kiyasHesapla({ snaps = [], flows = [], endeksler = {}, minGun = 
   const indeks = new Map(ortak.map((s, i) => [s.d, i]));
   for (const f of flows || []) {
     const g = g10(f?.date); if (!g) continue;
-    const tutar = Number(f.amountTRY); if (!isFinite(tutar) || !tutar) continue;
     let i = indeks.get(g);
     if (i == null) { i = ortak.findIndex((s) => s.d > g); if (i < 0) continue; }  // pencere dışına taşma → yok say
     if (i === 0) continue;                                    // ilk gün taban; getiri üretmez
-    akisUSD[i] += (f.type === "withdraw" ? -1 : 1) * tutar / ortak[i].kur;
+    const tutar = akisTutarUSD(f, ortak[i].kur);
+    if (tutar == null) return { ok: false, neden: "akis", n: ortak.length, minGun };
+    akisUSD[i] += (f.type === "withdraw" ? -1 : 1) * tutar;
   }
 
   const maske = adimMaskesi(ortak.map((x) => x.d), maxBosluk);

@@ -152,7 +152,10 @@
       ? updated.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })
       : "—";
 
-    const health = snapshot.healthy
+    const gap = snapshot.performanceWarning;
+    const health = gap
+      ? `<div class="desk-health is-warning"><span aria-hidden="true">!</span><div><b>Geçmiş nakit hareketleri doğrulanmalı</b><small>${safe(gap)}</small></div></div>`
+      : snapshot.healthy
       ? `<div class="desk-health is-ok"><span aria-hidden="true">●</span> Veriler güncel <small>${updateLabel}</small></div>`
       : `<div class="desk-health is-warning"><span aria-hidden="true">!</span><div><b>Kısmi veri · son güvenilir toplam gösteriliyor</b>${(snapshot.healthIssues || []).map((item) => `<small>${safe(item)}</small>`).join("") || "<small>Bazı fiyatlar veya kurlar henüz doğrulanmadı.</small>"}</div></div>`;
 

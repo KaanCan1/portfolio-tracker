@@ -160,20 +160,12 @@ function renderDailyBoard() {
     if (chgUSD !== 0 && (!topC || Math.abs(chgUSD) > Math.abs(topC.chg))) topC = { sym: h.symbol.toUpperCase(), chg: chgUSD };
   }
   const fxTRY = usdtryPrev ? prevUsdVal * (usdtry - usdtryPrev) : null;
-  /* GÜNLÜK DEĞİŞİM TEK KAYNAKTAN (16 Ağu). Bu KPI günlük yüzdeyi kendi hesaplıyordu:
-   * yalnız HİSSELERİN prevClose'undan, altın ve fon gün içi hareketi dışarıda. Kenar
-   * çubuğu ve hero ise sunucunun dayOpen'ını kullanıyor. Aynı ekranda %+4,0 ve %+4,14
-   * okunuyordu — aynı sabah düzelttiğimiz iki-farklı-toplam hatasının küçük kardeşi.
-   * Artık üçü de dayOpen'dan gelir; sunucu vermezse eski hesaba düşer (tüm varlıklar
-   * yerine yalnız hisse — eksik ama tutarsız değil).
-   * assetTRY/fxTRY aşağıdaki "hisse hareketi vs kur etkisi" dökümünde kalmaya devam
-   * ediyor: orada sorulan soru "gün ne kadar" değil "günü ne yaptı". */
-  const dayOpenTRY = S.meta?.totals?.dayOpenTRY ?? null;
-  const dayTRY = (dayOpenTRY != null && grandTRY != null) ? grandTRY - dayOpenTRY : assetTRY + (fxTRY || 0);
-  const dayUSD = usdtry ? dayTRY / usdtry : null;
-  const dayPct = (dayOpenTRY != null && dayOpenTRY > 0 && grandTRY != null)
-    ? ((grandTRY - dayOpenTRY) / dayOpenTRY) * 100
-    : (totalUSD != null && dayUSD != null && (totalUSD - dayUSD) !== 0) ? (dayUSD / (totalUSD - dayUSD)) * 100 : null;
+  /* Günlük KPI, hero ve kenar çubuğu aynı akış-arındırılmış USD getirisini okur.
+   * Nakit çekimini zarar sayan ham dayOpen farkına geri düşmeyiz. assetTRY/fxTRY
+   * yalnız aşağıdaki hisse/kur etkisi dökümünde kalır. */
+  const dayReturn = S.performance?.day?.ok ? S.performance.day : null;
+  const dayUSD = dayReturn?.gainUSD ?? null;
+  const dayPct = dayReturn?.pct ?? null;
 
   /* ---------- free-roll / house-money toplamları ---------- */
   const frList = stocks.map((h) => ({ h, fr: freeRollOf(h) })).filter((x) => x.fr.costBasis != null);
@@ -418,7 +410,7 @@ function renderFlows() {
     if (sign > 0) dep += try_; else wd += try_;
     return `<tr>
       <td class="l">${fmtDate(f.date)}</td>
-      <td class="l"><span class="flow-tag ${f.type}">${f.type === "withdraw" ? "Çekme" : "Yatırma"}</span>${f.note ? `<div class="tnote">${f.note}</div>` : ""}</td>
+      <td class="l"><span class="flow-tag ${f.type}">${f.type === "withdraw" ? "Çekme" : "Yatırma"}</span>${f.note ? `<div class="tnote">${f.note}</div>` : ""}${f.cashApplied === false ? `<div class="tnote">Geçmiş bakiye zaten işlenmiş</div>` : ""}</td>
       <td>${symFor(f.currency)}${fmtNum(f.amount, 2)}</td>
       <td class="${f.type === "withdraw" ? "neg" : "pos"}">${f.type === "withdraw" ? "−" : "+"}${fmtTRY0(try_)}</td>
       <td><button class="btn icon" data-delflow="${f.id}" title="Sil">${svgIcon("trash","ic-sm")}</button></td>
@@ -431,13 +423,17 @@ function renderFlows() {
         <thead><tr>
           <th class="l">Tarih</th><th class="l">Tür</th><th>Tutar</th><th>₺ Karşılığı</th><th></th>
         </tr></thead>
-        <tbody>${rows || `<tr><td colspan="5" class="empty-row">Henüz kayıt yok. “+ Para Yatır” ile yatırdığın sermayeyi gir; gerçek getirin hesaplansın.</td></tr>`}</tbody>
+        <tbody>${rows || `<tr><td colspan="5" class="empty-row">Henüz kayıt yok. Dış para hareketlerini kaydet; kayıtsız giriş/çıkışlar performansı bozar.</td></tr>`}</tbody>
       </table>
     </div>`;
 
   $("#flowsSub").innerHTML = flows.length
-    ? `Net sermaye <b>${fmtTRY0(net)}</b> · Yatırılan ${fmtTRY0(dep)} − Çekilen ${fmtTRY0(wd)}`
-    : "Yatırdığın parayı kaydet, gerçek getirini gör";
+    ? `Kayıtlı net dış akış <b>${fmtTRY0(net)}</b> · Yatırılan ${fmtTRY0(dep)} − Çekilen ${fmtTRY0(wd)} · tarihsel TL karşılığı, getiri değildir`
+    : "Dış para giriş/çıkışlarını kaydet; eksikler getiriyi bozar";
+  const unexplained = STATE.performance?.unexplained || [];
+  if (unexplained.length) {
+    $("#flowsSub").innerHTML += ` · Nakit farkı incelenecek günler: ${unexplained.map((g) => `${fmtDate(g.date)} (${fmtUSD0(g.usd)})`).join(", ")}`;
+  }
 
   box.querySelectorAll("[data-delflow]").forEach((b) =>
     b.addEventListener("click", async () => {
@@ -678,6 +674,7 @@ function openFlow(type) {
   flowForm.type.value = type;
   flowForm.date.value = new Date().toISOString().slice(0, 10);
   flowForm.currency.value = "TL";
+  flowForm.alreadyReflected.checked = false;
   $("#flowTitle").textContent = type === "withdraw" ? "Para Çek" : "Para Yatır";
   $("#flowPreview").textContent = "≈ ₺ —";
   flowModalBg.hidden = false;
@@ -690,6 +687,9 @@ function updateFlowPreview() {
     : "≈ ₺ —";
 }
 ["amount", "currency"].forEach((n) => flowForm[n].addEventListener("input", updateFlowPreview));
+flowForm.date.addEventListener("change", () => {
+  flowForm.alreadyReflected.checked = flowForm.date.value < new Date().toISOString().slice(0, 10);
+});
 
 $("#addDepositBtn").addEventListener("click", () => openFlow("deposit"));
 $("#addWithdrawBtn").addEventListener("click", () => openFlow("withdraw"));
@@ -703,7 +703,7 @@ flowForm.addEventListener("submit", async (e) => {
   if (!amount) return;
   const body = {
     type: fd.type, date: fd.date, currency: fd.currency, amount,
-    amountTRY: flowTRY(amount, fd.currency), note: fd.note || "",
+    amountTRY: flowTRY(amount, fd.currency), alreadyReflected: fd.alreadyReflected === "on", note: fd.note || "",
   };
   await fetch("/api/flows", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   flowModalBg.hidden = true;
@@ -882,4 +882,3 @@ $("#taxPrintBtn")?.addEventListener("click", () => {
   window.print();
   setTimeout(() => document.body.classList.remove("tax-printing"), 500);
 });
-

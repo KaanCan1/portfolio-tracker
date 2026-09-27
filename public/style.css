@@ -677,6 +677,8 @@ tfoot td.l { text-align: left; }
 .tf-grid input, .tf-grid select { width: 100%; margin-top: 6px; padding: 10px 12px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); font-family: inherit; font-size: 13.5px; background: var(--bg3); transition: border-color .15s ease, box-shadow .15s ease, background .15s ease; }
 .tf-grid input:focus, .tf-grid select:focus { outline: none; border-color: var(--green-l); box-shadow: var(--ring); background: #fff; }
 .tf-preview { font-size: 14px; font-weight: 700; color: var(--ink); margin-bottom: 14px; padding: 11px 14px; background: var(--bg2); border: 1px solid var(--line); border-radius: 11px; }
+.flow-historical { display: flex; align-items: flex-start; gap: 9px; margin: -2px 0 15px; color: var(--ink2); font-size: 12px; line-height: 1.45; }
+.flow-historical input { margin-top: 2px; accent-color: var(--green-d); flex: 0 0 auto; }
 @media (max-width: 720px) { .trade-summary { grid-template-columns: repeat(2, 1fr); } .tf-grid { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 480px) { .trade-summary { grid-template-columns: 1fr; } .tf-grid { grid-template-columns: 1fr; } }
 

@@ -45,6 +45,13 @@ test("akisGunleri: cekim negatif, o gunun kuruyla cevrilir", () => {
   assert.equal(m.get("2026-06-03"), 100);
 });
 
+test("akisGunleri: USD çekiminde TL karşılığı değil gerçek USD kullanılır", () => {
+  const m = akisGunleri(
+    [{ date: "2026-09-14", type: "withdraw", currency: "USD", amount: 300, amountTRY: 16000 }],
+    () => 49);
+  assert.equal(m.get("2026-09-14"), -300);
+});
+
 test("mutabik gun: alis nakitten dusmus, piyasaya girmis → acik yok", () => {
   const r = mutabakat({
     snaps: [snap("2026-06-01", 100000, 50000, 50000), snap("2026-06-02", 99925, 70000, 29925)],

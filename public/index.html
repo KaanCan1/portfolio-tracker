@@ -959,7 +959,7 @@
   <div class="modal-bg" id="flowModalBg" hidden>
     <div class="modal">
       <h3 id="flowTitle">Para Yatır</h3>
-      <p class="modal-note">Yatırdığın / çektiğin parayı kaydet. “Net sermaye = yatırılan − çekilen” baz alınarak <b>gerçek getirin</b> hesaplanır. İlk kez kullanıyorsan, bugüne kadar yatırdığın toplam parayı tek bir “Yatırma” olarak gir.</p>
+      <p class="modal-note">Portföy dışından yatırdığın veya kişisel harcama için çektiğin parayı kaydet. Kredi kartı ödemesi için çekim, yatırım zararı değildir; dönem getirisinden ayıklanır. Hisse satışını burada kaydetme. Geçmiş kayıt eksikse performans kesinleşmez.</p>
       <form id="flowForm">
         <input type="hidden" name="type" value="deposit" />
         <div class="tf-grid">
@@ -975,6 +975,7 @@
           <label class="tf-note">Not (opsiyonel)<input name="note" placeholder="örn. banka havalesi" /></label>
         </div>
         <div class="tf-preview" id="flowPreview">≈ ₺ —</div>
+        <label class="flow-historical"><input type="checkbox" name="alreadyReflected" /> Bu eski işlem bakiyeden zaten düşülmüş/eklenmiş; bugünkü nakdi tekrar değiştirme</label>
         <div class="modal-actions">
           <button type="button" class="btn ghost" id="flowCancelBtn">İptal</button>
           <button type="submit" class="btn primary">Kaydet</button>

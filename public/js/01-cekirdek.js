@@ -339,38 +339,11 @@ function sparklineSVG(closes) {
     </svg></span>`;
 }
 
-/* Portföy kıyas şeridi: gün / hafta / ay değişimi (snapshot'lardan + bugünün açılışı). */
-function buildCompare(history, current, dayOpenTotal) {
-  const segs = [];
-  const now = Date.now();
-  const agoTotal = (days) => {
-    const target = now - days * 86400_000;
-    for (let i = (history || []).length - 1; i >= 0; i--) {
-      if (new Date(history[i].date).getTime() <= target) return history[i].total;
-    }
-    return null;
-  };
-  const pushSeg = (label, base) => {
-    // current 0 ise bu "portföy sıfırlandı" değil, DEĞERLEME BAŞARISIZ demektir:
-    // döviz kuru ya da fiyatlar gelmediğinde toplam 0 çıkıyor ve buradan -%100
-    // üretiliyordu (3 Ağu 2026: Truncgil v4 boşaldı, ekran gün/hafta/ay/yıl için
-    // -%100 yazdı). Elde pozisyon varken toplam 0 olamaz — yüzde göstermektense
-    // hiç gösterme; "son bilinen değer" rozeti zaten durumu anlatıyor.
-    if (base == null || !(base > 0) || !(current > 0)) return;
-    segs.push({ label, pct: ((current - base) / base) * 100 });
-  };
-  // Yılbaşından itibaren (YTD): bu yılın ilk kayıt değerini baz al
-  const yearStart = () => {
-    const jan1 = `${new Date().getFullYear()}-01-01`;
-    const h = history || [];
-    for (let i = 0; i < h.length; i++) if (h[i].date >= jan1) return h[i].total;
-    return null;
-  };
-  pushSeg("Gün", dayOpenTotal);
-  pushSeg("Hafta", agoTotal(7));
-  pushSeg("Ay", agoTotal(30));
-  pushSeg("Yıl başı", yearStart());
-  return segs;
+/* Bütün yüzde etiketleri sunucudaki aynı akış-arındırılmış hesaptan gelir. */
+function buildCompare(performance) {
+  return [["Gün", "day"], ["Hafta", "week"], ["Ay", "month"], ["Yıl başı", "ytd"]]
+    .filter(([, key]) => performance?.[key]?.ok && performance[key].verified !== false)
+    .map(([label, key]) => ({ label, pct: performance[key].pct }));
 }
 
 /* ============================================================
@@ -743,12 +716,11 @@ function render() {
   const realizedUSD = Object.values(REALIZED_USD).reduce((s, v) => s + (v || 0), 0);
   const realizedTRY = realizedUSD * (fx.usdtry || 0);
 
-  // ---- Net yatırılan sermaye (gerçek getiri için) ----
-  const netInvested = (STATE.flows || []).reduce(
-    (s, f) => s + (f.type === "withdraw" ? -1 : 1) * (Number(f.amountTRY) || 0), 0
-  );
-  const realProfit = grandTotal - netInvested;
-  const realPct = netInvested > 0 ? (realProfit / netInvested) * 100 : null;
+  // İlk sermaye kaydı eksik olabildiği için toplam değer − net yatırma hesabı
+  // sahte kâr üretir. Ölçülen dönem yalnız doğrulanmış snapshot'tan başlar.
+  const measured = STATE.performance?.since?.ok && STATE.performance.since.verified !== false
+    ? STATE.performance.since : null;
+  const performanceIssue = STATE.performance?.unexplained?.[0] || null;
 
   // ---- Veri sağlığı: kaynak rate-limit olduğunda kırık değer göstermeyelim ----
   const healthy = fx.usdtry && fx.gram && holdings.every((h) => h.live?.marketValueTRY != null);
@@ -814,7 +786,7 @@ function render() {
    * canonical muhasebe değeri, display ise eksik veri durumunda son güvenilir
    * snapshot değeridir. Kopyalanmış küçük diziler, görünümün ana STATE'i yanlışlıkla
    * değiştirmesini önler. */
-  const dayCompare = buildCompare(STATE.history, grandTotal, STATE.dayOpen?.total);
+  const dayCompare = buildCompare(STATE.performance);
   const dayPct = dayCompare.find((item) => item.label === "Gün")?.pct ?? null;
   window.PortfolioDeskSnapshot = {
     canonicalGrandTotalTRY: grandTotal,
@@ -830,6 +802,9 @@ function render() {
     fx: { ...fx },
     updatedAt: STATE.updatedAt || new Date().toISOString(),
     healthIssues: [...healthIssues],
+    performanceWarning: performanceIssue
+      ? `${STATE.performance.unexplained.length} günün nakit farkı açıklanmıyor; en büyük ${fmtDate(performanceIssue.date)} (${fmtUSD0(performanceIssue.usd)}). Hafta/ay getirileri yalnız doğrulanan dönemlerde gösterilir.`
+      : null,
     metrics: {
       totalMarketTRY: totalMarket,
       totalCostTRY: totalCost,
@@ -838,9 +813,8 @@ function render() {
       profitPct,
       realizedUSD,
       realizedTRY,
-      netInvestedTRY: netInvested,
-      realProfitTRY: realProfit,
-      realPct,
+      periodGainUSD: measured?.gainUSD ?? null,
+      periodPct: measured?.pct ?? null,
       dayPct,
     },
     alerts: Array.isArray(STATE.alerts) ? STATE.alerts.map((item) => ({ ...item })) : [],
@@ -867,7 +841,7 @@ function render() {
           // 15 Ağu: dört dönem çipi de aynı ağırlıkta ve hepsi renkliydi — YIL BAŞI'nın
           // yeşili her gün bağırıyordu ama o sayı bugün bir şey yapmanı gerektirmiyor.
           // BUGÜN karar dönemi: renkli ve büyük. Diğerleri bağlam: nötr, tek satır.
-          const segs = buildCompare(STATE.history, grandTotal, STATE.dayOpen?.total);
+          const segs = buildCompare(STATE.performance);
           if (!segs.length) return "";
           const [bugun, ...gerisi] = segs;
           return `<div class="hero-compare">
@@ -920,13 +894,12 @@ function render() {
         <div class="value ${cls(realizedUSD)}">${fmtUSD(realizedUSD)}</div>
         <div class="meta">${trades.filter((t) => t.kind !== "buy").length} satış</div>
       </div>
-      ${netInvested > 0 ? `
       <div class="card">
         <span class="mc-ic">${svgIcon("scale")}</span>
-        <div class="label">Gerçek Getiri ${tipIcon("İpucu: Bugünkü toplam değer − net yatırdığın para, USD bazında. Piyasa kazancını cebinden eklediğin paradan ayırır; portföyün gerçekten büyüyor mu sorusunun tek dürüst cevabı.")}</div>
-        <div class="value ${healthy ? cls(realProfit) : ""}">${healthy ? (fx.usdtry ? fmtUSD(realProfit / fx.usdtry) : fmtTRY(realProfit)) : "—"}</div>
-        <div class="meta">${healthy && realPct != null ? pctChip(realPct) : "—"} Sermaye ${fx.usdtry ? fmtUSD0(netInvested / fx.usdtry) : fmtTRY0(netInvested)}</div>
-      </div>` : ""}
+        <div class="label">Ölçülen Dönem Getirisi ${tipIcon("İlk güvenilir değerlemeden bugüne USD bazında zaman ağırlıklı getiri. Kayıtlı para yatırma ve çekmelerini performanstan ayırır; eksik nakit hareketleri sonucu bozabilir.")}</div>
+        <div class="value ${measured ? cls(measured.gainUSD) : ""}">${measured ? fmtUSD(measured.gainUSD) : "—"}</div>
+        <div class="meta">${measured ? `${pctChip(measured.pct)} ${fmtDate(measured.start)} tarihinden beri · ${measured.flowCount} dış akış arındırıldı` : performanceIssue ? `${STATE.performance.unexplained.length} günün nakit farkı açıklanmıyor; en büyük ${fmtDate(performanceIssue.date)} (${fmtUSD0(performanceIssue.usd)}). Geçmiş kayıtları doğrula.` : "Güvenilir dönem veya değerleme bekleniyor"}</div>
+      </div>
       <div class="card">
         <span class="mc-ic">${svgIcon("dollar")}</span>
         <div class="label">USD / TRY</div>
@@ -1065,7 +1038,7 @@ function render() {
 
   // Yapışkan mini özet verisi (kaydırınca üstte görünür)
   try {
-    const _segs = buildCompare(STATE.history, grandTotal, STATE.dayOpen?.total);
+    const _segs = buildCompare(STATE.performance);
     const _day = _segs.find((s) => s.label === "Gün");
     updateMiniTop(grandTotal, fx.usdtry, _day ? _day.pct : null);
   } catch {}
@@ -1299,11 +1272,10 @@ function drawChart() {
   const first = pts[0].total;
   const last = pts[pts.length - 1].total;
   const change = last - first;
-  const changePct = first ? (change / first) * 100 : 0;
-  const baseLabel = intraday ? "bugün açılışa göre" : pts.length > 1 ? "dönem başına göre" : "";
+  const baseLabel = intraday ? "bugün açılışa göre net değer" : pts.length > 1 ? "dönem başına göre net değer" : "";
   $("#chartSub").innerHTML =
-    `${fmtUSD(last)} <span class="chart-chg ${cls(change)}">${change >= 0 ? "▲" : "▼"} ${fmtUSD(Math.abs(change))} (${fmtPct(changePct)})</span>` +
-    (baseLabel ? ` <span class="chart-base">· ${baseLabel}</span>` : "");
+    `${fmtUSD(last)} <span class="chart-chg ${cls(change)}">${change >= 0 ? "▲" : "▼"} ${fmtUSD(Math.abs(change))}</span>` +
+    (baseLabel ? ` <span class="chart-base">· ${baseLabel} · para giriş/çıkışı dahil</span>` : "");
 
   if (pts.length === 1) {
     box.innerHTML = `<div class="chart-empty single">
@@ -1397,7 +1369,6 @@ function attachHover(box, pts, { px, py, W, H, first, color }) {
     const xPct = (px(i) / W) * 100;
     const yPct = (py(p.total) / H) * 100;
     const diff = p.total - first;
-    const diffPct = first ? (diff / first) * 100 : 0;
 
     cursor.style.left = xPct + "%";
     hot.style.left = xPct + "%";
@@ -1407,7 +1378,7 @@ function attachHover(box, pts, { px, py, W, H, first, color }) {
     tip.innerHTML = `
       <div class="tip-d">${p.label}</div>
       <div class="tip-v">${fmtUSD(p.total)}</div>
-      <div class="tip-c ${cls(diff)}">${diff >= 0 ? "▲" : "▼"} ${fmtUSD(Math.abs(diff))} (${fmtPct(diffPct)})</div>
+      <div class="tip-c ${cls(diff)}">Net değer ${diff >= 0 ? "▲" : "▼"} ${fmtUSD(Math.abs(diff))}</div>
       ${p.totalTRY != null ? `<div class="tip-tl">≈ ${fmtTRY0(p.totalTRY)}</div>` : ""}`;
     if (document.body.classList.contains("privacy"))
       tip.querySelectorAll(".tip-v, .tip-c, .tip-tl").forEach((e) => { e.textContent = e.textContent.replace(/[0-9]/g, "•"); });

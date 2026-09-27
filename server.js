@@ -23,6 +23,7 @@ import { adrAt as chAdrAt, seansIciGirisSinyali } from "./entry-modes.js";
 import { depoOlustur, appDataYaz, jsonMetin } from "./store.js";
 import { swingKapsam, sayilanPay } from "./swing-kapsam.js";
 import { kiyasHesapla, kiyasHukum } from "./kiyas.js";
+import { performansHesapla, performansDogrula } from "./performans.js";
 import { korelasyonCarpaniHesapla } from "./boyutlandirma.js";
 import { gunlukKayit, kayitKur, normalize as korGunlukNormalize, karne as korKarne } from "./korelasyon-gunlugu.js";
 import { silmeKarari } from "./swing-silme.js";
@@ -5118,8 +5119,14 @@ app.get("/api/portfolio", async (_req, res) => {
       }));
     }
 
+    const dailyPerformance = meta.healthy ? performansHesapla({
+      snapshots: data.snapshots || [], flows: data.flows || [],
+      current: { total: grandTotal, usdtry },
+      dayOpen: { total: openTotal + cashTL, usdtry },
+      today: new Date().toISOString().slice(0, 10), baslangic: OLCUM_BASLANGIC,
+    }) : null;
     {
-      const dayPct = openTotal > 0 ? ((grandTotal - openTotal) / openTotal) * 100 : null;
+      const dayPct = dailyPerformance?.day?.ok ? dailyPerformance.day.pct : null;
       const buyN = stocksEnriched.filter((h) => h.sig?.signal?.tone === "buy").length;
       const sellN = stocksEnriched.filter((h) => h.sig?.signal?.tone === "sell").length;
       const trimN = stocksEnriched.filter((h) => h.sig?.profitTake).length;
@@ -5127,7 +5134,7 @@ app.get("/api/portfolio", async (_req, res) => {
       const guardBad = stocksEnriched.filter((h) => h.guard?.breached).map((h) => h.symbol);
       const s = [];
       if (dayPct != null && isFinite(dayPct)) {
-        s.push(`Portföy bugün ${dayPct >= 0 ? "+" : ""}%${dayPct.toFixed(2)} ${dayPct >= 0.05 ? "yukarıda" : dayPct <= -0.05 ? "aşağıda" : "yatay"} (gün açılışına göre, döviz dahil)`);
+        s.push(`Portföy bugün ${dayPct >= 0 ? "+" : ""}%${dayPct.toFixed(2)} ${dayPct >= 0.05 ? "yukarıda" : dayPct <= -0.05 ? "aşağıda" : "yatay"} (USD, kayıtlı dış para akışlarından arındırılmış)`);
       }
       if (guardBad.length) s.push(`${guardBad.join(", ")} iz süren stopun altında — çıkış planını uygula`);
       if (rule1 && rule1.score < 85) s.push(`Kural 1 skoru ${rule1.score}/100 — ${rule1.violations.filter((x) => x.level !== "info").length} sermaye koruma uyarısı var, panele bak`);
@@ -5192,7 +5199,7 @@ app.get("/api/portfolio", async (_req, res) => {
           note: meta.summaryText, // günün düz Türkçe özeti — rapor tek başına okunabilsin
           totalTRY: Math.round(grandTotal),
           totalUSD: usdtry ? Math.round(grandTotal / usdtry) : null,
-          dayChangePct: openTotal > 0 ? ((grandTotal - openTotal) / openTotal) * 100 : null,
+          dayChangePct: dailyPerformance?.day?.ok ? dailyPerformance.day.pct : null,
           regime: regime
             ? { vix: regime.vix, band: regime.band, advice: regime.advice, targetCash: regime.targetCash, currentCashPct: regime.currentCashPct }
             : null,
@@ -5221,6 +5228,23 @@ app.get("/api/portfolio", async (_req, res) => {
       });
     }
 
+    let performance = meta.healthy
+      ? performansHesapla({
+          snapshots: data.snapshots || [], flows: data.flows || [],
+          current: { total: grandTotal, usdtry }, dayOpen: data.dayOpen,
+          today, baslangic: OLCUM_BASLANGIC,
+        })
+      : null;
+    if (performance) {
+      // TWR yalnız KAYITLI akışları temizleyebilir. Nakit mutabakatı olmayan
+      // dönemlerde kesin getiri göstermek yerine hangi günlerin incelenmesi
+      // gerektiğini bildir. Bunlar otomatik "para çekimi" sayılmaz.
+      const audit = mutabakat({
+        snaps: data.snapshots || [], trades: data.trades || [],
+        flows: data.flows || [], baslangic: OLCUM_BASLANGIC,
+      });
+      performance = performansDogrula(performance, audit.ok ? audit.gunler : []);
+    }
     res.json({
       cash: data.cash,
       fx: { usdtry, eurtry, gram, metals },
@@ -5231,6 +5255,7 @@ app.get("/api/portfolio", async (_req, res) => {
       insights, // Portföy Önerileri: önceliklendirilmiş eylem akışı
       topPicks, // En büyük 3 pozisyon: olumlu/olumsuz + haberler (saatlik)
       meta, // veri sağlığı + kaynaklar + günün düz Türkçe özeti (summaryText)
+      performance, // dış para hareketlerinden arındırılmış dönem getirileri
       watchlist: watchSymbols.map((sym) => {
         const q = (stockMap || {})[sym];
         const price = q?.price ?? null;
@@ -7427,8 +7452,8 @@ app.post("/api/realized2026/sync-trades", async (_req, res) => {
 });
 
 /* --------------- API: para giriş/çıkış (sermaye defteri) -------------- */
-// Yatırılan/çekilen parayı kaydeder; gerçek getiri (yatırdığın paraya göre)
-// hesabı için net sermaye = Σ yatırma − Σ çekme (TL karşılığı, giriş anındaki).
+// Dış para akışlarını kaydeder. Geçmişte nakde zaten yansımış bir hareket
+// performansı düzeltir ama bugünkü bakiyeyi ikinci kez değiştiremez.
 app.get("/api/flows", async (_req, res) => {
   try {
     const data = await loadData();
@@ -7442,26 +7467,31 @@ app.post("/api/flows", async (req, res) => {
   try {
     const f = req.body;
     const amount = Number(f.amount) || 0;
-    if (!amount) return res.status(400).json({ error: "tutar zorunlu" });
+    if (!(amount > 0) || !Number.isFinite(amount)) return res.status(400).json({ error: "pozitif tutar zorunlu" });
     const currency = ["TL", "USD", "EUR"].includes(f.currency) ? f.currency : "TL";
+    const date = f.date || new Date().toISOString().slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ error: "geçerli tarih zorunlu" });
+    const cashApplied = !(f.alreadyReflected === true && date < new Date().toISOString().slice(0, 10));
     const flow = {
       id: yeniId("f-"),
       type: f.type === "withdraw" ? "withdraw" : "deposit",
-      date: f.date || new Date().toISOString().slice(0, 10),
+      date,
       currency,
       amount,
       // Giriş anındaki TL karşılığı (frontend hesaplar; yoksa TL kabul et)
       amountTRY: f.amountTRY != null ? Number(f.amountTRY) : (currency === "TL" ? amount : 0),
+      cashApplied,
       note: f.note || "",
     };
     await veriIslem(async (d) => {
       d.flows = d.flows || [];
       d.flows.push(flow);
-      // Tam otomatik nakit: yatır → nakde ekle, çek → nakitten düş (kendi para birimi kovasına)
-      d.cash = d.cash || {};
-      const bucket = currency === "USD" ? "usd" : currency === "EUR" ? "eur" : "tl";
-      const sign = flow.type === "deposit" ? 1 : -1;
-      d.cash[bucket] = +(((Number(d.cash[bucket]) || 0) + sign * amount)).toFixed(2);
+      if (flow.cashApplied) {
+        d.cash = d.cash || {};
+        const bucket = currency === "USD" ? "usd" : currency === "EUR" ? "eur" : "tl";
+        const sign = flow.type === "deposit" ? 1 : -1;
+        d.cash[bucket] = +(((Number(d.cash[bucket]) || 0) + sign * amount)).toFixed(2);
+      }
     });
     res.json(flow);
   } catch (e) {
@@ -7474,7 +7504,7 @@ app.delete("/api/flows/:id", async (req, res) => {
     await veriIslem(async (d) => {
       const f = (d.flows || []).find((x) => x.id === req.params.id);
       // Nakit etkisini geri al (yatır silinince nakit düşer, çek silinince geri gelir)
-      if (f) {
+      if (f && f.cashApplied !== false) {
         d.cash = d.cash || {};
         const bucket = f.currency === "USD" ? "usd" : f.currency === "EUR" ? "eur" : "tl";
         const sign = f.type === "deposit" ? 1 : -1;
