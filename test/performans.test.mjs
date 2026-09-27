@@ -74,3 +74,11 @@ test("açıklanamayan eski nakit farkı haftayı gizler, temiz bugünü korur", 
   assert.equal(audited.since.verified, false);
   assert.deepEqual(audited.unexplained, [{ date: "2026-08-12", usd: -300 }]);
 });
+
+test("ölçüm tabanından önceki geriye doldurulmuş kayıt yıl başı getirisi olamaz", () => {
+  const p = hesapla([
+    snap("2026-03-02", 500), snap("2026-06-02", 1000), snap("2026-08-12", 1100),
+  ], [], snap("2026-08-13", 1100));
+  assert.equal(p.ytd, null);
+  assert.equal(p.since.start, "2026-06-02");
+});

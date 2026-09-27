@@ -74,7 +74,9 @@ export function performansHesapla({ snapshots = [], flows = [], current, dayOpen
     currency: "USD", method: "daily_twr",
     day, week: pencere(noktalar, flows, once(cutoff(7))),
     month: pencere(noktalar, flows, once(cutoff(30))),
-    ytd: pencere(noktalar, flows, ilk(ytd)),
+    // Ölçüm tabanından önceki geriye doldurulmuş yıl kaydını
+    // "yıl başı getirisi" diye sunma.
+    ytd: baslangic && baslangic > ytd ? null : pencere(noktalar, flows, ilk(ytd)),
     since: pencere(noktalar, flows, ilk(baslangic)),
   };
 }
