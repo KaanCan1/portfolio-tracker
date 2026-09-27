@@ -30,6 +30,8 @@
  * Saf modül: DOM bilmez, fetch etmez, tarih/kur girdiden gelir.
  */
 
+import { akisUSD } from "./performans.js";
+
 const g10 = (x) => String(x ?? "").slice(0, 10);
 const say = (v) => (Number.isFinite(+v) ? +v : 0);
 
@@ -69,14 +71,16 @@ export function islemGunleri(trades = []) {
   return m;
 }
 
-/** Gün → net akış (USD). Akış TRY kaydedilir, o günün kuruyla çevrilir. */
+/** Gün → net akış (USD). USD tutarı doğrudan; diğerleri kayıtlı TL karşılığından çevrilir. */
 export function akisGunleri(flows = [], kurBul = () => 0) {
   const m = new Map();
   for (const f of flows) {
     const d = g10(f?.date); if (!d) continue;
     const kur = say(kurBul(d)); if (!(kur > 0)) continue;
     const yon = f.type === "withdraw" ? -1 : 1;
-    m.set(d, (m.get(d) || 0) + (yon * say(f.amountTRY)) / kur);
+    const tutar = akisUSD(f, kur);
+    if (tutar == null) continue;
+    m.set(d, (m.get(d) || 0) + yon * tutar);
   }
   return m;
 }

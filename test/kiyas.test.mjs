@@ -115,6 +115,16 @@ test("kiyasHesapla: yatırılan para alfayı şişirmez", () => {
   assert.equal(s.akisN, 1, "arındırılan akış sayılır");
 });
 
+test("kiyasHesapla: USD çekiminde tarihsel TL karşılığı kurla yeniden çevrilmez", () => {
+  const degerler = Array.from({ length: 30 }, (_, i) => (i < 15 ? 1000 : 800));
+  const s = kiyasHesapla({
+    snaps: snapDizi(degerler, 48),
+    flows: [{ date: gun(15), type: "withdraw", currency: "USD", amount: 200, amountTRY: 11000 }],
+    endeksler: { QQQ: bar(Array(30).fill(50)) },
+  });
+  yakin(s.portfoy.getiri, 0, 1e-9);
+});
+
 test("kiyasHesapla: borsa tatiline denk gelen akış atılmaz, sonraki güne taşınır", () => {
   const degerler = Array.from({ length: 30 }, (_, i) => (i < 15 ? 100 : 200));
   const snaps = snapDizi(degerler);
