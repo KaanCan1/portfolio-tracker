@@ -721,7 +721,8 @@ async function chCanliMark(D) {
       const q = quotes?.[p.sym];
       if (!q || !(q.price > 0)) continue;
       p.mark = q.price;
-      p.markCanli = !q.stale;                       // kart "canlı mı" diye soruyor
+      const qMs = Number(q.asOf) < 1e12 ? Number(q.asOf) * 1000 : Number(q.asOf);
+      p.markCanli = !q.stale && Number.isFinite(qMs) && qMs > 0 && Date.now() - qMs < 15 * 60_000;
       if (p.shares > 0) p.unreal = +(p.rem * p.shares * (p.mark - p.entry)).toFixed(2);
     }
   } catch { /* kotasyon yok → mum kapanışıyla devam */ }
@@ -730,7 +731,12 @@ async function chCanliMark(D) {
 
 async function renderChallenge() {
   const el = $("#challengeBox"); if (!el) return;
-  const D = await chCanliMark((await chLoadBoard()) || (await chLocalBoard(el)));
+  const board = await chLoadBoard();
+  if (!board) {
+    el.innerHTML = `<div class="rk-empty">Alfa Avı panosu henüz hazır değil. Sunucu hesabı tamamlanınca yeniden deneyin.</div>`;
+    return;
+  }
+  const D = await chCanliMark(board);
   const positions = D.positions, cash = D.cash;
   const closed = positions.filter((p) => !p.open), open = positions.filter((p) => p.open);
   const realized = positions.reduce((s, p) => s + p.realized, 0);
