@@ -17,10 +17,12 @@
  * (EMA21 iz süren çıkışı close'a baktığı için tek yönlü DEĞİLDİR; çağıran
  * onu kapanmış barla sınırlamalıdır.) */
 
-export function canliBarBindir(candles, kotasyon, bugun) {
+import { tazeSeansKotasyonu } from "./alfa-clock.js";
+
+export function canliBarBindir(candles, kotasyon, bugun, an = new Date()) {
   if (!Array.isArray(candles) || !candles.length) return candles;
   const fiyat = Number(kotasyon?.price);
-  if (!(fiyat > 0)) return candles;          // canlı fiyat yoksa seriye dokunma
+  if (!(fiyat > 0) || !tazeSeansKotasyonu(kotasyon, bugun, an)) return candles;
 
   const son = candles[candles.length - 1];
   if (son?.time === bugun) {
