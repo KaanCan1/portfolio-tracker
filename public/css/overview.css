@@ -138,28 +138,48 @@
 }
 @media (prefers-reduced-motion: reduce) { .desk-state-spinner { animation: none; } }
 
-/* Ana sayfa grafiği toplam değerin hemen ardından gelir; aynı yüzey mobilde de korunur. */
+/* Ana sayfa grafiği: önce sonuç, sonra çizgi, en sonda yöntem açıklaması. */
 .desk-chart-slot { grid-column: 1 / -1; min-width: 0; }
 .desk-chart-slot .chart-panel { margin: 0; padding: clamp(18px, 2.4vw, 30px); border: 1px solid var(--desk-line, #e6eaee); border-radius: 16px; background: var(--desk-surface, #fff); box-shadow: 0 10px 30px rgba(25,38,52,.045); }
-.chart-panel-head { gap: 20px; }
+.chart-panel-head { align-items: flex-start; gap: 20px; margin-bottom: 0; }
 .chart-heading { min-width: 0; }
-.chart-heading h2 { margin: 4px 0 0; font-size: clamp(18px, 2vw, 24px); letter-spacing: -.035em; }
-.chart-controls { display: grid; justify-items: end; gap: 10px; }
+.chart-heading h2 { margin: 4px 0 0; color: var(--desk-text, #192634); font-size: 17px; font-weight: 700; letter-spacing: -.025em; }
+.chart-summary { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 14px; margin-top: 10px; }
+.chart-main-value { color: var(--desk-text, #192634); font: 700 clamp(27px, 3vw, 36px)/1.1 var(--mono, "IBM Plex Mono", monospace); letter-spacing: -.045em; font-variant-numeric: tabular-nums; }
+.chart-main-value.is-negative { color: var(--down, #b64c4c); }
+.chart-summary .chart-sub { margin: 0; max-width: 44ch; color: var(--desk-muted, #687585); font-size: 12px; line-height: 1.5; }
+.chart-controls { display: grid; justify-items: end; gap: 11px; }
 .chart-mode-tabs { display: flex; gap: 3px; padding: 3px; border-radius: 10px; background: var(--desk-page, #f5f6f8); }
-.chart-mode { min-height: 34px; padding: 7px 13px; border: 0; border-radius: 8px; background: transparent; color: var(--desk-muted, #687585); font-family: inherit; font-size: 12px; line-height: 1.2; font-weight: 700; cursor: pointer; }
+.chart-mode { min-width: 72px; min-height: 36px; padding: 8px 13px; border: 0; border-radius: 8px; background: transparent; color: var(--desk-muted, #687585); font-family: inherit; font-size: 12px; line-height: 1.2; font-weight: 700; cursor: pointer; }
 .chart-mode.active { background: var(--desk-surface, #fff); color: var(--desk-accent, #096e75); box-shadow: 0 1px 4px rgba(25,38,52,.1); }
-.chart-mode:focus-visible, .range-tabs .rt:focus-visible { outline: 2px solid var(--desk-accent, #096e75); outline-offset: 2px; }
+.chart-mode:focus-visible, .range-tabs .rt:focus-visible, .chart-empty-state button:focus-visible, .chart-method summary:focus-visible { outline: 2px solid var(--desk-accent, #096e75); outline-offset: 2px; }
 .desk-chart-slot .range-tabs { background: transparent; border: 0; padding: 0; }
-.desk-chart-slot .rt { min-width: 36px; min-height: 34px; padding: 7px 9px; }
+.desk-chart-slot .rt { min-height: 36px; padding: 8px 10px; font-size: 12px; }
 .desk-chart-slot .rt.active { background: var(--desk-accent-soft, #e7f3f2); color: var(--desk-accent, #096e75); box-shadow: none; }
-.chart-context { margin: 14px 0 0; color: var(--desk-muted, #687585); font-size: 12px; line-height: 1.5; }
-.desk-chart-slot .chart-box { height: clamp(245px, 29vw, 360px); margin-top: 14px; }
-.desk-chart-slot .chart-box.is-empty { height: 170px; }
-.chart-insights { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 26px; }
-.chart-insights:empty { display: none; }
-.chart-insights span { display: inline-flex; align-items: center; min-height: 30px; padding: 6px 10px; border-radius: 8px; color: var(--desk-muted, #687585); background: var(--desk-page, #f5f6f8); font-size: 11px; font-weight: 650; }
-.chart-insights span b { margin-left: 5px; color: var(--desk-text, #192634); font-variant-numeric: tabular-nums; }
+.chart-context { margin: 12px 0 0; color: var(--desk-muted, #687585); font-size: 12px; line-height: 1.5; }
 .chart-context.is-warning { color: #95630e; }
+.desk-chart-slot .chart-box { height: clamp(245px, 28vw, 340px); margin-top: 12px; border-radius: 10px; }
+.desk-chart-slot .chart-box:focus-visible { outline: 2px solid var(--desk-accent, #096e75); outline-offset: 3px; }
+.desk-chart-slot .chart-box.is-empty { height: auto; min-height: 150px; }
+.desk-chart-slot .chart-ylabels span { right: 1px; background: linear-gradient(90deg, transparent, var(--desk-surface, #fff) 35%); }
+.desk-chart-slot .chart-tip { max-width: 190px; white-space: normal; background: var(--desk-surface, #fff); color: var(--desk-text, #192634); }
+.desk-chart-slot .chart-peak span { display: none; }
+.chart-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.chart-insights { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 24px; border-top: 1px solid var(--desk-line, #e6eaee); }
+.chart-insights:empty { display: none; }
+.chart-insights > div { min-width: 0; display: grid; gap: 5px; padding: 14px 16px 2px 0; }
+.chart-insights > div + div { border-left: 1px solid var(--desk-line, #e6eaee); padding-left: 16px; }
+.chart-insights small { color: var(--desk-muted, #687585); font-size: 11px; line-height: 1.35; }
+.chart-insights b { color: var(--desk-text, #192634); font: 700 16px/1.25 var(--mono, "IBM Plex Mono", monospace); font-variant-numeric: tabular-nums; }
+.chart-method { margin-top: 17px; padding-top: 13px; border-top: 1px solid var(--desk-line, #e6eaee); color: var(--desk-muted, #687585); font-size: 12px; line-height: 1.55; }
+.chart-method summary { width: max-content; max-width: 100%; color: var(--desk-accent, #096e75); font-weight: 700; cursor: pointer; }
+.chart-method p { max-width: 76ch; margin: 9px 0 0; }
+.chart-method b { color: var(--desk-text, #192634); }
+.chart-empty-state { min-height: 150px; display: flex; align-items: center; gap: 16px; padding: 22px; border: 1px dashed color-mix(in srgb, var(--desk-accent, #096e75) 22%, var(--desk-line, #e6eaee)); border-radius: 10px; background: linear-gradient(130deg, color-mix(in srgb, var(--desk-accent-soft, #e7f3f2) 38%, transparent), var(--desk-surface, #fff) 68%); }
+.chart-empty-symbol { width: 42px; height: 42px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 11px; color: var(--desk-accent, #096e75); background: var(--desk-accent-soft, #e7f3f2); font-size: 23px; }
+.chart-empty-state strong { display: block; color: var(--desk-text, #192634); font-size: 14px; }
+.chart-empty-state p { margin: 5px 0 0; color: var(--desk-muted, #687585); font-size: 12px; line-height: 1.5; }
+.chart-empty-state button { margin-top: 11px; padding: 7px 0; border: 0; background: transparent; color: var(--desk-accent, #096e75); font-family: inherit; font-size: 12px; line-height: 1.2; font-weight: 700; cursor: pointer; }
 @media (max-width: 767px) {
   .desk-chart-slot { order: 2; }
   .desk-priority-card { order: 3; }
@@ -168,11 +188,19 @@
   .desk-context-grid { order: 6; }
   .desk-chart-slot .chart-panel { padding: 17px 14px 18px; }
   .chart-panel-head { display: grid; }
-  .chart-controls { justify-items: stretch; }
+  .chart-summary { display: grid; gap: 4px; margin-top: 8px; }
+  .chart-main-value { font-size: 30px; }
+  .chart-controls { justify-items: stretch; gap: 9px; }
   .chart-mode-tabs { width: max-content; max-width: 100%; }
   .desk-chart-slot .range-tabs { flex-wrap: nowrap; overflow-x: auto; max-width: 100%; }
-  .desk-chart-slot .chart-box { height: 260px; }
-  .desk-chart-slot .chart-box.is-empty { height: 150px; }
-  .desk-chart-slot .chart-peak span { display: none; }
-  .chart-insights { margin-top: 24px; }
+  .desk-chart-slot .rt { flex: 0 0 auto; min-width: 42px; }
+  .desk-chart-slot .chart-box { height: 244px; }
+  .desk-chart-slot .chart-box.is-empty { height: auto; min-height: 150px; }
+  .chart-insights { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 22px; }
+  .chart-insights > div { padding: 13px 10px 10px 0; }
+  .chart-insights > div + div { padding-left: 10px; }
+  .chart-insights > div:nth-child(3) { grid-column: 1 / -1; border-left: 0; border-top: 1px solid var(--desk-line, #e6eaee); padding-left: 0; }
+  .chart-empty-state { align-items: flex-start; padding: 17px; gap: 12px; }
+  .chart-empty-symbol { width: 34px; height: 34px; font-size: 19px; }
 }
+@media (prefers-reduced-motion: reduce) { .desk-chart-slot .chart-enddot::after { animation: none; } }
