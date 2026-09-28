@@ -80,5 +80,22 @@ test("ölçüm tabanından önceki geriye doldurulmuş kayıt yıl başı getiri
     snap("2026-03-02", 500), snap("2026-06-02", 1000), snap("2026-08-12", 1100),
   ], [], snap("2026-08-13", 1100));
   assert.equal(p.ytd, null);
+  assert.equal(p.half, null);
+  assert.equal(p.year, null);
   assert.equal(p.since.start, "2026-06-02");
+});
+
+
+test("grafik noktaları çekim gününde getiri sıçraması üretmez ve denetim dönemleri işaretler", () => {
+  const p = hesapla(
+    [snap("2026-08-06", 1000), snap("2026-08-10", 800), snap("2026-08-11", 840)],
+    [{ date: "2026-08-10", type: "withdraw", currency: "USD", amount: 200 }],
+    snap("2026-08-13", 840), "2026-08-13",
+  );
+  assert.deepEqual(p.week.series.map((point) => Math.round(point.index)), [100, 100, 105, 105]);
+  yakin(p.week.series.at(-1).pct, p.week.pct);
+  const audited = performansDogrula(p, [{ d: "2026-08-10", ariza: "deger-acigi", cashAcik: -10 }]);
+  assert.equal(audited.week.verified, false);
+  assert.equal(audited.day.verified, true);
+  assert.equal(audited.since.verified, false);
 });

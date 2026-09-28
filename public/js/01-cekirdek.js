@@ -130,7 +130,8 @@ function bindAlloc() {
 }
 
 let STATE = null;
-let RANGE = "1d";
+let RANGE = "1m";
+let CHART_MODE = "performance";
 let ALLOC = { segs: [], total: 0, usdtry: 0, grandTotalTRY: 0 }; // varlık dağılımı (donut hover)
 
 /* ===== POZİSYON BOYUTLANDIRMA — tek formül, tek yer =============================
@@ -1257,31 +1258,61 @@ function iconizeHeaders(root) {
 
 function drawChart() {
   const box = $("#chartBox");
-  const { pts, intraday } = buildSeries();
+  box.classList.remove("is-empty");
+  const sub = $("#chartSub");
+  const context = $("#chartContext");
+  const insights = $("#chartInsights");
+  const isPerformance = CHART_MODE === "performance";
+  $("#chartTitle").textContent = isPerformance ? "Akışlardan arındırılmış performans" : "Portföy değeri";
+  const rangeKey = { "1d": "day", "1w": "week", "1m": "month", "3m": "quarter", "6m": "half", "1y": "year", all: "since" }[RANGE];
+  const period = isPerformance ? STATE.performance?.[rangeKey] : null;
+  if (isPerformance && (!period?.ok || period.verified === false || !Array.isArray(period.series) || period.series.length < 2)) {
+    const unresolved = period?.unexplainedCount || 0;
+    sub.textContent = "Doğrulanmış getiri bekleniyor";
+    context.textContent = unresolved
+      ? `${unresolved} günün nakit farkı açıklanmıyor. Bu aralıkta getiri çizgisi gösterilmiyor.`
+      : "Bu aralık için yeterli doğrulanmış değerleme yok. Daha kısa bir dönem seçebilirsin.";
+    context.classList.toggle("is-warning", !!unresolved);
+    insights.innerHTML = "";
+    box.classList.add("is-empty");
+    box.innerHTML = `<div class="chart-empty">${unresolved ? "Önce geçmiş nakit hareketlerini doğrula; bu dönem için güvenilir performans hesaplanamıyor." : "Bu dönemde çizilecek yeterli performans noktası henüz yok."}</div>`;
+    return;
+  }
+  const raw = isPerformance ? null : buildSeries();
+  const pts = isPerformance ? period.series.map((p, i) => ({
+    label: RANGE === "1d" ? (i === 0 ? "Açılış" : "Şimdi") : fmtDate(p.date),
+    total: p.index, pct: p.pct,
+  })) : raw.pts;
+  const intraday = isPerformance ? false : raw.intraday;
+  const fmtChart = (n) => isPerformance ? n.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : fmtUSD0(n);
+  context.textContent = isPerformance
+    ? "USD bazında günlük zaman ağırlıklı getiri · para giriş ve çıkışları hariç · başlangıç 100"
+    : "Gerçek portföy bakiyesi · para giriş ve çıkışları çizgide görünür.";
+  context.classList.remove("is-warning");
 
   if (pts.length === 0) {
-    $("#chartSub").textContent = intraday ? "Gün içi veri birikiyor…" : "Henüz veri yok";
-    box.innerHTML = `<div class="chart-empty">${
-      intraday
-        ? "Bugünün seyri uygulama açık kaldıkça (her ~1 dk) dolar"
-        : "Bugün milat · Portföy değeri verileri bugünden itibaren birikmeye başlayacak."
-    }</div>`;
+    sub.textContent = intraday ? "Gün içi veri birikiyor…" : "Henüz veri yok";
+    insights.innerHTML = "";
+    box.classList.add("is-empty");
+    box.innerHTML = `<div class="chart-empty">${intraday ? "Bugünün seyri uygulama açık kaldıkça oluşur." : "Değerleme verileri biriktikçe grafik oluşacak."}</div>`;
     return;
   }
 
   const first = pts[0].total;
   const last = pts[pts.length - 1].total;
   const change = last - first;
-  const baseLabel = intraday ? "bugün açılışa göre net değer" : pts.length > 1 ? "dönem başına göre net değer" : "";
-  $("#chartSub").innerHTML =
-    `${fmtUSD(last)} <span class="chart-chg ${cls(change)}">${change >= 0 ? "▲" : "▼"} ${fmtUSD(Math.abs(change))}</span>` +
-    (baseLabel ? ` <span class="chart-base">· ${baseLabel} · para giriş/çıkışı dahil</span>` : "");
+  if (isPerformance) {
+    sub.innerHTML = `<span class="chart-chg ${cls(period.pct)}">${fmtPct(period.pct)}</span> <span class="chart-base">${fmtDate(period.start)} – ${fmtDate(period.end)} · ${period.flowCount} dış para hareketi ayrıştırıldı</span>`;
+  } else {
+    const baseLabel = intraday ? "bugün açılışa göre net değer" : pts.length > 1 ? "dönem başına göre net değer" : "";
+    sub.innerHTML = `${fmtUSD(last)} <span class="chart-chg ${cls(change)}">${change >= 0 ? "▲" : "▼"} ${fmtUSD(Math.abs(change))}</span>` +
+      (baseLabel ? ` <span class="chart-base">· ${baseLabel} · para giriş/çıkışı dahil</span>` : "");
+  }
 
   if (pts.length === 1) {
-    box.innerHTML = `<div class="chart-empty single">
-      <div class="single-val">${fmtUSD(last)}</div>
-      <div class="single-note">${pts[0].label} · ${intraday ? "Gün içi ilk nokta alındı, seyir dakikalar içinde şekillenecek." : "İlk kayıt alındı. Grafik birkaç günde şekillenecek."}</div>
-    </div>`;
+    insights.innerHTML = "";
+    box.classList.add("is-empty");
+    box.innerHTML = `<div class="chart-empty single"><div class="single-val">${fmtUSD(last)}</div><div class="single-note">${pts[0].label} · İlk kayıt alındı; grafik yeni noktalarla oluşacak.</div></div>`;
     return;
   }
 
@@ -1296,7 +1327,8 @@ function drawChart() {
   const up = change >= 0;
   const color = up ? "#1f8a4e" : "#d8442f";
   const lastX = px(pts.length - 1), lastY = py(last);
-  const lineD = smoothPath(pts.map((p, i) => [px(i), py(p.total)]));
+  const chartCoords = pts.map((p, i) => [px(i), py(p.total)]);
+  const lineD = isPerformance ? "M " + chartCoords.map(([x, y]) => `${x.toFixed(1)} ${y.toFixed(1)}`).join(" L ") : smoothPath(chartCoords);
   const areaD = `${lineD} L ${(W - pad.r).toFixed(1)} ${(H - pad.b).toFixed(1)} L ${pad.l.toFixed(1)} ${(H - pad.b).toFixed(1)} Z`;
 
   // Yatay referans ızgarası (4 seviye) + açılış/dönem başı kesikli çizgisi
@@ -1312,7 +1344,7 @@ function drawChart() {
   // Dönem zirvesi / dibi işaretçileri (detaylı görünüm)
   let hiI = 0, loI = 0;
   pts.forEach((p, i) => { if (p.total > pts[hiI].total) hiI = i; if (p.total < pts[loI].total) loI = i; });
-  const peak = (i, cls2) => `<div class="chart-peak ${cls2}" style="left:${((px(i) / W) * 100).toFixed(2)}%; top:${((py(pts[i].total) / H) * 100).toFixed(2)}%"><span>${cls2 === "hi" ? "▲ zirve" : "▼ dip"} ${fmtUSD0(pts[i].total)}</span></div>`;
+  const peak = (i, cls2) => `<div class="chart-peak ${cls2}" style="left:${((px(i) / W) * 100).toFixed(2)}%; top:${((py(pts[i].total) / H) * 100).toFixed(2)}%"><span>${cls2 === "hi" ? "▲ zirve" : "▼ dip"} ${fmtChart(pts[i].total)}</span></div>`;
   const peaks = (!intraday && pts.length >= 4 && hiI !== loI) ? peak(hiI, "hi") + peak(loI, "lo") : "";
 
   box.innerHTML = `
@@ -1333,7 +1365,7 @@ function drawChart() {
       <path d="${lineD}" fill="none" stroke="${color}" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" filter="url(#cglow)"/>
     </svg>
     <div class="chart-ylabels">${
-      gridVals.map((v) => `<span style="top:${((py(v) / H) * 100).toFixed(1)}%">${fmtUSD0(v)}</span>`).join("")
+      gridVals.map((v) => `<span style="top:${((py(v) / H) * 100).toFixed(1)}%">${fmtChart(v)}</span>`).join("")
     }</div>
     ${peaks}
     <div class="chart-enddot" style="left:${((lastX / W) * 100).toFixed(2)}%; top:${((lastY / H) * 100).toFixed(2)}%; --c:${color}"></div>
@@ -1345,12 +1377,17 @@ function drawChart() {
         .map((l) => `<span>${l}</span>`).join("")
     }</div>`;
 
-  attachHover(box, pts, { px, py, W, H, first, color });
+  attachHover(box, pts, { px, py, W, H, first, color, isPerformance });
+  const hi = pts[hiI], lo = pts[loI];
+  insights.innerHTML = `<span>Başlangıç <b>${isPerformance ? "100,00" : fmtUSD0(first)}</b></span>
+    <span>Dönem zirvesi <b>${fmtChart(hi.total)}</b></span>
+    <span>Dönem dibi <b>${fmtChart(lo.total)}</b></span>
+    <span>Son nokta <b>${fmtChart(last)}</b></span>`;
   if (document.body.classList.contains("privacy")) applyMask(true);
 }
 
 // İmleçle gezinme: dikey çizgi + nokta + balon (değer ve başlangıca göre kazanç)
-function attachHover(box, pts, { px, py, W, H, first, color }) {
+function attachHover(box, pts, { px, py, W, H, first, color, isPerformance }) {
   const cursor = box.querySelector(".chart-cursor");
   const hot = box.querySelector(".chart-hot");
   const tip = box.querySelector(".chart-tip");
@@ -1377,8 +1414,8 @@ function attachHover(box, pts, { px, py, W, H, first, color }) {
     tip.style.top = `clamp(6px, ${yPct}%, 78%)`;
     tip.innerHTML = `
       <div class="tip-d">${p.label}</div>
-      <div class="tip-v">${fmtUSD(p.total)}</div>
-      <div class="tip-c ${cls(diff)}">Net değer ${diff >= 0 ? "▲" : "▼"} ${fmtUSD(Math.abs(diff))}</div>
+      <div class="tip-v">${isPerformance ? fmtPct(p.pct) : fmtUSD(p.total)}</div>
+      <div class="tip-c ${cls(diff)}">${isPerformance ? `Getiri endeksi ${p.total.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : `Net değer ${diff >= 0 ? "▲" : "▼"} ${fmtUSD(Math.abs(diff))}`}</div>
       ${p.totalTRY != null ? `<div class="tip-tl">≈ ${fmtTRY0(p.totalTRY)}</div>` : ""}`;
     if (document.body.classList.contains("privacy"))
       tip.querySelectorAll(".tip-v, .tip-c, .tip-tl").forEach((e) => { e.textContent = e.textContent.replace(/[0-9]/g, "•"); });
@@ -1389,6 +1426,18 @@ function attachHover(box, pts, { px, py, W, H, first, color }) {
   box.onpointerleave = () => show(false);
   box.ontouchmove = (e) => { if (e.touches[0]) move(e.touches[0].clientX); };
 }
+
+$("#chartModeTabs").addEventListener("click", (e) => {
+  const button = e.target.closest("[data-mode]");
+  if (!button) return;
+  CHART_MODE = button.dataset.mode;
+  document.querySelectorAll("#chartModeTabs [data-mode]").forEach((node) => {
+    const active = node === button;
+    node.classList.toggle("active", active);
+    node.setAttribute("aria-pressed", String(active));
+  });
+  if (STATE) drawChart();
+});
 
 $("#rangeTabs").addEventListener("click", (e) => {
   const b = e.target.closest(".rt");

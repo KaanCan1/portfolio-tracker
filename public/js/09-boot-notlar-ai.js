@@ -551,7 +551,7 @@ const PM_SEL = [
   ".mover-card .mv-pct",
   ".cash-item .v", ".cash-item .sub",
   "#flowsSub", "#tradesSub", "#r26Sub", "#alertsSub",
-  "#chartSub", ".chart-ylabels span",
+  "#chartSub", ".chart-ylabels span", ".chart-peak span", "#chartInsights b",
   "#tables tbody td:not(.l):not(.spark-col)", "#tables tfoot td:not(.l)",
   "#allTrades tbody td:not(.l)", "#allTrades tfoot td:not(.l)",
   "#realized2026 tbody td:not(.l)", "#realized2026 .r26-stat > b",
