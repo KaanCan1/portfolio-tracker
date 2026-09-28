@@ -19,6 +19,7 @@ function pencere(noktalar, flows, ilk, fallback = false) {
   const secili = noktalar.slice(ilk.index);
   if (secili.length < 2) return null;
   let zincir = 1, akisToplam = 0, akisN = 0;
+  const series = [{ date: secili[0].date, index: 100, pct: 0 }];
   for (let i = 1; i < secili.length; i++) {
     const onceki = secili[i - 1], simdi = secili[i];
     let akis = 0;
@@ -36,13 +37,14 @@ function pencere(noktalar, flows, ilk, fallback = false) {
     if (!Number.isFinite(oran) || oran < 0) return { ok: false, reason: "deger" };
     zincir *= oran;
     akisToplam += akis;
+    series.push({ date: simdi.date, index: zincir * 100, pct: (zincir - 1) * 100 });
   }
   const bas = secili[0], son = secili[secili.length - 1];
   return {
     ok: true, pct: (zincir - 1) * 100,
     gainUSD: son.usd - bas.usd - akisToplam,
     start: bas.date, end: son.date, flowCount: akisN,
-    approximate: true,
+    approximate: true, series,
   };
 }
 
@@ -64,6 +66,10 @@ export function performansHesapla({ snapshots = [], flows = [], current, dayOpen
   const cutoff = (days) => new Date(Date.parse(`${tarih}T00:00:00Z`) - days * 86400000).toISOString().slice(0, 10);
   const once = (date) => { const index = noktalar.findLastIndex((s) => s.date <= date); return index >= 0 ? { index } : null; };
   const ilk = (date) => { const index = noktalar.findIndex((s) => s.date >= date); return index >= 0 && index < noktalar.length - 1 ? { index } : null; };
+  const sonGunlerden = (days) => {
+    const tarihSiniri = cutoff(days);
+    return baslangic && tarihSiniri < baslangic ? null : pencere(noktalar, flows, once(tarihSiniri));
+  };
   const ytd = `${tarih.slice(0, 4)}-01-01`;
   let day = pencere(noktalar, flows, sonGun);
   if (!day && Number(dayOpen?.total) > 0) {
@@ -72,9 +78,14 @@ export function performansHesapla({ snapshots = [], flows = [], current, dayOpen
   }
   return {
     currency: "USD", method: "daily_twr",
-    day, week: pencere(noktalar, flows, once(cutoff(7))),
-    month: pencere(noktalar, flows, once(cutoff(30))),
-    ytd: pencere(noktalar, flows, ilk(ytd)),
+    day, week: sonGunlerden(7),
+    month: sonGunlerden(30),
+    quarter: sonGunlerden(90),
+    half: sonGunlerden(180),
+    year: sonGunlerden(365),
+    // Ölçüm tabanından önceki geriye doldurulmuş yıl kaydını
+    // "yıl başı getirisi" diye sunma.
+    ytd: baslangic && baslangic > ytd ? null : pencere(noktalar, flows, ilk(ytd)),
     since: pencere(noktalar, flows, ilk(baslangic)),
   };
 }
@@ -84,7 +95,7 @@ export function performansDogrula(performance, auditDays = []) {
   if (!performance) return null;
   const issues = auditDays.filter((g) => g.ariza === "deger-acigi");
   const out = { ...performance };
-  for (const key of ["day", "week", "month", "ytd", "since"]) {
+  for (const key of ["day", "week", "month", "quarter", "half", "year", "ytd", "since"]) {
     const p = performance[key];
     if (!p?.ok) continue;
     const unmatched = issues.filter((g) => g.d > p.start && g.d <= p.end);

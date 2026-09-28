@@ -11,20 +11,22 @@ Vanilla JavaScript SPA · Three.js · Express · PostgreSQL · Claude API · MCP
 ![MCP](https://img.shields.io/badge/MCP-server-6C47FF)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-![Portfolio Tracker desktop overview with allocation, priorities and portfolio summary](docs/screenshots/overview.png)
+![Portfolio Tracker desktop overview with portfolio total and cash-flow-adjusted performance chart](docs/screenshots/overview.png)
 
 <details>
   <summary>Mobile overview</summary>
-  <img src="docs/screenshots/overview-mobile.png" alt="Mobile overview with portfolio summary, today's priorities and bottom navigation" width="390">
+  <img src="docs/screenshots/overview-mobile.png" alt="Mobile overview with portfolio total, performance chart and bottom navigation" width="390">
 </details>
 
-*Screenshots use the local mock server and sample data.*
+*Screenshots show illustrative sample data from a local preview.*
 
 > **Why it exists** — I wanted one place that enforces my own trading discipline instead of just charting prices: *Rule #1: don't lose money.* Positions without a stop plan get flagged, new entries are blocked when the market regime is off, profits trigger "pull your initial capital, let the profit ride for free" suggestions. The app is my daily driver; the UI is Turkish because it was built for me first.
 
 ---
 
 ## Features
+
+- **Portfolio-first overview** puts the detailed performance chart directly below the total, with mobile-friendly period controls and a separate actual-value view. Registered deposits and withdrawals are excluded from the return chart; unverified periods are clearly marked.
 
 **Portfolio core**
 - Live portfolio (US stocks, funds, gold, options) with day/week/month/YTD returns, allocation donut with an optional 3D desktop view, benchmark compare and a privacy mode that masks every number

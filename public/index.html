@@ -148,23 +148,32 @@
            Beğenilirse diğer görünümlere de aynı sınıf eklenir. -->
       <section class="view active" id="view-genel">
         <div id="deskOverview"></div>
-        <section class="panel chart-panel">
-          <div class="panel-head">
-            <div>
-              <h2><svg class="h2-ic" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>Portföy Değeri <span class="tip" data-tip="İpucu: Günlük görünüm 15 dakikalık noktalarla çizilir; uzun aralıklar gün kapanışlarını gösterir. Tek günlük oynamaya değil eğimin yönüne bak — Kural 1: ana trend aşağı kırılırsa önce sermayeyi koru.">?</span></h2>
-              <span class="chart-sub" id="chartSub">—</span>
+        <section class="panel chart-panel" id="portfolioChartPanel">
+          <div class="panel-head chart-panel-head">
+            <div class="chart-heading">
+              <p class="desk-kicker">PORTFÖY SEYRİ</p>
+              <h2 id="chartTitle">Akışlardan arındırılmış performans</h2>
+              <span class="chart-sub" id="chartSub">Veri yükleniyor…</span>
             </div>
-            <div class="range-tabs" id="rangeTabs">
-              <button class="rt active" data-range="1d">Günlük</button>
-              <button class="rt" data-range="1w">Haftalık</button>
-              <button class="rt" data-range="1m">Aylık</button>
-              <button class="rt" data-range="3m">3 Aylık</button>
-              <button class="rt" data-range="6m">6 Aylık</button>
-              <button class="rt" data-range="1y">1 Yıllık</button>
-              <button class="rt" data-range="all">Tümü</button>
+            <div class="chart-controls">
+              <div class="chart-mode-tabs" id="chartModeTabs" role="group" aria-label="Grafik görünümü">
+                <button type="button" class="chart-mode active" data-mode="performance" aria-pressed="true">Performans</button>
+                <button type="button" class="chart-mode" data-mode="value" aria-pressed="false">Portföy değeri</button>
+              </div>
+              <div class="range-tabs" id="rangeTabs" role="group" aria-label="Grafik dönemi">
+                <button type="button" class="rt" data-range="1d">1G</button>
+                <button type="button" class="rt" data-range="1w">1H</button>
+                <button type="button" class="rt active" data-range="1m">1A</button>
+                <button type="button" class="rt" data-range="3m">3A</button>
+                <button type="button" class="rt" data-range="6m">6A</button>
+                <button type="button" class="rt" data-range="1y">1Y</button>
+                <button type="button" class="rt" data-range="all">Tümü</button>
+              </div>
             </div>
           </div>
+          <p class="chart-context" id="chartContext">Kayıtlı para giriş ve çıkışları getiriden ayrılır.</p>
           <div class="chart-box" id="chartBox"></div>
+          <div class="chart-insights" id="chartInsights" aria-live="polite"></div>
         </section>
 
         <details class="desk-details" id="deskLegacyDetails"><summary>Piyasa, risk ve muhasebe ayrıntıları <span>Göstergeler ve tüm uyarılar</span></summary>

@@ -174,6 +174,8 @@
 
     // WebGL renderer bu düğüme bağlıdır. 60 sn'lik portföy yenilemelerinde aynı
     // dağılım yüzeyini korumak context/texture churn'ünü engeller.
+    const existingChartPanel = document.getElementById("portfolioChartPanel");
+    existingChartPanel?.remove();
     const existingAllocationMount = document.getElementById("deskAllocationVisual");
     const existingThreeToggle = existingAllocationMount
       ?.closest(".desk-allocation-card")
@@ -193,6 +195,7 @@
           <article><small>Realize K/Z</small><b class="desk-sensitive ${tone(metrics.realizedUSD)}">${moneyUSD(metrics.realizedUSD)}</b><span>satışlardan</span></article>
           <article><small>Kanıtlanmış swing katkısı</small><b class="desk-sensitive ${tone(proven?.perMonth)}">${proven?.perMonth != null ? `${moneyUSD(proven.perMonth)}/ay` : "Ölçülmüyor"}</b><span>${swing?._valid === false ? "veri alınamadı" : proven?.verdict === "yetersiz" || !proven ? "yeterli örnek yok" : proven.verdict === "gurultu" ? "gürültüden ayrışmıyor" : "ölçülen katkı"}</span></article>
         </div>
+        <div class="desk-chart-slot" id="deskChartSlot"></div>
       </section>
 
       <section class="desk-overview-grid">
@@ -222,6 +225,7 @@
         </article>
       </section>`;
 
+    if (existingChartPanel) document.getElementById("deskChartSlot")?.append(existingChartPanel);
     const replacementMount = document.getElementById("deskAllocationVisual");
     if (existingAllocationMount && replacementMount && existingAllocationMount !== replacementMount) {
       const oldFallback = existingAllocationMount.querySelector(".desk-allocation-fallback");
