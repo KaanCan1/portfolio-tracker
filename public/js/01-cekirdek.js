@@ -1170,16 +1170,25 @@ function pickTicks(pts, max) {
   return out;
 }
 
-// Catmull-Rom → kübik bezier: noktaları yumuşak, doğal bir eğriye çevirir
+// Ölçülen noktalar arasında taşma üretmeyen monoton kübik eğri.
+// Tepe/dip değerleri kaydın ötesine taşımaz; iki noktada düz çizgi kalır.
 function smoothPath(P) {
   if (!P.length) return "";
   if (P.length < 3) return "M " + P.map((p) => `${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(" L ");
+  const slopes = P.slice(1).map((p, i) => (p[1] - P[i][1]) / (p[0] - P[i][0]));
+  const tangent = slopes.map((s, i) => {
+    if (i === 0) return s;
+    const left = slopes[i - 1];
+    if (left * s <= 0) return 0;
+    const h0 = P[i][0] - P[i - 1][0], h1 = P[i + 1][0] - P[i][0];
+    const w0 = 2 * h1 + h0, w1 = h1 + 2 * h0;
+    return (w0 + w1) / (w0 / left + w1 / s);
+  });
+  tangent.push(slopes[slopes.length - 1]);
   let d = `M ${P[0][0].toFixed(1)} ${P[0][1].toFixed(1)}`;
   for (let i = 0; i < P.length - 1; i++) {
-    const p0 = P[i - 1] || P[i], p1 = P[i], p2 = P[i + 1], p3 = P[i + 2] || P[i + 1];
-    const c1x = p1[0] + (p2[0] - p0[0]) / 6, c1y = p1[1] + (p2[1] - p0[1]) / 6;
-    const c2x = p2[0] - (p3[0] - p1[0]) / 6, c2y = p2[1] - (p3[1] - p1[1]) / 6;
-    d += ` C ${c1x.toFixed(1)} ${c1y.toFixed(1)}, ${c2x.toFixed(1)} ${c2y.toFixed(1)}, ${p2[0].toFixed(1)} ${p2[1].toFixed(1)}`;
+    const a = P[i], b = P[i + 1], third = (b[0] - a[0]) / 3;
+    d += ` C ${(a[0] + third).toFixed(1)} ${(a[1] + tangent[i] * third).toFixed(1)}, ${(b[0] - third).toFixed(1)} ${(b[1] - tangent[i + 1] * third).toFixed(1)}, ${b[0].toFixed(1)} ${b[1].toFixed(1)}`;
   }
   return d;
 }
@@ -1314,11 +1323,12 @@ function drawChart() {
   const pts = isPerformance ? period.series.map((p, i) => ({
     label: RANGE === "1d" ? (i === 0 ? "Açılış" : "Şimdi") : fmtDate(p.date),
     total: p.pct,
+    date: p.date,
   })) : raw.pts;
   const intraday = isPerformance ? false : raw.intraday;
   const fmtChart = (n) => isPerformance ? chartPct(n) : fmtUSD0(n);
   context.textContent = isPerformance
-    ? "Para yatırma ve çekme işlemleri getiriyi değiştirmez."
+    ? `Para yatırma ve çekme işlemleri getiriyi değiştirmez.${pts.length <= 5 ? ` ${pts.length} kayıt noktası var; çizgi ara değerleri ölçmez.` : ""}`
     : "Gerçek bakiye: para giriş ve çıkışları çizgide görünür.";
   context.classList.remove("is-warning");
 
@@ -1355,12 +1365,15 @@ function drawChart() {
   const vals = pts.map((p) => p.total);
   let min = Math.min(...vals), max = Math.max(...vals);
   if (min === max) { min -= 1; max += 1; }
-  const px = (i) => pad.l + (i / (pts.length - 1)) * (W - pad.l - pad.r);
+  const times = isPerformance ? pts.map((p) => Date.parse(`${p.date}T00:00:00Z`)) : [];
+  const timeScale = isPerformance && times.every(Number.isFinite) && times[pts.length - 1] > times[0]
+    && times.every((t, i) => i === 0 || t > times[i - 1]);
+  const px = (i) => pad.l + (timeScale ? (times[i] - times[0]) / (times[pts.length - 1] - times[0]) : i / (pts.length - 1)) * (W - pad.l - pad.r);
   const py = (v) => pad.t + (1 - (v - min) / (max - min)) * (H - pad.t - pad.b);
   const color = "#096e75";
   const lastX = px(pts.length - 1), lastY = py(last);
   const coords = pts.map((p, i) => [px(i), py(p.total)]);
-  const lineD = isPerformance ? "M " + coords.map(([x, y]) => `${x.toFixed(1)} ${y.toFixed(1)}`).join(" L ") : smoothPath(coords);
+  const lineD = smoothPath(coords);
   const areaBottom = isPerformance ? py(0) : H - pad.b;
   const areaD = `${lineD} L ${lastX.toFixed(1)} ${areaBottom.toFixed(1)} L ${pad.l.toFixed(1)} ${areaBottom.toFixed(1)} Z`;
   const gridVals = [max, min + (max - min) * 2 / 3, min + (max - min) / 3, min];
@@ -1372,6 +1385,9 @@ function drawChart() {
   pts.forEach((p, i) => { if (p.total > pts[hiI].total) hiI = i; if (p.total < pts[loI].total) loI = i; });
   const peak = (i, kind) => `<div class="chart-peak ${kind}" aria-hidden="true" style="left:${((px(i) / W) * 100).toFixed(2)}%; top:${((py(pts[i].total) / H) * 100).toFixed(2)}%"></div>`;
   const peaks = pts.length >= 4 && hiI !== loI ? peak(hiI, "hi") + peak(loI, "lo") : "";
+  const observations = pts.length <= 8 ? pts.slice(0, -1).map((_, i) =>
+    `<span class="chart-observation" aria-hidden="true" style="left:${((px(i) / W) * 100).toFixed(2)}%;top:${((py(pts[i].total) / H) * 100).toFixed(2)}%;--c:${color}"></span>`
+  ).join("") : "";
 
   box.innerHTML = `
     <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" class="chart-svg" aria-hidden="true">
@@ -1386,7 +1402,7 @@ function drawChart() {
       <path d="${lineD}" fill="none" stroke="${color}" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
     </svg>
     <div class="chart-ylabels">${gridVals.map((v) => `<span style="top:${((py(v) / H) * 100).toFixed(1)}%">${fmtChart(v)}</span>`).join("")}</div>
-    ${peaks}
+    ${peaks}${observations}
     <div class="chart-enddot" style="left:${((lastX / W) * 100).toFixed(2)}%; top:${((lastY / H) * 100).toFixed(2)}%; --c:${color}"></div>
     <div class="chart-cursor"></div><div class="chart-hot" style="background:${color}"></div><div class="chart-tip"></div>
     <div class="chart-axis">${(intraday ? pickTicks(pts, 4) : [pts[0].label, pts[pts.length - 1].label]).map((label) => `<span>${label}</span>`).join("")}</div>
@@ -1434,7 +1450,10 @@ function attachHover(box, pts, { px, py, W, H, first, isPerformance }) {
   };
   const fromX = (clientX) => {
     const rect = box.getBoundingClientRect();
-    select(Math.round(Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)) * (n - 1)));
+    const x = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)) * W;
+    let nearest = 0;
+    for (let i = 1; i < n; i++) if (Math.abs(px(i) - x) < Math.abs(px(nearest) - x)) nearest = i;
+    select(nearest);
   };
   box.onpointermove = (event) => fromX(event.clientX);
   box.onpointerdown = (event) => fromX(event.clientX);
