@@ -148,32 +148,36 @@
            Beğenilirse diğer görünümlere de aynı sınıf eklenir. -->
       <section class="view active" id="view-genel">
         <div id="deskOverview"></div>
-        <section class="panel chart-panel" id="portfolioChartPanel">
+        <section class="panel chart-panel" id="portfolioChartPanel" aria-labelledby="chartTitle">
           <div class="panel-head chart-panel-head">
             <div class="chart-heading">
               <p class="desk-kicker">PORTFÖY SEYRİ</p>
-              <h2 id="chartTitle">Akışlardan arındırılmış performans</h2>
-              <span class="chart-sub" id="chartSub">Veri yükleniyor…</span>
+              <h2 id="chartTitle">Yatırım getirisi</h2>
+              <div class="chart-summary">
+                <strong class="chart-main-value" id="chartMainValue">—</strong>
+                <span class="chart-sub" id="chartSub">Veri yükleniyor…</span>
+              </div>
             </div>
             <div class="chart-controls">
-              <div class="chart-mode-tabs" id="chartModeTabs" role="group" aria-label="Grafik görünümü">
-                <button type="button" class="chart-mode active" data-mode="performance" aria-pressed="true">Performans</button>
-                <button type="button" class="chart-mode" data-mode="value" aria-pressed="false">Portföy değeri</button>
+              <div class="chart-mode-tabs" id="chartModeTabs" role="group" aria-label="Grafikte gösterilen bilgi">
+                <button type="button" class="chart-mode active" data-mode="performance" aria-label="Yatırım getirisini göster" aria-pressed="true">Getiri</button>
+                <button type="button" class="chart-mode" data-mode="value" aria-label="Portföy bakiyesini göster" aria-pressed="false">Bakiye</button>
               </div>
               <div class="range-tabs" id="rangeTabs" role="group" aria-label="Grafik dönemi">
-                <button type="button" class="rt" data-range="1d">1G</button>
-                <button type="button" class="rt" data-range="1w">1H</button>
-                <button type="button" class="rt active" data-range="1m">1A</button>
-                <button type="button" class="rt" data-range="3m">3A</button>
-                <button type="button" class="rt" data-range="6m">6A</button>
-                <button type="button" class="rt" data-range="1y">1Y</button>
-                <button type="button" class="rt" data-range="all">Tümü</button>
+                <button type="button" class="rt" data-range="1d" aria-pressed="false">Gün</button>
+                <button type="button" class="rt" data-range="1w" aria-pressed="false">Hafta</button>
+                <button type="button" class="rt active" data-range="1m" aria-pressed="true">Ay</button>
+                <button type="button" class="rt" data-range="3m" aria-pressed="false">3 Ay</button>
+                <button type="button" class="rt" data-range="6m" aria-pressed="false">6 Ay</button>
+                <button type="button" class="rt" data-range="1y" aria-pressed="false">1 Yıl</button>
+                <button type="button" class="rt" data-range="all" aria-pressed="false">Tümü</button>
               </div>
             </div>
           </div>
-          <p class="chart-context" id="chartContext">Kayıtlı para giriş ve çıkışları getiriden ayrılır.</p>
-          <div class="chart-box" id="chartBox"></div>
-          <div class="chart-insights" id="chartInsights" aria-live="polite"></div>
+          <p class="chart-context" id="chartContext">Para yatırma ve çekme işlemleri getiriden ayrılır.</p>
+          <div class="chart-box" id="chartBox" role="group" tabindex="0" aria-label="Portföy grafiği. Noktaları incelemek için ok tuşlarını kullanın."></div>
+          <div class="chart-insights" id="chartInsights"></div>
+          <details class="chart-method"><summary>Bu grafik neyi gösteriyor?</summary><p><b>Getiri</b> görünümü, kayıtlı para yatırma ve çekmelerini ayırarak USD bazında değişimi gösterir. <b>Bakiye</b> görünümü portföyün gerçek dolar değeridir; para hareketleri burada görünür. Günlük getiriler kapanış değerleriyle yaklaşık hesaplanır.</p></details>
         </section>
 
         <details class="desk-details" id="deskLegacyDetails"><summary>Piyasa, risk ve muhasebe ayrıntıları <span>Göstergeler ve tüm uyarılar</span></summary>

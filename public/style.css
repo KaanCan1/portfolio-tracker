@@ -461,7 +461,7 @@ body.privacy [data-pm="1"] { user-select: none; }
 }
 .rt:hover { color: var(--ink); }
 .rt.active { background: var(--card); color: var(--ink); box-shadow: 0 1px 2px rgba(20,30,25,.1); }
-.chart-box { margin-top: 14px; height: 360px; position: relative; touch-action: none; }
+.chart-box { margin-top: 14px; height: 360px; position: relative; touch-action: pan-y; }
 .chart-svg { width: 100%; height: 100%; display: block; }
 .chart-axis { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--muted); font-weight: 600; margin-top: 2px; }
 .chart-base { font-size: 11.5px; font-weight: 600; color: var(--muted); margin-left: 4px; }

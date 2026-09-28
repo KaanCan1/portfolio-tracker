@@ -308,6 +308,8 @@ function showView(name) {
   }
   if (!VIEWS.includes(name)) name = "genel";
   document.querySelectorAll(".view").forEach((v) => v.classList.toggle("active", v.id === "view-" + name));
+  // Sekme gizliyken çizilen SVG genişliği sıfır olur; Genel Bakış açılınca gerçek ölçüyle yenile.
+  if (name === "genel" && STATE) requestAnimationFrame(drawChart);
   // Nav: Swing hub (data-view=swingdefteri) 3 segmentin (defter/qm/büyüme) hepsinde aktif kalır
   document.querySelectorAll(".nav-item").forEach((b) =>
     b.classList.toggle("active", b.dataset.view === name || (b.dataset.view === "swingdefteri" && SWING_SEGS.includes(name))));
@@ -551,7 +553,7 @@ const PM_SEL = [
   ".mover-card .mv-pct",
   ".cash-item .v", ".cash-item .sub",
   "#flowsSub", "#tradesSub", "#r26Sub", "#alertsSub",
-  "#chartSub", ".chart-ylabels span", ".chart-peak span", "#chartInsights b",
+  "#chartSub", "#chartMainValue", ".chart-ylabels span", ".chart-peak span", "#chartInsights b",
   "#tables tbody td:not(.l):not(.spark-col)", "#tables tfoot td:not(.l)",
   "#allTrades tbody td:not(.l)", "#allTrades tfoot td:not(.l)",
   "#realized2026 tbody td:not(.l)", "#realized2026 .r26-stat > b",

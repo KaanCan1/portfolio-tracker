@@ -1256,176 +1256,218 @@ function iconizeHeaders(root) {
   iconizeHeaders();
 })();
 
+const CHART_PERIODS = { "1d": "day", "1w": "week", "1m": "month", "3m": "quarter", "6m": "half", "1y": "year", all: "since" };
+const chartPct = (n) => `${n >= 0 ? "+" : ""}${Number(n).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
+const CHART_RANGE_NAMES = { "1d": "gün", "1w": "hafta", "1m": "ay", "3m": "3 ay", "6m": "6 ay", "1y": "1 yıl", all: "tüm dönem" };
+
+function chartDateRange(start, end) {
+  if (!start || !end) return "";
+  if (start === end) return fmtDate(start);
+  const [sy, sm, sd] = start.split("-").map(Number);
+  const [ey, em, ed] = end.split("-").map(Number);
+  if (sy === ey && sm === em) return `${sd}–${ed} ${TR_MONTHS[sm - 1]} ${sy}`;
+  if (sy === ey) return `${sd} ${TR_MONTHS[sm - 1]} – ${ed} ${TR_MONTHS[em - 1]} ${sy}`;
+  return `${fmtDate(start)} – ${fmtDate(end)}`;
+}
+
 function drawChart() {
   const box = $("#chartBox");
-  box.classList.remove("is-empty");
+  const mainValue = $("#chartMainValue");
   const sub = $("#chartSub");
   const context = $("#chartContext");
   const insights = $("#chartInsights");
   const isPerformance = CHART_MODE === "performance";
-  $("#chartTitle").textContent = isPerformance ? "Akışlardan arındırılmış performans" : "Portföy değeri";
-  const rangeKey = { "1d": "day", "1w": "week", "1m": "month", "3m": "quarter", "6m": "half", "1y": "year", all: "since" }[RANGE];
-  const period = isPerformance ? STATE.performance?.[rangeKey] : null;
+  box.classList.remove("is-empty");
+  box.onpointermove = box.onpointerdown = box.onpointerleave = box.onpointercancel = null;
+  box.onkeydown = box.onfocus = box.onblur = null;
+  $("#chartTitle").textContent = isPerformance ? "Yatırım getirisi" : "Portföy bakiyesi";
+  box.setAttribute("aria-label", `${isPerformance ? "Getiri" : "Bakiye"} grafiği. Noktaları incelemek için sağ ve sol ok tuşlarını kullanın.`);
+
+  const period = isPerformance ? STATE.performance?.[CHART_PERIODS[RANGE]] : null;
   if (isPerformance && (!period?.ok || period.verified === false || !Array.isArray(period.series) || period.series.length < 2)) {
     const unresolved = period?.unexplainedCount || 0;
-    sub.textContent = "Doğrulanmış getiri bekleniyor";
+    const available = ["1m", "1w", "1d"].find((range) => {
+      const p = STATE.performance?.[CHART_PERIODS[range]];
+      return range !== RANGE && p?.ok && p.verified !== false && p.series?.length >= 2;
+    });
+    mainValue.textContent = "—";
+    mainValue.className = "chart-main-value";
+    sub.textContent = unresolved ? `${unresolved} günün nakit kaydı açıklanmıyor` : "Bu dönem için yeterli doğrulanmış kayıt yok";
     context.textContent = unresolved
-      ? `${unresolved} günün nakit farkı açıklanmıyor. Bu aralıkta getiri çizgisi gösterilmiyor.`
-      : "Bu aralık için yeterli doğrulanmış değerleme yok. Daha kısa bir dönem seçebilirsin.";
+      ? "Yanlış getiri göstermemek için bu dönemin çizgisi gizlendi."
+      : "Ölçüm başladıkça grafik burada oluşacak.";
     context.classList.toggle("is-warning", !!unresolved);
     insights.innerHTML = "";
     box.classList.add("is-empty");
-    box.innerHTML = `<div class="chart-empty">${unresolved ? "Önce geçmiş nakit hareketlerini doğrula; bu dönem için güvenilir performans hesaplanamıyor." : "Bu dönemde çizilecek yeterli performans noktası henüz yok."}</div>`;
+    box.innerHTML = `<div class="chart-empty-state" role="status">
+      <span class="chart-empty-symbol" aria-hidden="true">↗</span>
+      <div><strong>${unresolved ? "Bu dönemin getirisi doğrulanamıyor" : "Henüz yeterli veri yok"}</strong>
+      <p>${unresolved ? "Eksik nakit hareketleri tamamlanınca bu grafik otomatik açılır." : "Daha kısa bir döneme veya bakiye görünümüne bakabilirsin."}</p>
+      <button type="button" data-chart-action="${available ? "range" : "value"}" ${available ? `data-range="${available}"` : ""}>${available ? `Doğrulanmış ${CHART_RANGE_NAMES[available]} görünümünü aç` : "Bakiye grafiğini aç"}<span aria-hidden="true"> →</span></button></div>
+    </div>`;
     return;
   }
+
   const raw = isPerformance ? null : buildSeries();
+  // Getiriyi 100 bazlı endeks yerine doğrudan yüzde olarak göster: 0 çizgisi
+  // kullanıcının dönem başını temsil eder, para çekimi yapay bir düşüş yaratmaz.
   const pts = isPerformance ? period.series.map((p, i) => ({
     label: RANGE === "1d" ? (i === 0 ? "Açılış" : "Şimdi") : fmtDate(p.date),
-    total: p.index, pct: p.pct,
+    total: p.pct,
   })) : raw.pts;
   const intraday = isPerformance ? false : raw.intraday;
-  const fmtChart = (n) => isPerformance ? n.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : fmtUSD0(n);
+  const fmtChart = (n) => isPerformance ? chartPct(n) : fmtUSD0(n);
   context.textContent = isPerformance
-    ? "USD bazında günlük zaman ağırlıklı getiri · para giriş ve çıkışları hariç · başlangıç 100"
-    : "Gerçek portföy bakiyesi · para giriş ve çıkışları çizgide görünür.";
+    ? "Para yatırma ve çekme işlemleri getiriyi değiştirmez."
+    : "Gerçek bakiye: para giriş ve çıkışları çizgide görünür.";
   context.classList.remove("is-warning");
 
   if (pts.length === 0) {
-    sub.textContent = intraday ? "Gün içi veri birikiyor…" : "Henüz veri yok";
+    mainValue.textContent = "—";
+    mainValue.className = "chart-main-value";
+    sub.textContent = intraday ? "Gün içi veri birikiyor" : "Henüz değerleme kaydı yok";
     insights.innerHTML = "";
     box.classList.add("is-empty");
-    box.innerHTML = `<div class="chart-empty">${intraday ? "Bugünün seyri uygulama açık kaldıkça oluşur." : "Değerleme verileri biriktikçe grafik oluşacak."}</div>`;
+    box.innerHTML = `<div class="chart-empty-state" role="status"><span class="chart-empty-symbol" aria-hidden="true">↗</span><div><strong>Grafik hazırlanıyor</strong><p>${intraday ? "Bugünün seyri yeni fiyatlarla oluşacak." : "İlk kayıtlar geldikçe portföy seyri çizilecek."}</p></div></div>`;
     return;
   }
 
   const first = pts[0].total;
   const last = pts[pts.length - 1].total;
   const change = last - first;
-  if (isPerformance) {
-    sub.innerHTML = `<span class="chart-chg ${cls(period.pct)}">${fmtPct(period.pct)}</span> <span class="chart-base">${fmtDate(period.start)} – ${fmtDate(period.end)} · ${period.flowCount} dış para hareketi ayrıştırıldı</span>`;
-  } else {
-    const baseLabel = intraday ? "bugün açılışa göre net değer" : pts.length > 1 ? "dönem başına göre net değer" : "";
-    sub.innerHTML = `${fmtUSD(last)} <span class="chart-chg ${cls(change)}">${change >= 0 ? "▲" : "▼"} ${fmtUSD(Math.abs(change))}</span>` +
-      (baseLabel ? ` <span class="chart-base">· ${baseLabel} · para giriş/çıkışı dahil</span>` : "");
-  }
+  mainValue.textContent = isPerformance ? chartPct(period.pct) : fmtUSD(last);
+  mainValue.className = `chart-main-value ${isPerformance && period.pct < 0 ? "is-negative" : ""}`;
+  sub.textContent = isPerformance
+    ? `${chartDateRange(period.start, period.end)} · ${period.flowCount ? `${period.flowCount} para hareketi ayrıştırıldı` : "kayıtlı para hareketi yok"}`
+    : `${pts[0].label} – ${pts[pts.length - 1].label} · ${change >= 0 ? "+" : "−"}${fmtUSD(Math.abs(change))} net değişim`;
 
   if (pts.length === 1) {
     insights.innerHTML = "";
     box.classList.add("is-empty");
-    box.innerHTML = `<div class="chart-empty single"><div class="single-val">${fmtUSD(last)}</div><div class="single-note">${pts[0].label} · İlk kayıt alındı; grafik yeni noktalarla oluşacak.</div></div>`;
+    box.innerHTML = `<div class="chart-empty-state" role="status"><span class="chart-empty-symbol" aria-hidden="true">↗</span><div><strong>İlk nokta kaydedildi</strong><p>Yeni değerlemeler geldikçe çizgi burada oluşacak.</p></div></div>`;
     return;
   }
 
-  // ölçek
-  const W = 1000, H = 240, pad = { t: 16, r: 12, b: 24, l: 12 };
+  const W = 1000, H = 240;
+  // Sağdaki eksen etiketleriyle uç nokta arasında gerçek ekranda ~60px bırak.
+  const chartWidth = box.clientWidth || Math.max(320, window.innerWidth - (window.innerWidth > 767 ? 360 : 60));
+  const pad = { t: 20, r: Math.max(70, Math.round(W * 60 / chartWidth)), b: 28, l: 12 };
   const vals = pts.map((p) => p.total);
   let min = Math.min(...vals), max = Math.max(...vals);
   if (min === max) { min -= 1; max += 1; }
   const px = (i) => pad.l + (i / (pts.length - 1)) * (W - pad.l - pad.r);
   const py = (v) => pad.t + (1 - (v - min) / (max - min)) * (H - pad.t - pad.b);
-
-  const up = change >= 0;
-  const color = up ? "#1f8a4e" : "#d8442f";
+  const color = "#096e75";
   const lastX = px(pts.length - 1), lastY = py(last);
-  const chartCoords = pts.map((p, i) => [px(i), py(p.total)]);
-  const lineD = isPerformance ? "M " + chartCoords.map(([x, y]) => `${x.toFixed(1)} ${y.toFixed(1)}`).join(" L ") : smoothPath(chartCoords);
-  const areaD = `${lineD} L ${(W - pad.r).toFixed(1)} ${(H - pad.b).toFixed(1)} L ${pad.l.toFixed(1)} ${(H - pad.b).toFixed(1)} Z`;
-
-  // Yatay referans ızgarası (4 seviye) + açılış/dönem başı kesikli çizgisi
+  const coords = pts.map((p, i) => [px(i), py(p.total)]);
+  const lineD = isPerformance ? "M " + coords.map(([x, y]) => `${x.toFixed(1)} ${y.toFixed(1)}`).join(" L ") : smoothPath(coords);
+  const areaBottom = isPerformance ? py(0) : H - pad.b;
+  const areaD = `${lineD} L ${lastX.toFixed(1)} ${areaBottom.toFixed(1)} L ${pad.l.toFixed(1)} ${areaBottom.toFixed(1)} Z`;
   const gridVals = [max, min + (max - min) * 2 / 3, min + (max - min) / 3, min];
   const grid = gridVals.map((v) =>
     `<line x1="${pad.l}" y1="${py(v).toFixed(1)}" x2="${(W - pad.r).toFixed(1)}" y2="${py(v).toFixed(1)}" class="cg-grid" vector-effect="non-scaling-stroke"/>`
   ).join("");
-  const baseInRange = first >= min && first <= max;
-  const baseLine = baseInRange
-    ? `<line x1="${pad.l}" y1="${py(first).toFixed(1)}" x2="${(W - pad.r).toFixed(1)}" y2="${py(first).toFixed(1)}" class="cg-base" vector-effect="non-scaling-stroke"/>`
-    : "";
-
-  // Dönem zirvesi / dibi işaretçileri (detaylı görünüm)
+  const baseLine = `<line x1="${pad.l}" y1="${py(first).toFixed(1)}" x2="${(W - pad.r).toFixed(1)}" y2="${py(first).toFixed(1)}" class="cg-base" vector-effect="non-scaling-stroke"/>`;
   let hiI = 0, loI = 0;
   pts.forEach((p, i) => { if (p.total > pts[hiI].total) hiI = i; if (p.total < pts[loI].total) loI = i; });
-  const peak = (i, cls2) => `<div class="chart-peak ${cls2}" style="left:${((px(i) / W) * 100).toFixed(2)}%; top:${((py(pts[i].total) / H) * 100).toFixed(2)}%"><span>${cls2 === "hi" ? "▲ zirve" : "▼ dip"} ${fmtChart(pts[i].total)}</span></div>`;
-  const peaks = (!intraday && pts.length >= 4 && hiI !== loI) ? peak(hiI, "hi") + peak(loI, "lo") : "";
+  const peak = (i, kind) => `<div class="chart-peak ${kind}" aria-hidden="true" style="left:${((px(i) / W) * 100).toFixed(2)}%; top:${((py(pts[i].total) / H) * 100).toFixed(2)}%"></div>`;
+  const peaks = pts.length >= 4 && hiI !== loI ? peak(hiI, "hi") + peak(loI, "lo") : "";
 
   box.innerHTML = `
-    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" class="chart-svg">
+    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" class="chart-svg" aria-hidden="true">
       <defs>
         <linearGradient id="cg" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="${color}" stop-opacity="0.26"/>
-          <stop offset="55%" stop-color="${color}" stop-opacity="0.08"/>
+          <stop offset="0%" stop-color="${color}" stop-opacity="0.2"/>
           <stop offset="100%" stop-color="${color}" stop-opacity="0"/>
         </linearGradient>
-        <filter id="cglow" x="-3%" y="-12%" width="106%" height="124%">
-          <feGaussianBlur stdDeviation="2.4" result="b"/>
-          <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-        </filter>
       </defs>
       ${grid}${baseLine}
       <path d="${areaD}" fill="url(#cg)"/>
-      <path d="${lineD}" fill="none" stroke="${color}" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" filter="url(#cglow)"/>
+      <path d="${lineD}" fill="none" stroke="${color}" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
     </svg>
-    <div class="chart-ylabels">${
-      gridVals.map((v) => `<span style="top:${((py(v) / H) * 100).toFixed(1)}%">${fmtChart(v)}</span>`).join("")
-    }</div>
+    <div class="chart-ylabels">${gridVals.map((v) => `<span style="top:${((py(v) / H) * 100).toFixed(1)}%">${fmtChart(v)}</span>`).join("")}</div>
     ${peaks}
     <div class="chart-enddot" style="left:${((lastX / W) * 100).toFixed(2)}%; top:${((lastY / H) * 100).toFixed(2)}%; --c:${color}"></div>
-    <div class="chart-cursor"></div>
-    <div class="chart-hot" style="background:${color}"></div>
-    <div class="chart-tip"></div>
-    <div class="chart-axis">${
-      (intraday ? pickTicks(pts, 6) : [pts[0].label, pts[pts.length - 1].label])
-        .map((l) => `<span>${l}</span>`).join("")
-    }</div>`;
+    <div class="chart-cursor"></div><div class="chart-hot" style="background:${color}"></div><div class="chart-tip"></div>
+    <div class="chart-axis">${(intraday ? pickTicks(pts, 4) : [pts[0].label, pts[pts.length - 1].label]).map((label) => `<span>${label}</span>`).join("")}</div>
+    <span class="chart-sr-only" aria-live="polite"></span>`;
 
-  attachHover(box, pts, { px, py, W, H, first, color, isPerformance });
+  attachHover(box, pts, { px, py, W, H, first, isPerformance });
   const hi = pts[hiI], lo = pts[loI];
-  insights.innerHTML = `<span>Başlangıç <b>${isPerformance ? "100,00" : fmtUSD0(first)}</b></span>
-    <span>Dönem zirvesi <b>${fmtChart(hi.total)}</b></span>
-    <span>Dönem dibi <b>${fmtChart(lo.total)}</b></span>
-    <span>Son nokta <b>${fmtChart(last)}</b></span>`;
+  insights.innerHTML = isPerformance
+    ? `<div><small>En yüksek getiri</small><b>${chartPct(hi.total)}</b></div>
+       <div><small>En düşük getiri</small><b>${chartPct(lo.total)}</b></div>
+       <div><small>Ayrıştırılan para hareketi</small><b>${period.flowCount}</b></div>`
+    : `<div><small>Dönem başı</small><b>${fmtUSD0(first)}</b></div>
+       <div><small>En yüksek bakiye</small><b>${fmtUSD0(hi.total)}</b></div>
+       <div><small>En düşük bakiye</small><b>${fmtUSD0(lo.total)}</b></div>`;
   if (document.body.classList.contains("privacy")) applyMask(true);
 }
 
-// İmleçle gezinme: dikey çizgi + nokta + balon (değer ve başlangıca göre kazanç)
-function attachHover(box, pts, { px, py, W, H, first, color, isPerformance }) {
+function attachHover(box, pts, { px, py, W, H, first, isPerformance }) {
   const cursor = box.querySelector(".chart-cursor");
   const hot = box.querySelector(".chart-hot");
   const tip = box.querySelector(".chart-tip");
+  const screenReader = box.querySelector(".chart-sr-only");
   const n = pts.length;
-
-  const show = (on) => {
-    [cursor, hot, tip].forEach((el) => (el.style.opacity = on ? "1" : "0"));
-  };
-
-  const move = (clientX) => {
-    const rect = box.getBoundingClientRect();
-    let frac = (clientX - rect.left) / rect.width;
-    frac = Math.max(0, Math.min(1, frac));
-    const i = Math.round(frac * (n - 1));
-    const p = pts[i];
-    const xPct = (px(i) / W) * 100;
+  let selected = n - 1;
+  const show = (on) => [cursor, hot, tip].forEach((el) => { el.style.opacity = on ? "1" : "0"; });
+  const select = (index, announce = false) => {
+    selected = Math.max(0, Math.min(n - 1, index));
+    const p = pts[selected];
+    const xPct = (px(selected) / W) * 100;
     const yPct = (py(p.total) / H) * 100;
     const diff = p.total - first;
-
     cursor.style.left = xPct + "%";
     hot.style.left = xPct + "%";
     hot.style.top = yPct + "%";
-    tip.style.left = `clamp(46px, ${xPct}%, calc(100% - 46px))`;
-    tip.style.top = `clamp(6px, ${yPct}%, 78%)`;
-    tip.innerHTML = `
-      <div class="tip-d">${p.label}</div>
-      <div class="tip-v">${isPerformance ? fmtPct(p.pct) : fmtUSD(p.total)}</div>
-      <div class="tip-c ${cls(diff)}">${isPerformance ? `Getiri endeksi ${p.total.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : `Net değer ${diff >= 0 ? "▲" : "▼"} ${fmtUSD(Math.abs(diff))}`}</div>
+    tip.style.left = `clamp(70px, ${xPct}%, calc(100% - 70px))`;
+    tip.style.top = `clamp(12px, ${yPct}%, 78%)`;
+    tip.innerHTML = `<div class="tip-d">${p.label}</div>
+      <div class="tip-v">${isPerformance ? chartPct(p.total) : fmtUSD(p.total)}</div>
+      <div class="tip-c ${cls(diff)}">${isPerformance ? "Dönem başından beri" : `Değişim ${diff >= 0 ? "+" : "−"}${fmtUSD(Math.abs(diff))}`}</div>
       ${p.totalTRY != null ? `<div class="tip-tl">≈ ${fmtTRY0(p.totalTRY)}</div>` : ""}`;
     if (document.body.classList.contains("privacy"))
-      tip.querySelectorAll(".tip-v, .tip-c, .tip-tl").forEach((e) => { e.textContent = e.textContent.replace(/[0-9]/g, "•"); });
+      tip.querySelectorAll(".tip-v, .tip-c, .tip-tl").forEach((el) => { el.textContent = el.textContent.replace(/[0-9]/g, "•"); });
+    if (announce) screenReader.textContent = `${p.label}: ${document.body.classList.contains("privacy") ? "tutar gizli" : (isPerformance ? chartPct(p.total) : fmtUSD(p.total))}`;
     show(true);
   };
-
-  box.onpointermove = (e) => move(e.clientX);
-  box.onpointerleave = () => show(false);
-  box.ontouchmove = (e) => { if (e.touches[0]) move(e.touches[0].clientX); };
+  const fromX = (clientX) => {
+    const rect = box.getBoundingClientRect();
+    select(Math.round(Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)) * (n - 1)));
+  };
+  box.onpointermove = (event) => fromX(event.clientX);
+  box.onpointerdown = (event) => fromX(event.clientX);
+  box.onpointerleave = (event) => { if (event.pointerType !== "touch") show(false); };
+  box.onpointercancel = () => show(false);
+  box.onfocus = () => select(selected, true);
+  box.onblur = () => show(false);
+  box.onkeydown = (event) => {
+    const next = event.key === "ArrowLeft" ? selected - 1 : event.key === "ArrowRight" ? selected + 1
+      : event.key === "Home" ? 0 : event.key === "End" ? n - 1 : null;
+    if (next == null) return;
+    event.preventDefault();
+    select(next, true);
+  };
 }
+
+function selectChartRange(range) {
+  RANGE = range;
+  document.querySelectorAll("#rangeTabs .rt").forEach((button) => {
+    const active = button.dataset.range === range;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+    if (active) button.scrollIntoView({ block: "nearest", inline: "nearest" });
+  });
+  if (STATE) drawChart();
+}
+
+$("#portfolioChartPanel").addEventListener("click", (event) => {
+  const action = event.target.closest("[data-chart-action]");
+  if (!action) return;
+  if (action.dataset.chartAction === "range") selectChartRange(action.dataset.range);
+  if (action.dataset.chartAction === "value") $("#chartModeTabs [data-mode=value]").click();
+});
 
 $("#chartModeTabs").addEventListener("click", (e) => {
   const button = e.target.closest("[data-mode]");
@@ -1442,7 +1484,5 @@ $("#chartModeTabs").addEventListener("click", (e) => {
 $("#rangeTabs").addEventListener("click", (e) => {
   const b = e.target.closest(".rt");
   if (!b) return;
-  RANGE = b.dataset.range;
-  document.querySelectorAll(".rt").forEach((x) => x.classList.toggle("active", x === b));
-  if (STATE) drawChart();
+  selectChartRange(b.dataset.range);
 });
