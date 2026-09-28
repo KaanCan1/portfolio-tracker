@@ -164,6 +164,7 @@
 .desk-chart-slot .chart-ylabels span { right: 1px; background: linear-gradient(90deg, transparent, var(--desk-surface, #fff) 35%); }
 .desk-chart-slot .chart-tip { max-width: 190px; white-space: normal; background: var(--desk-surface, #fff); color: var(--desk-text, #192634); }
 .desk-chart-slot .chart-peak span { display: none; }
+.desk-chart-slot .chart-observation { position: absolute; width: 7px; height: 7px; border: 2px solid var(--c, #096e75); border-radius: 50%; background: var(--desk-surface, #fff); transform: translate(-50%, -50%); pointer-events: none; z-index: 1; }
 .chart-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .chart-insights { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 24px; border-top: 1px solid var(--desk-line, #e6eaee); }
 .chart-insights:empty { display: none; }
