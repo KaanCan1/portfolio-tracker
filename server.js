@@ -28,6 +28,8 @@ import { korelasyonCarpaniHesapla } from "./boyutlandirma.js";
 import { gunlukKayit, kayitKur, normalize as korGunlukNormalize, karne as korKarne } from "./korelasyon-gunlugu.js";
 import { silmeKarari } from "./swing-silme.js";
 import { MIDAS_FEE, alisNakitDelta, satisNakitDelta, nakitUygula } from "./nakit-komisyon.js";
+import { saleCapacity, swingLockedQty } from "./sell-inventory.js";
+import { validateCashFlow } from "./cash-flow-input.js";
 import { mutabakat, mutabakatNotu } from "./deger-mutabakat.js";
 import { temaGucu } from "./tema-gucu.js";
 import { RADAR_GROUPS, RADAR_THEME, RADAR_SYMBOLS } from "./radar-evren.js";
@@ -415,7 +417,8 @@ app.get("/api/challenge/board", async (_req, res) => {
     res.status(503).json({ error: "board hazır değil — motor ısınıyor, birazdan tekrar dene" });
   } catch (e) { res.status(500).json({ error: String(e.message || e) }); }
 });
-// Eski istemci motorunun deftere doğrudan yazma yolu kapalıdır.
+// Eski PWA sürümleri bu uca doğrudan plan yazabiliyordu. Kararın tek sahibi
+// sunucu motoru; eski istemci kural/hafta sonu kapılarını atlayamaz.
 app.post("/api/challenge/open", (_req, res) =>
   res.status(410).json({ error: "Alfa Avı işlemleri yalnız sunucu motorundan açılır" }));
 
@@ -599,6 +602,88 @@ async function chSendMail(subject, html) {
     if (!r.ok) console.error("Alfa Avı mail hatası:", r.status, await r.text().catch(() => ""));
     return r.ok;
   } catch (e) { console.error("Alfa Avı mail hatası:", e.message); return false; }
+}
+
+/* ── Alfa Avı AÇILIŞ BİLDİRİMİ — tek yer ──────────────────────────────────
+ * 14 Eyl 2026. Defterde işlem açan İKİ yol var:
+ *   1) sunucu motoru (chEngineTick)            → by:"server", posta atıyordu
+ *   2) client motorunun dondurduğu plan        → /api/challenge/open, HİÇBİR
+ *      bildirim üretmiyordu
+ * İkinci yoldan üç işlem geçmiş ve sessiz kalmıştı: DDOG (10 Ağu), DELL (12 Ağu),
+ * CRWD (27 Ağu) — defterde varlar, gelen kutusunda yoklar. "İşlem açılınca haber
+ * vermiyorsun" şikâyetinin kaynağı buydu. Bildirim metni iki yerde iki kez
+ * yazılmasın diye buraya alındı: aynı olayın iki farklı cümlesi olamaz.
+ *
+ * Açılış artık AKIŞA da düşüyor (type:"alfa"). Bunun sebebi posta değil CEP:
+ * feedPush köprüsü alfa olaylarını web-push ile telefona iletiyor, yani
+ * bildirim e-posta gecikmesini beklemeden geliyor.
+ *
+ * GECİKME KAPISI: motor geçmişi her turda yeniden oynatır. Sunucu birkaç gün
+ * kapalı kalırsa (Render uykusu, lokal kapalı) eski bir tetik "yeni pozisyon"
+ * diye bugün postalanabilir — oysa o fiyat geçti. Yalnız gerçek işlem gününde
+ * keşfedilen açılış bildirilir; geçmiş kayıt defterde sessiz kalır. */
+
+/* ── BAYAT BAR KAPISI — 14 Eyl 2026 ────────────────────────────────────────
+ * Motor geçmişi HER TURDA baştan oynatıyor. Bu, kaçan tetiği yakalamak için
+ * tasarlanmıştı; ölçtüğümüzde başka bir şey yaptığı çıktı.
+ *
+ * Defterdeki 10 işlemin bar tarihi ile deftere yazılma anı (frozenAt) arasındaki
+ * fark: 6, 8, 8, 11, 13, 15, 16, 24, 32, 40 gün. **Sıfır işlem gerçek zamanlı.**
+ * Üstelik motor 2 Temmuz'dan beri koşuyordu: 6 Tem–4 Ağu arasındaki altı işlemi
+ * 14 Ağustos'ta, hepsini aynı anda üretti. O tarihlerde her tur koştu ve bu
+ * işlemleri AÇMADI; 12 Ağu'da kurulum kapıları devreye girince oynatmanın yolu
+ * değişti (bir işlem elendi → nakit ve sektör tavanı boşaldı → başkaları açıldı)
+ * ve geçmiş yeniden yazıldı.
+ *
+ * Sonuç iki katmanlı:
+ *   1) Bildirim geç gelmiyor — KARAR geç doğuyor. Geçmiş fiyata "yeni pozisyon"
+ *      demek, alınmamış bir işlemi alınmış saymaktır.
+ *   2) Karne bunu ölçemez. "kapi-v1" kovası, kapıdan sonra ALINAN işlemler değil,
+ *      kapı konunca oynatmanın ÜRETTİĞİ işlemlerdir. CLAUDE.md'deki 5. tuzağın
+ *      (üretilmemiş geçmiş) Alfa Avı defterindeki hâli.
+ *
+ * Kapı: barı bu kadar günden eski olan tetik AÇILMAZ. Sessizce de düşmez —
+ * led.kacirilan'a sebebiyle yazılır, çünkü "defterde yok" ile "hiç olmadı"
+ * farklı şeyler ve ikincisini iddia edemeyiz.
+ *
+ * 4 gün: Cuma kapanışı Pazartesi görülür (3 gün) + bir gün pay. Daha uzun tutmak
+ * hafta boyu kapalı kalan sunucunun geçmişi yeniden yazmasına izin verirdi. */
+const CH_BAYAT_BAR_GUN = Number(process.env.CH_BAYAT_BAR_GUN ?? 4);  // env: yalnız sınamak için
+const CH_KACIRILAN_MAX = 200;
+const gunFarki = (a, b) => Math.round((new Date(a) - new Date(b)) / 86400_000);
+
+function chAcilisBildirimi(t, ctx = {}) {
+  const { half = false, weakRs = false, regime = null, rai = null, cash = null, acikSayi = null, fee = null } = ctx;
+  const riskUSD = t.shares * (t.entry - t.stop);
+  const rr = (t.tp2 - t.entry) / Math.max(0.0001, t.entry - t.stop);
+  const yarim = half || weakRs;
+  const laneLine = t.lane === "ep"
+    ? `EP / HABER trade'i — ${t.gapPct != null ? `+%${t.gapPct} boşluk/hamle` : "katalizör günü"}, hacim ${t.epVolR ?? "—"}× (QM episodic pivot; stop = günün dibi)${t.news ? `.<br><b>Katalizör:</b> “${t.news}”` : ""}`
+    : t.lane === "tech"
+      ? `TEKNİK — geri çekilme sonrası EMA8'i hacimle geri aldı, trend + QM teyitli`
+      : `Plan panodan donduruldu (client motoru)`;
+  const raiLine = rai?.comps
+    ? `<li>Risk iştahı (RAI): <b>${rai.score}/100</b> — trend ${rai.comps.trend ?? "—"} · volatilite ${rai.comps.vol ?? "—"} · kredi ${rai.comps.credit ?? "—"} · rotasyon ${rai.comps.rot ?? "—"} · genişlik ${rai.comps.breadth ?? "—"}</li>`
+    : t.rai != null ? `<li>Risk iştahı (RAI): <b>${t.rai}/100</b></li>` : "";
+  const boyutNotu = half
+    ? `<br><b>Boyut:</b> rejim ${regime === "off" ? "risk-off (yalnız EP istisnası)" : "temkin"} nedeniyle YARIM.`
+    : weakRs ? `<br><b>Boyut:</b> göreli güç lider bandında değil (RS %${t.rsPct} &lt; ${CH_ENG.rsMin}) → YARIM.` : "";
+  const hesapSatiri = cash != null
+    ? `<li>Hesap: nakit ~$${cash.toFixed(0)}${acikSayi != null ? ` · açık pozisyon ${acikSayi}` : ""}</li>` : "";
+
+  // Akışa her hâlde yazılır — kayıt kaybolmasın. Cebe gitmesi feedPush'un işi.
+  const bayat = !bugunBildir(t.date);
+  if (!bayat) feedPush({
+    key: `ch:open:${t.id}`, type: "alfa", sev: "info", sym: t.sym,
+    title: `Alfa Avı: ${t.sym} açıldı — $${t.entry}${yarim ? " (yarım boyut)" : ""}`,
+    detail: `${t.date} · giriş $${t.entry} · stop $${t.stop} · risk ~$${riskUSD.toFixed(0)} · TP2 $${t.tp2} (${rr.toFixed(1)}R)`,
+  });
+  if (bayat) return null;
+
+  return {
+    subject: `🏹 Alfa Avı: ${t.sym} AÇILDI — $${t.entry} (${t.lane === "ep" ? "EP/Haber" : t.lane === "tech" ? "Teknik" : "Pano"}${yarim ? " · yarım boyut" : ""})`,
+    html: `<h2>🏹 Alfa Avı — yeni pozisyon: ${t.sym}</h2><p>${t.date} kapanışında tetik oluştu. <b>Şerit:</b> ${laneLine}${boyutNotu}</p><ul><li>Giriş: <b>$${t.entry}</b> · Pozisyon: <b>~$${t.notional}</b> (${t.shares} adet)${fee != null ? ` · komisyon $${fee} düşüldü` : ""}</li><li>Stop: <b>$${t.stop}</b> → riskteki para <b>~$${riskUSD.toFixed(0)}</b> (pozisyonun %${(((t.entry - t.stop) / t.entry) * 100).toFixed(1)}'i)</li><li>TP1 (+%${CH_ENG.tp1}): <b>$${t.tp1}</b> → %25 kâr al · TP2 (+%${CH_ENG.tp2}): <b>$${t.tp2}</b> → %25 daha · kalan EMA21 iz süren</li><li>Ödül/Risk (TP2'ye): <b>${rr.toFixed(1)}R</b>${t.rsPct != null ? ` · Göreli güç: <b>RS %${t.rsPct}</b> (evren yüzdeliği)` : ""}</li>${hesapSatiri}${raiLine}</ul><p>Plan sunucu defterine kilitlendi — hedef/stop gerçek mumlarla otomatik ölçülür. Bu oyun parasıdır, yatırım tavsiyesi değildir.</p>`,
+  };
 }
 
 // ── Sunucu-panosu yardımcıları (client parite) — /api/challenge/board için ──
@@ -886,6 +971,7 @@ async function chEngineTick(trigger = "timer") {
     const frozenByDate = {};
     for (const t of led.trades) (frozenByDate[t.date] ||= []).push(t);
     let cash = CH_ENG.startCapital, dirty = false;
+    const kacirilanBuTur = [];   // bu turda bayat bar yüzünden açılmayan tetikler
     const FEE = CH_ENG.commission; // her emirde düşülür — alış + her kısmi satış (net muhasebe)
     const positions = [];
     const mails = [];
@@ -972,7 +1058,22 @@ async function chEngineTick(trigger = "timer") {
          * ölçülebilsin (oversold'da öğrendik: kural değişince karne sıfırlanır). */
         const kapi = chKapiFor(S, Q, sig.sym, d, sig.lane);
         if (!kapi.gecti) continue;
-        if (cash < notional + FEE || Math.round((new Date(todayISO) - new Date(d)) / 86400_000) > 4) continue;
+        if (cash < notional + FEE) continue;
+        /* Bayat bar: tetik gerçek ama biz onu zamanında görmedik. Açmıyoruz —
+         * nakde de dokunmuyoruz, çünkü bu işlem alınmadı. Kayıt düşülüyor:
+         * kaçırdığımızı bilmek, kaçırmadığımızı sanmaktan iyidir. */
+        const barYas = gunFarki(todayISO, d);
+        if (barYas > CH_BAYAT_BAR_GUN) {
+          if (!Array.isArray(led.kacirilan)) led.kacirilan = [];
+          if (!led.kacirilan.some((k) => k.id === id)) {
+            led.kacirilan.push({ id, sym: sig.sym, date: d, lane: sig.lane, entry: +sig.entry.toFixed(4),
+              stop: +sig.stop.toFixed(4), barYasGun: barYas, kural: CH_KURAL, gorulduAn: new Date().toISOString() });
+            if (led.kacirilan.length > CH_KACIRILAN_MAX) led.kacirilan = led.kacirilan.slice(-CH_KACIRILAN_MAX);
+            kacirilanBuTur.push(`${sig.sym} ${d} (${barYas}g)`);
+            dirty = true;
+          }
+          continue;
+        }
         cash -= notional + FEE;
         const t = { id, sym: sig.sym, date: sig.date, entry: +sig.entry.toFixed(4), stop: +sig.stop.toFixed(4), tp1: +(sig.entry * (1 + CH_ENG.tp1 / 100)).toFixed(4), tp2: +(sig.entry * (1 + CH_ENG.tp2 / 100)).toFixed(4), notional: +notional.toFixed(2), shares: +(notional / sig.entry).toFixed(6), rai: raiD ? raiD.score : null, lane: sig.lane, gapPct: sig.gapPct ?? null, epVolR: sig.lane === "ep" ? sig.volRatio : null, rsPct: rsPctV, weakRs, news: null, kural: CH_KURAL, frozenAt: new Date().toISOString(), by: "server" };
         if (t.lane === "ep") t.news = await chNewsFor(t.sym, t.date).catch(() => null); // katalizör başlığı (yalnız yeni EP girişleri — nadir, kota dostu)
@@ -981,16 +1082,12 @@ async function chEngineTick(trigger = "timer") {
         held.add(t.sym); dirty = true;
         if (!led.notified[`open:${id}`]) {
           led.notified[`open:${id}`] = new Date().toISOString();
-          const raiLine = raiD ? `<li>Risk iştahı (RAI): <b>${raiD.score}/100</b> — trend ${raiD.comps.trend ?? "—"} · volatilite ${raiD.comps.vol ?? "—"} · kredi ${raiD.comps.credit ?? "—"} · rotasyon ${raiD.comps.rot ?? "—"} · genişlik ${raiD.comps.breadth ?? "—"}</li>` : "";
-          const riskUSD = t.shares * (t.entry - t.stop);
-          const rr = (t.tp2 - t.entry) / Math.max(0.0001, t.entry - t.stop);
-          const laneLine = t.lane === "ep"
-            ? `EP / HABER trade'i — ${t.gapPct != null ? `+%${t.gapPct} boşluk/hamle` : "katalizör günü"}, hacim ${t.epVolR ?? "—"}× (QM episodic pivot; stop = günün dibi)${t.news ? `.<br><b>Katalizör:</b> “${t.news}”` : ""}`
-            : `TEKNİK — geri çekilme sonrası EMA8'i hacimle geri aldı, trend + QM teyitli`;
-          if (bugunBildir(t.date)) mails.push({
-            subject: `🏹 Alfa Avı: ${t.sym} AÇILDI — $${t.entry} (${t.lane === "ep" ? "EP/Haber" : "Teknik"}${half || weakRs ? " · yarım boyut" : ""})`,
-            html: `<h2>🏹 Alfa Avı — yeni pozisyon: ${t.sym}</h2><p>${t.date} kapanışında tetik oluştu. <b>Şerit:</b> ${laneLine}${half ? `<br><b>Boyut:</b> rejim ${regime === "off" ? "risk-off (yalnız EP istisnası)" : "temkin"} nedeniyle YARIM.` : weakRs ? `<br><b>Boyut:</b> göreli güç lider bandında değil (RS %${t.rsPct} &lt; ${CH_ENG.rsMin}) → YARIM.` : ""}</p><ul><li>Giriş: <b>$${t.entry}</b> · Pozisyon: <b>~$${t.notional}</b> (${t.shares} adet) · komisyon $${FEE} düşüldü</li><li>Stop: <b>$${t.stop}</b> → riskteki para <b>~$${riskUSD.toFixed(0)}</b> (pozisyonun %${(((t.entry - t.stop) / t.entry) * 100).toFixed(1)}'i)</li><li>TP1 (+%${CH_ENG.tp1}): <b>$${t.tp1}</b> → %25 kâr al · TP2 (+%${CH_ENG.tp2}): <b>$${t.tp2}</b> → %25 daha · kalan EMA21 iz süren</li><li>Ödül/Risk (TP2'ye): <b>${rr.toFixed(1)}R</b>${t.rsPct != null ? ` · Göreli güç: <b>RS %${t.rsPct}</b> (evren yüzdeliği)` : ""}</li><li>Hesap: nakit ~$${cash.toFixed(0)} · açık pozisyon ${positions.filter((x) => x.open).length}</li>${raiLine}</ul><p>Plan sunucu defterine kilitlendi — hedef/stop gerçek mumlarla otomatik ölçülür. Bu oyun parasıdır, yatırım tavsiyesi değildir.</p>`,
-          });
+          // Metin + akış olayı chAcilisBildirimi'nde — client yolu (/api/challenge/open)
+          // aynı cümleyi kullansın diye tek yerde. Geç keşfedilen tetik null döner:
+          // akışta görünür, postaya çıkmaz.
+          const m = chAcilisBildirimi(t, { half, weakRs, regime, rai: raiD, cash,
+            acikSayi: positions.filter((x) => x.open).length, fee: FEE });
+          if (m) mails.push(m);
         }
       }
     }
@@ -1000,7 +1097,14 @@ async function chEngineTick(trigger = "timer") {
       if (led.notified[key]) continue;
       led.notified[key] = new Date().toISOString(); dirty = true;
       const pnl = +p.realized.toFixed(2);
-      if (!bugunBildir(p.exitDate)) continue; // eski kapanış bugün satılmış gibi bildirilmez
+      // Açılışla aynı gerekçe (14 Eyl): kapanış da cebe düşsün — feedPush köprüsü
+      // alfa olaylarını web-push ile iletiyor, posta yedek kanal olarak kalıyor.
+      // Replay geçmiş kapanışı bugün keşfedebilir. Deftere işaretle ama yeni
+      // satılmış gibi push/mail gönderme (27 Eyl COIN vakası: çıkış 24 Eyl).
+      if (!bugunBildir(p.exitDate)) continue;
+      feedPush({ key: `ch:close:${p.id}`, type: "alfa", sev: "info", sym: p.sym,
+        title: `Alfa Avı: ${p.sym} kapandı — ${pnl >= 0 ? "+" : ""}$${pnl}`,
+        detail: `${p.date} girişi · ${p.exitDate} ${p.exitKind} · komisyon dahil net` });
       mails.push({
         subject: `Alfa Avı: ${p.sym} kapandı — ${pnl >= 0 ? "KÂR" : "ZARAR"} ${pnl >= 0 ? "+" : ""}$${pnl}`,
         html: `<h2>Alfa Avı — pozisyon kapandı</h2><p><b>${p.sym}</b> (${p.date} girişi) ${p.exitDate} tarihinde <b>${p.exitKind}</b> ile kapandı.</p><p>Net sonuç: <b>${pnl >= 0 ? "+" : ""}$${pnl}</b> (toplam $${(p.fees || 0).toFixed(2)} komisyon düşülmüş)</p>`,
@@ -1015,6 +1119,9 @@ async function chEngineTick(trigger = "timer") {
         if (led.notified[key]) continue;
         led.notified[key] = new Date().toISOString(); dirty = true;
         if (!bugunBildir(ev.d)) continue;
+        feedPush({ key: `ch:${ev.k}:${p.id}:${ev.d}`, type: "alfa", sev: "info", sym: p.sym,
+          title: `Alfa Avı: ${p.sym} ${ev.k.toUpperCase()} vurdu — +$${(+ev.pnl).toFixed(0)}`,
+          detail: `${ev.d} · $${(+ev.px).toFixed(2)} · pozisyonun %25'i realize${ev.k === "tp1" ? " · stop başa-başa" : ""}` });
         mails.push({
           subject: `🎯 Alfa Avı: ${p.sym} ${ev.k.toUpperCase()} vurdu — +$${(+ev.pnl).toFixed(0)} realize`,
           html: `<h2>🎯 ${p.sym} ${ev.k.toUpperCase()} (+%${ev.k === "tp1" ? CH_ENG.tp1 : CH_ENG.tp2})</h2><p>${ev.d} mumunda <b>$${(+ev.px).toFixed(2)}</b> hedefi görüldü → pozisyonun %25'i satıldı, <b>+$${(+ev.pnl).toFixed(2)}</b> realize edildi ($${CH_ENG.commission} emir komisyonu düşülmüş net).</p><p>${ev.k === "tp1" ? "Stop <b>başa-başa</b> çekildi — kalan %75 artık risksiz koşuyor." : "Kalan %50, EMA21 iz süren stopla trendde bırakıldı."}</p><p>Bu oyun parasıdır, yatırım tavsiyesi değildir.</p>`,
@@ -1082,7 +1189,15 @@ async function chEngineTick(trigger = "timer") {
     for (const m of mails) await chSendMail(m.subject, m.html);
     const openN = positions.filter((x) => x.open).length;
     CH_ENG.lastRun = new Date().toISOString();
-    CH_ENG.lastSummary = { trigger, universe: watch.length, ledger: led.trades.length, open: openN, cash: +cash.toFixed(2), mailsSent: mails.length, regimeToday: regimeAt(todayISO), rai: raiToday ? raiToday.score : null };
+    if (kacirilanBuTur.length) {
+      console.warn(`Alfa Avı: ${kacirilanBuTur.length} tetik BAYAT BAR nedeniyle açılmadı → ${kacirilanBuTur.join(" · ")}`);
+      /* Akışta durur, cebe gitmez (sistem+info). Amaç alarm değil iz: sunucu
+       * kapalı kaldıysa ya da oynatma yolu değiştiyse bunu ekranda görelim. */
+      feedPush({ key: `ch:kacirilan:${todayISO}`, type: "sistem", sev: "info", sym: null,
+        title: `Alfa Avı: ${kacirilanBuTur.length} tetik kaçırıldı`,
+        detail: `${kacirilanBuTur.join(" · ")} — barı ${CH_BAYAT_BAR_GUN} günden eski, geçmişe dönük açılmadı` });
+    }
+    CH_ENG.lastSummary = { trigger, universe: watch.length, ledger: led.trades.length, open: openN, cash: +cash.toFixed(2), mailsSent: mails.length, kacirilan: kacirilanBuTur.length, regimeToday: regimeAt(todayISO), rai: raiToday ? raiToday.score : null };
     console.log("Alfa Avı motor:", JSON.stringify(CH_ENG.lastSummary));
 
     // ── SUNUCU-PANOSU (tek doğruluk kaynağı) — client bunu çizer, kendi motorunu çalıştırmaz ──
@@ -1456,14 +1571,21 @@ async function guardTick(trigger = "timer") {
 
     /* Bayat veri kaynağı — 3 Ağu dersinin bekçiye taşınmış hâli. O gün döviz
      * kaynağı 9 GÜN boyunca sessizce bozuktu; tek sinyal ön yüzdeki küçük bir
-     * rozetti ve kimse fark etmedi. Artık sessizlik uyarı üretiyor.
-     * warn seviyesi: veri bozuk ama sermaye doğrudan tehlikede değil —
-     * kuyruğa girer, günlük özette görünür. */
+     * rozetti ve kimse fark etmedi. Artık sessizlik iz bırakıyor.
+     *
+     * 14 Eyl 2026 — POSTA KESİLDİ, İZ KALDI. Kaan haklı olarak "döviz verisi
+     * bayat" postasından şikâyet etti: ekranda son doğrulanmış değer zaten
+     * duruyor, yapılacak bir şey yok. Eylem gerektirmeyen şey uyarı değildir.
+     * Bulgu artık akışta "info" olarak durur (cebe de gitmez, köprü yalnız
+     * crit/warn/alfa iletiyor); postaya YALNIZ kaynak bir tam gün hiç
+     * tazelenemezse çıkar — 3 Ağu'daki 9 günlük sessiz arıza o kapıdan geçer,
+     * hafta sonu/yavaş uç geçmez. Eşik: guard-alerts.KAYNAK_MAIL_ESIK_DK. */
     try {
       for (const d of KAYNAKLAR.bayatOlanlar(SOURCE_STALE_MIN)) {
         const b = bayatKaynakBulgusu(d, SOURCE_STALE_MIN, today);
-        feedPush({ ...b.feed, gid: b.anahtar });
-        if (mark(b.anahtar)) uyar(b.anahtar, b.alert);
+        // gid YALNIZ postalanan bulguda: "işe yaradı mı" oylaması yalnız uyarıya sorulur.
+        feedPush(b.alert ? { ...b.feed, gid: b.anahtar } : b.feed);
+        if (b.alert && mark(b.anahtar)) uyar(b.anahtar, b.alert);
       }
     } catch {}
 
@@ -7285,13 +7407,6 @@ app.get("/api/trades", async (_req, res) => {
 // Midas her emirde (alış VE satış) sabit ücret keser; MIDAS_FEE ve nakit
 // aritmetiği artık nakit-komisyon.js'te (tek kaynak, testli).
 
-// Aynı semboldeki AÇIK swing kayıtlarına kilitli toplam adet (satış korumasında kullanılır)
-function swingLockedQty(data, sym, excludeId) {
-  return (data.swingTrades || [])
-    .filter((s) => s.status === "open" && String(s.symbol).toUpperCase() === sym && s.id !== excludeId)
-    .reduce((a, s) => a + (Number(s.qty) || 0), 0);
-}
-
 function applyTrade(data, t, usdtry) {
   data.trades = data.trades || [];
   data.holdings = data.holdings || [];
@@ -7299,14 +7414,17 @@ function applyTrade(data, t, usdtry) {
   const kind = t.kind === "buy" ? "buy" : "sell";
   const src = t.src === "swing" ? "swing" : "port"; // satış kaynağı: swing akışı mı, normal (uzun vade) mi
   const shares = Number(t.shares) || 0;
-  const hIdx = data.holdings.findIndex((x) => x.symbol === sym && x.type === "stock");
+  const hIdx = data.holdings.findIndex((x) => String(x.symbol).toUpperCase() === sym && x.type === "stock");
   const h = hIdx !== -1 ? data.holdings[hIdx] : null;
   let sync = "";
   let soldShares = kind === "sell" ? shares : 0;
   if (kind === "sell") {
+    if (!saleCapacity(data, t).ok) {
+      throw new VeriHata(400, `${sym}: satılacak adet portföydeki serbest hisseyi veya açık swing adedini aşıyor`);
+    }
     if (!Number(t.buyUSD) && h?.costUSD) t.buyUSD = h.costUSD; // alış boşsa ort. maliyet
     if (h && h.quantity > 0) {
-      const sold = Math.min(shares, h.quantity);
+      const sold = shares;
       soldShares = sold;
       const ratio = sold / h.quantity;
       if (h.costTRY != null) h.costTRY = +(h.costTRY * (1 - ratio)).toFixed(2);
@@ -7364,9 +7482,12 @@ function applyTrade(data, t, usdtry) {
 app.post("/api/trades", async (req, res) => {
   try {
     const t = req.body;
+    if (!t || !["buy", "sell"].includes(t.kind)) return res.status(400).json({ error: "işlem türü geçersiz" });
+    if (t.src === "swing") return res.status(400).json({ error: "swing satışı yalnız Swing ekranından yapılabilir" });
     if (!t.symbol) return res.status(400).json({ error: "symbol zorunlu" });
     if (!(Number(t.shares) > 0)) return res.status(400).json({ error: "adet 0'dan büyük olmalı" });
     if (t.kind !== "sell" && !(Number(t.buyUSD) > 0)) return res.status(400).json({ error: "alış fiyatı zorunlu" });
+    if (t.kind === "sell" && !(Number(t.sellUSD) > 0)) return res.status(400).json({ error: "satış fiyatı zorunlu" });
     // Kur çekimi ağ işi → kilidin dışında. Yedeği (son snapshot) işlem içinde okunur.
     let fxNow = null;
     try { fxNow = Number((await fetchMetals())?.usd?.selling) || null; } catch {}
@@ -7465,32 +7586,18 @@ app.get("/api/flows", async (_req, res) => {
 
 app.post("/api/flows", async (req, res) => {
   try {
-    const f = req.body;
-    const amount = Number(f.amount) || 0;
-    if (!(amount > 0) || !Number.isFinite(amount)) return res.status(400).json({ error: "pozitif tutar zorunlu" });
-    const currency = ["TL", "USD", "EUR"].includes(f.currency) ? f.currency : "TL";
-    const date = f.date || new Date().toISOString().slice(0, 10);
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ error: "geçerli tarih zorunlu" });
-    const cashApplied = !(f.alreadyReflected === true && date < new Date().toISOString().slice(0, 10));
-    const flow = {
-      id: yeniId("f-"),
-      type: f.type === "withdraw" ? "withdraw" : "deposit",
-      date,
-      currency,
-      amount,
-      // Giriş anındaki TL karşılığı (frontend hesaplar; yoksa TL kabul et)
-      amountTRY: f.amountTRY != null ? Number(f.amountTRY) : (currency === "TL" ? amount : 0),
-      cashApplied,
-      note: f.note || "",
-    };
+    const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Istanbul" });
+    const checked = validateCashFlow(req.body, today);
+    if (checked.error) return res.status(400).json({ error: checked.error });
+    const flow = { id: yeniId("f-"), ...checked.value };
     await veriIslem(async (d) => {
       d.flows = d.flows || [];
       d.flows.push(flow);
       if (flow.cashApplied) {
         d.cash = d.cash || {};
-        const bucket = currency === "USD" ? "usd" : currency === "EUR" ? "eur" : "tl";
+        const bucket = flow.currency === "USD" ? "usd" : flow.currency === "EUR" ? "eur" : "tl";
         const sign = flow.type === "deposit" ? 1 : -1;
-        d.cash[bucket] = +(((Number(d.cash[bucket]) || 0) + sign * amount)).toFixed(2);
+        d.cash[bucket] = +(((Number(d.cash[bucket]) || 0) + sign * flow.amount)).toFixed(2);
       }
     });
     res.json(flow);

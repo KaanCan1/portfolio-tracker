@@ -1094,6 +1094,17 @@ async function openChartModal(sym, ctx = null, fresh = false) {
       </div>
       ${st2.industry ? `<div class="cm-stats-ind">${st2.industry}</div>` : ""}
     </div>` : "";
+  /* Mobilde yan panel grafiğin ÜSTÜNE çıkar — ama YALNIZ pozisyonun varsa.
+   * 3 Eyl: kullanıcı bir hisseye dokunduğunda "kaç adet, ne kadar" görmek
+   * istiyor; o bilgi kartın en altındaki 240px'lik panelin içinde kalıyordu ve
+   * grafik yüklenirken hiç görünmüyordu. Koşulsuz öne alsaydık sahip OLMADIĞIN
+   * bir sembolde (radar'dan tıklanan) sinyal listesi grafiği ekran dışına
+   * iterdi — o yüzden sınıf pozisyona bağlı. */
+  /* Aynı kart iki yerde: yan panelde (masaüstü) ve başlık altındaki şeritte
+   * (mobil). İkisi de AYNI posCard string'i — ayrı bir hesap ya da ayrı bir
+   * biçim yok, yalnız iki yerleşim. Görünürlüğü CSS ayırıyor. */
+  const posBar = $("#cmPosBar");
+  if (posBar) { posBar.innerHTML = posCard; posBar.hidden = !posCard; }
   sideEl.innerHTML = `
     ${cmHeroLevels(d, pos, pl)}
     ${statsCard}

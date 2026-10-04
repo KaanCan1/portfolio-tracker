@@ -171,7 +171,7 @@ function renderGroup(title, rows, groupKey, horizon = "long") {
     return `<tr>
       <td class="l hl-id">
         <div class="hl-id-top">${symCell} ${sigBadge}${rozetler}</div>
-        ${h.name ? `<div class="hl-id-nm">${h.name}</div>` : ""}
+        ${h.name ? `<div class="hl-id-nm">${esc(h.name)}</div>` : ""}
       </td>
       <td>${h.error ? `<span class="err">veri yok</span>` : priceCell}</td>
       <td class="spark-col">${h.type === "stock" ? sparklineSVG(h.spark) : `<span class="spark-na">—</span>`}</td>
@@ -305,7 +305,7 @@ function renderSwingGroup(positions) {
       : `<button class="btn icon" data-swedit="${p.ids[0]}" title="Swing Defteri'nde düzenle">✎</button>`;
     return `<tr>
       <td class="l"><span class="sym sym-link" data-swpos="${p.symbol}" title="Grafik + analiz">${p.symbol}</span>${mergeBadge}${kaynakBadge}</td>
-      <td class="l nm">${p.name || ""}</td>
+      <td class="l nm">${esc(p.name || "")}</td>
       <td>${priceCell}</td>
       <td>${fmtUSD(p.entry)}</td>
       <td>${p.stop != null ? `<span class="neg">${fmtUSD(p.stop)}</span>` : `<span class="muted">stop yok</span>`}</td>
@@ -796,4 +796,3 @@ cashForm.addEventListener("submit", async (e) => {
   cashModalBg.hidden = true;
   load();
 });
-

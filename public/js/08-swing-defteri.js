@@ -597,7 +597,7 @@ function renderSwingDeck() {
         <div class="swp-lvls">${tgtLine}${stopLine}</div>
         ${grid}
         ${m.realizedSoFar > 0 ? `<div class="sw-pos-realized">💵 Çekilen kâr: <b>${fmtUSD(m.realizedSoFar)}</b> · ${fmtNum(m.soldShares, 2)} adet satıldı (swing getirisine + vergiye işlendi)</div>` : ""}
-        ${t.note ? `<div class="sw-pos-note">“${t.note}”</div>` : ""}
+        ${t.note ? `<div class="sw-pos-note">“${esc(t.note)}”</div>` : ""}
         <div class="sw-pos-acts">
           <button class="btn ghost sm" data-sw-edit="${t.id}">Düzenle</button>
           <button class="btn ghost sm" data-sw-del="${t.id}">Sil</button>
@@ -866,7 +866,7 @@ async function renderDayAnalysis(dateStr) {
       : `${fmtNum(t.shares, 4)} adet · $${(+t.buyUSD).toFixed(2)} · maliyet ${fmtUSD(t.shares * t.buyUSD)}`;
     cards.push(`<div class="ch-card ${a.verdict === "pos" ? "win" : a.verdict === "warn" ? "neu" : "loss"}">
       <div class="ch-card-top"><div class="ch-card-sym"><b>${t.symbol}</b> ${srcTag}</div><div class="ch-card-r">${pill}</div></div>
-      <div class="ch-card-dt">${head}${t.note ? ` · “${t.note}”` : ""}</div>
+      <div class="ch-card-dt">${head}${t.note ? ` · “${esc(t.note)}”` : ""}</div>
       <div class="ch-why"><ul class="ch-ev">${a.findings.map((f) => `<li class="da-${f.tone}">${f.txt}</li>`).join("") || "<li>Veri yetersiz — mum geçmişi alınamadı.</li>"}</ul></div>
     </div>`);
   }
@@ -1419,15 +1419,15 @@ function renderWeeklyPlanBox() {
     </section>`;
   } else {
     const rows = (p.candidates || []).map((c) => `<tr>
-      <td class="l"><b>${c.sym}</b></td><td class="l">${c.setup || "—"}</td>
+      <td class="l"><b>${esc(c.sym)}</b></td><td class="l">${esc(c.setup || "—")}</td>
       <td>${c.entry != null ? fmtUSD(c.entry) : "—"}</td><td>${c.stop != null ? fmtUSD(c.stop) : "—"}</td>
-      <td>${c.qty != null ? fmtNum(c.qty, 2) : "—"}</td><td class="l wkp-cnote">${c.note || ""}</td></tr>`).join("");
+      <td>${c.qty != null ? fmtNum(c.qty, 2) : "—"}</td><td class="l wkp-cnote">${esc(c.note || "")}</td></tr>`).join("");
     el.innerHTML = `<section class="panel wkp-panel">
       <div class="panel-head"><div><h2>Haftalık plan <span class="sw-chip">${d.yw}</span> ${rbChip}</h2>
         <span class="chart-sub">${p.regime?.band ? `Rejim: <b>${p.regime.band}</b>${p.regime.vix != null ? ` · VIX ${fmtNum(p.regime.vix, 1)}` : ""} · ` : ""}${(p.candidates || []).length} aday${(p.watch || []).length ? ` · izleme: ${p.watch.join(", ")}` : ""}</span></div>
         <button class="btn ghost sm" id="wkndStartBtn">Düzenle</button></div>
       ${rows ? `<div class="tbl-wrap wkp-tblwrap"><table class="wkp-table"><thead><tr><th class="l">Sembol</th><th class="l">Setup</th><th>Giriş</th><th>Stop</th><th>Adet</th><th class="l">Not</th></tr></thead><tbody>${rows}</tbody></table></div>` : ""}
-      ${p.note ? `<div class="wkp-plannote">“${p.note}”</div>` : ""}
+      ${p.note ? `<div class="wkp-plannote">“${esc(p.note)}”</div>` : ""}
     </section>`;
   }
   const btn = $("#wkndStartBtn");
@@ -1469,7 +1469,7 @@ function wkndPaint() {
     const rb = (typeof RBUD !== "undefined" && RBUD.d && RBUD.d.budget > 0) ? RBUD.d : null;
     body.innerHTML = `
       <div class="wknd-regime">
-        ${rg ? `<div class="wknd-rg"><span class="wknd-rg-l">Piyasa rejimi</span><b>${rg.band || "—"}</b><span class="wknd-rg-s">VIX ${fmtNum(rg.vix, 1)}${rg.note ? ` · ${rg.note}` : ""}</span></div>` : `<div class="wknd-rg"><span class="wknd-rg-l">Piyasa rejimi</span><span class="sw-muted">veri yok</span></div>`}
+        ${rg ? `<div class="wknd-rg"><span class="wknd-rg-l">Piyasa rejimi</span><b>${esc(rg.band || "—")}</b><span class="wknd-rg-s">VIX ${fmtNum(rg.vix, 1)}${rg.note ? ` · ${esc(rg.note)}` : ""}</span></div>` : `<div class="wknd-rg"><span class="wknd-rg-l">Piyasa rejimi</span><span class="sw-muted">veri yok</span></div>`}
         ${fng ? `<div class="wknd-rg"><span class="wknd-rg-l">Aç Gözlülük</span><b>${fng.score ?? "—"}/100</b><span class="wknd-rg-s">${fng.band || ""}</span></div>` : ""}
         ${rb ? `<div class="wknd-rg"><span class="wknd-rg-l">Risk bütçesi</span><b class="${rb.level === "full" ? "neg" : rb.level === "warn" ? "" : "pos"}">%${Math.round(rb.ratio)} dolu</b><span class="wknd-rg-s">${fmtUSD0(rb.left)} pay kaldı</span></div>` : ""}
       </div>

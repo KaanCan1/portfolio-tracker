@@ -4,14 +4,24 @@
 /* ============================ Görünüm: Analiz ============================ */
 // Günlük değişimi diverging kırmızı↔gri↔yeşil skalaya çevirir (±%4 doygunluk).
 // Koyu kutularda beyaz, açık kutularda koyu yazı → her zaman okunur.
+/* Isı haritası skalası TEMAYA GÖRE ters kurulur (3 Eyl 2026).
+ * Açık temada nötr kutu neredeyse beyaz (%91) ve doygunlaştıkça KOYULAŞIR.
+ * Koyu temada aynı formül ekranın en parlak yüzeyini üretiyordu — 8 pozisyonluk
+ * bir ızgara gece açıldığında fener gibi çalışıyordu. Koyuda yön tersine döner:
+ * nötr koyu (%14), doygunlaştıkça AÇILIR. Hue ve doygunluk aynı kalır — hangi
+ * rengin ne anlattığı değişmiyor, yalnız hangi uçtan geldiği. */
 function heatStyle(pct) {
-  if (pct == null || isNaN(pct)) return { bg: "hsl(140 6% 91%)", fg: "#5a655d" };
+  const koyu = window.matchMedia?.("(prefers-color-scheme: dark)").matches;
+  if (pct == null || isNaN(pct))
+    return koyu ? { bg: "hsl(140 5% 15%)", fg: "#8d9384" } : { bg: "hsl(140 6% 91%)", fg: "#5a655d" };
   const t = Math.max(-1, Math.min(1, pct / 4));
   const mag = Math.abs(t);
   const hue = t >= 0 ? 146 : 6;
-  const sat = 14 + mag * 54;     // 14%..68%
-  const light = 93 - mag * 44;   // 93%..49%
-  return { bg: `hsl(${hue} ${sat}% ${light}%)`, fg: light < 64 ? "#ffffff" : "#1d2722" };
+  const sat = 14 + mag * 54;     // 14%..68% — iki temada da aynı
+  const light = koyu ? 14 + mag * 30 : 93 - mag * 44;
+  // Yazı zeminden AYRIŞAN uçtan: açıkta koyu kutuda beyaz, koyuda açık kutuda koyu.
+  const fg = koyu ? (light > 30 ? "#0d0f0b" : "#e6e9df") : (light < 64 ? "#ffffff" : "#1d2722");
+  return { bg: `hsl(${hue} ${sat}% ${light}%)`, fg };
 }
 
 // Basit squarified treemap: items[{value,...}] (desc) → her birine {x,y,w,h} (%)

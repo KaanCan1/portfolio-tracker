@@ -116,10 +116,10 @@ test("kiyasHesapla: yatırılan para alfayı şişirmez", () => {
 });
 
 test("kiyasHesapla: USD çekiminde tarihsel TL karşılığı kurla yeniden çevrilmez", () => {
-  const degerler = Array.from({ length: 30 }, (_, i) => (i < 15 ? 1000 : 800));
+  const degerler = Array.from({ length: 30 }, (_, i) => (i < 15 ? 1000 : 720));
   const s = kiyasHesapla({
     snaps: snapDizi(degerler, 48),
-    flows: [{ date: gun(15), type: "withdraw", currency: "USD", amount: 200, amountTRY: 11000 }],
+    flows: [{ date: gun(15), type: "withdraw", currency: "USD", amount: 280, amountTRY: 14000 }],
     endeksler: { QQQ: bar(Array(30).fill(50)) },
   });
   yakin(s.portfoy.getiri, 0, 1e-9);

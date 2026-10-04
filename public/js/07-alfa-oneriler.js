@@ -19,7 +19,6 @@ const CHALLENGE = {
   watch: [],
   _sym: {}, _loaded: false,
   _frozen: new Map(),        // sunucudaki immutable defter (id → plan)
-  _posted: new Set(),        // bu oturumda POST'lananlar (tekrar göndermeyi önler)
 };
 
 /* Endeks (QQQ) rejim filtresi — araştırma: Qullamaggie QQQ 10/20MA altında kırılım almaz;
@@ -161,15 +160,24 @@ function chRegimeToday() {
   return { state: st, txt, qqq: c, rai, emaState: emaSt };
 }
 
-// Açılan planı sunucu defterine bir kez yaz (idempotent; evren değişse de karar kaymaz)
-function chFreeze(t) {
-  if (CHALLENGE._frozen.has(t.id) || CHALLENGE._posted.has(t.id)) return;
-  CHALLENGE._posted.add(t.id);
-  fetch("/api/challenge/open", {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ id: t.id, sym: t.sym, date: t.date, entry: t.entry, stop: t.stop, tp1: t.tp1, tp2: t.tp2, notional: t.notional, shares: t.shares, rai: t.rai ?? null }),
-  }).catch(() => CHALLENGE._posted.delete(t.id));
-}
+/* chFreeze KALDIRILDI — 14 Eyl 2026.
+ *
+ * Bu fonksiyon, buradaki yerel motorun açtığı pozisyonu sunucunun KALICI
+ * defterine yazıyordu. Yerel motor ise sunucununkinin eski bir sürümü:
+ * kurulum kapısı yok (oynaklık tavanı / göreli güç), EP-haber şeridi yok,
+ * zayıf-RS yarım boyut kuralı yok, kural sürümü yazmıyor. Yani kapısız
+ * kararlar, kapının karnesini tutan deftere giriyordu.
+ *
+ * Üç işlem böyle girdi: DDOG (10 Ağu), DELL (12 Ağu), CRWD (27 Ağu). Kural
+ * sürümü taşımadıkları için ölçüm scripti onları "(kapı öncesi)" kovasına
+ * atıyor ve kapıyı olduğundan iyi gösteriyordu (docs/olcumler §20f).
+ *
+ * Defterin tek yazarı artık sunucu motoru. Aşağıdaki yerel motor YALNIZ
+ * çizim içindir (chLocalBoard: sunucu panosu gelmezse ekran boş kalmasın) —
+ * çizer, yazmaz. Sunucu tarafında da kapı var: kural sürümü taşımayan kayıt
+ * /api/challenge/open tarafından reddediliyor; bu, telefonda önbelleğe
+ * takılmış eski JS'in deftere yazmasını da engelliyor.
+ */
 
 // Evreni topla: Radar taraması + Swing defteri sembolleri + çekirdek (tekilleştirilmiş)
 async function chUniverse() {
@@ -322,7 +330,7 @@ function chRun() {
       const t = { ...sig, id, notional, shares: notional / sig.entry, tp1: sig.entry * (1 + P.tp1 / 100), tp2: sig.entry * (1 + P.tp2 / 100), rai: raiD ? raiD.score : null, rem: 1, tp1hit: false, tp2hit: false, realized: -FEE, fees: FEE, open: true, events: [] };
       positions.push(t);
       held.add(sig.sym);
-      if (d < todayISO) chFreeze(t); // gün kapanmışsa karar kesindir → dondur (bugünün barı hâlâ oluşuyor olabilir)
+      // (eskiden burada chFreeze(t) vardı — yerel motor artık deftere YAZMAZ, bkz. yukarı)
     }
     let mtm = 0; for (const p of positions.filter((x) => x.open)) mtm += p.rem * p.shares * chMarkAt(P, p, d);
     equity.push({ d, v: +(cash + mtm).toFixed(2) });

@@ -119,7 +119,18 @@ export function pozisyonBulgulari({ sym, price, qty, cost, gunlukPct, adr, agirl
 }
 
 /* Bayat veri kaynağı. warn: veri bozuk ama sermaye doğrudan tehlikede değil. */
-export function bayatKaynakBulgusu(durum, esikDk, bugun) {
+/* MAIL EŞİĞİ (14 Eyl 2026) — bayatlık artık tek başına posta sebebi DEĞİL.
+ * Gerekçe: bayat kaynakta ekranda son DOĞRULANMIŞ değer duruyor; Kaan'ın
+ * yapabileceği bir şey yok. Uyarı "bir şey yapman gerekiyor" demekse, bu
+ * uyarı değil durum bilgisidir → akışta kalır, cebe/postaya gitmez.
+ * (Renk yalnız eylem gerektiren yerde — CLAUDE.md tasarım kuralı 3.)
+ *
+ * Ama 3 Ağu dersi silinmiyor: o gün döviz kaynağı 9 GÜN sessizce bozuktu.
+ * Bir tam gün tazelenememek artık "yavaş" değil ARIZADIR ve posta hak eder.
+ * İki eşik bu yüzden ayrı: esikDk akışa yazar, mailEsikDk postaya çıkarır. */
+export const KAYNAK_MAIL_ESIK_DK = 24 * 60;
+
+export function bayatKaynakBulgusu(durum, esikDk, bugun, mailEsikDk = KAYNAK_MAIL_ESIK_DK) {
   /* Üç ayrı hâl, üç ayrı cümle. Eskiden ikisi "hiç doğrulanmış veri yok" diye tek
    * torbaya giriyordu ve YANLIŞ alarm veriyordu (5 Ağu): tohumlanmış kaynakta
    * DOĞRULANMIŞ bir değer VARDIR, yalnız yaşı bilinmez. Panik hak etmeyen duruma
@@ -133,18 +144,29 @@ export function bayatKaynakBulgusu(durum, esikDk, bugun) {
   const headline = tohumdan
     ? `Sunucu yeniden başladı, kaynak <b>${durum.tohumYasDk ?? "?"} dk</b>dır tazelenemiyor. Ekrandaki sayılar kalıcı depodaki son doğrulanmış değerden — yaşı bilinmiyor.`
     : `Son doğrulanmış veri alınalı <b>${yasMetni}</b>. Ekrandaki sayılar son bilinen değerlerden.`;
+
+  /* Postaya çıkma kararı. Elde doğrulanmış değer YOKSA yaş "sonsuz" sayılır:
+   * gösterilecek sayı bile yok, bu her hâlde arızadır. Değer varsa bilinen yaş
+   * (tohumdan geldiyse tohum yaşı) mailEsikDk ile kıyaslanır. */
+  const degerVar = durum.degerVar !== false;
+  const yasDkEtkin = !degerVar ? Infinity : (durum.yasDk ?? durum.tohumYasDk ?? Infinity);
+  const postala = yasDkEtkin >= mailEsikDk;
+
+  const anahtar = `kaynak:${durum.ad}:${bugun}`;
   return {
-    anahtar: `kaynak:${durum.ad}:${bugun}`,
-    feed: { key: `kaynak:${durum.ad}:${bugun}`, type: "sistem", sev: "warn", sym: null,
+    anahtar,
+    /* Postalanmayan hâl "info": akışta görünür, cebe bildirim ATMAZ
+     * (feedPush köprüsü yalnız crit/warn/alfa'yı iletir). */
+    feed: { key: anahtar, type: "sistem", sev: postala ? "warn" : "info", sym: null,
       title: `Veri kaynağı bayat: ${durum.ad}`, detail: yasMetni + (durum.sonHata ? ` · ${durum.sonHata}` : "") },
-    alert: { sev: "warn", kind: "kaynak", kindLabel: "Veri kaynağı", sym: null,
+    alert: !postala ? null : { sev: "warn", kind: "kaynak", kindLabel: "Veri kaynağı", sym: null,
       title: `${durum.ad} kaynağı bayat`,
       headline,
       stats: [
         { label: "Kaynak", value: durum.ad },
         { label: "Son başarı", value: durum.sonBasari ? durum.sonBasari.slice(0, 16).replace("T", " ") : tohumdan ? "depodan" : "—" },
         { label: "Yaş", value: durum.yasDk != null ? `${durum.yasDk} dk` : tohumdan ? `${durum.tohumYasDk ?? "?"} dk+` : "—" },
-        { label: "Eşik", value: `${esikDk} dk` },
+        { label: "Eşik", value: `${esikDk} dk · posta ${mailEsikDk} dk` },
       ],
       action: (durum.sonHata || "Kaynak yanıt vermiyor.") + " Sağlayıcı ucu değişmiş olabilir — /api/health/sources'a bak." },
   };

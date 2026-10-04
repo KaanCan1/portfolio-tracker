@@ -32,7 +32,7 @@ const GROUPS = {
  * Kullanım: HTML'de <span class="tip" data-tip="…">?</span> ya da JS
  * şablonlarında tipIcon("…"). Tek bir yüzen kutu tüm sayfaya hizmet
  * eder; masaüstünde hover, mobilde dokunmayla açılır/kapanır. */
-const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 const tipIcon = (text) => `<span class="tip" data-tip="${esc(text)}">?</span>`;
 const tipBox = document.createElement("div");
 tipBox.id = "tipBox";
@@ -203,10 +203,14 @@ async function load() {
   $("#updated").innerHTML = '<span class="spin">↻</span> yükleniyor…';
   window.dispatchEvent(new CustomEvent("portfolio:loading"));
   PRORISK = null; // her yüklemede taze risk hesabı
+  let dataLoaded = false;
   try {
     const r = await fetch("/api/portfolio");
     if (r.status === 401) { window.location.href = "/login"; return; }
+    if (!r.ok) throw new Error(`Portföy isteği HTTP ${r.status}`);
     STATE = await r.json();
+    if (!Array.isArray(STATE?.holdings)) throw new Error("Portföy yanıtı beklenen biçimde değil");
+    dataLoaded = true;
     render();
     renderReports();
     /* Korelasyon çarpanını ARKA PLANDA çek — boyutlandırmayı bloklamasın.
@@ -215,8 +219,9 @@ async function load() {
      * yerine bekleme hâlini söylemek, kullanıcının yanlış adede güvenmesini önler. */
     korCarpaniYukle();
   } catch (e) {
-    $("#updated").textContent = "Bağlantı hatası";
-    window.dispatchEvent(new CustomEvent("portfolio:error", { detail: { message: "Portföy verisine ulaşılamadı." } }));
+    console.error(dataLoaded ? "Portföy ekranı çizilemedi:" : "Portföy verisi yüklenemedi:", e);
+    $("#updated").textContent = dataLoaded ? "Ekran hatası" : "Bağlantı hatası";
+    window.dispatchEvent(new CustomEvent("portfolio:error", { detail: { message: dataLoaded ? "Portföy verisi geldi ancak ekran çizilemedi." : "Portföy verisine ulaşılamadı." } }));
   }
 }
 
@@ -447,7 +452,7 @@ function renderSentiment(data) {
         <span class="regime-band">${rg.band}</span>
       </div>
       <div class="regime-val">${fmtNum(rg.vix, 2)}${rg.vixChangePct != null ? ` <span class="chip ${cls(rg.vixChangePct)}">${fmtPct(rg.vixChangePct)}</span>` : ""}</div>
-      <div class="regime-note">${rg.note}</div>
+      <div class="regime-note">${esc(rg.note)}</div>
       ${hasCash ? `
       <div class="regime-bar" title="Nakit oranı (0–${SCALE}%)">
         <div class="rb-target" style="left:${(rg.targetCash[0] / SCALE) * 100}%;width:${((rg.targetCash[1] - rg.targetCash[0]) / SCALE) * 100}%"></div>

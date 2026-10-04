@@ -62,6 +62,85 @@
   /* Ortak hareket dili — tüm geçişler aynı yumuşak eğriyle akar */
   --ease: cubic-bezier(.22,1,.36,1);
 }
+/* ════════════════════════════════════════════════════════════════════════
+   KOYU TEMA (3 Eyl 2026) — sıcak kağıdın gece hâli
+   ════════════════════════════════════════════════════════════════════════
+   Kaan uygulamayı ana ekrana ekledi ve gece açıyor; beyaz kağıt karanlıkta
+   fener gibi çalışıyordu. Seçim SİSTEME bırakıldı: telefon karanlık moddaysa
+   koyu, değilse açık. Uygulama içinde ayrı bir düğme YOK — iOS'ta tema zaten
+   sistem ayarı, ikinci bir anahtar iki doğruluk kaynağı demek olurdu.
+
+   YÖNTEM: yalnız TOKEN yeniden tanımlanır, hiçbir kural iki kez yazılmaz.
+   Bunun çalışması için 20 sabit `background: #fff` önce var(--card)'a bağlandı
+   (aynı turda) — biri bile atlanırsa koyu zeminde beyaz bir dikdörtgen kalır ve
+   bunu ancak o paneli gece açtığında görürsün.
+
+   ÜÇ ŞEY TERSİNE ÇEVRİLİR, körlemesine değil:
+   1. "Metin gücü" tonlar. Açıkta --green-d KOYU yeşildir (#1b6a40, beyazda
+      okunur); koyuda AÇIK olmalı (#5fd48d). Bir rengi sadece karartıp
+      aydınlatmak yetmez, rolü ters döner.
+   2. Yumuşak zeminler. --green-soft açıkta açık mint, koyuda koyu yeşil-siyah.
+      Aynı isim, ters uç.
+   3. Gölge → kenarlık. Koyu zeminde gölge görünmez; yükseklik hissi ince bir
+      açık kenarlıkla verilir (shadow-lg'nin ilk halkası).
+
+   color-scheme: dark ŞART — form kontrolleri, kaydırma çubukları ve tarih
+   seçici tarayıcının kendi koyu çizimini kullansın. Yoksa input'lar beyaz kalır
+   ve hiçbir CSS onu düzeltmez. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --bg: #0d0f0b;        /* sayfa zemini — sıcak kağıdın gece karşılığı */
+    --bg2: #1a1d15;       /* iç yüzey (input, başlık, inset) */
+    --bg3: #22261c;       /* hover / açık inset */
+    --card: #15180f;      /* kart zeminden AÇIK: koyuda yükseklik böyle okunur */
+    --ink: #f1f3ea;       /* sıcak beyaz — saf #fff koyuda parlar ve titrer */
+    --ink2: #c8ccbc;
+    --muted: #949a88;     /* --bg2 üstünde ~5,4:1 */
+    --ink-soft: #7c8271;
+    --green: #45b877;
+    --green-d: #63d693;   /* AÇIK: koyuda metin gücü tonu ters uçtan gelir */
+    --green-l: #2f8f57;   /* focus halkası — koyuda daha sakin */
+    --accent: #63d693;
+    --brand: #1c7a4d;     /* logo rozeti: koyuda biraz açıldı, yoksa zemine gömülür */
+    --brand-2: #0e5236;
+    --red: #e8564f;
+    --red-d: #f4756c;
+    --red-bg: #2b1512;
+    --amber: #d9a13c;
+    --amber-bg: #2b2213;
+    --amber-d: #e8bb66;
+    --amber-line: #453820;
+    --green-soft: #142619;
+    --green-line: #26452f;
+    --red-line: #4b2420;
+    --up: #3ecf70;
+    --up-soft: rgba(62,207,112,.16);
+    --down: #f2604a;
+    --down-soft: rgba(242,96,74,.16);
+    --violet: #a99cf0;
+    --sky: #7fb0dd;
+    --line: #262a1e;
+    --line-strong: #383d2d;
+    --surface: #15180f;
+    --surface-2: #1c1f16;
+    --green-bg: #142619;
+    --sky-d: #8fc2ea;
+    --sky-soft: #16212a;
+    --sky-line: #28353f;
+    --violet-d: #b6a9f7;
+    --violet-soft: #1d1a2c;
+    --hero: #0a0c08;      /* sidebar zaten koyuydu; bir tık daha derinleşir */
+    --hero2: #050705;
+    /* Gölge koyuda görünmez — yükseklik ince açık halkayla verilir. */
+    --shadow: 0 1px 2px rgba(0,0,0,.5);
+    --shadow-sm: var(--shadow);
+    --shadow-md: 0 1px 2px rgba(0,0,0,.45), 0 8px 22px -14px rgba(0,0,0,.7);
+    --shadow-lg: 0 0 0 1px rgba(255,255,255,.07), 0 32px 70px -26px rgba(0,0,0,.8);
+    --ring: 0 0 0 3px rgba(99,214,147,.34);
+  }
+
+}
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
 }
@@ -302,7 +381,7 @@ tr.opt-detail .muted { color: var(--muted); }
 /* 1) Özet */
 .fr-summary { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
 .fr-stats { display: flex; flex-wrap: wrap; gap: 10px; }
-.fr-stat { display: flex; flex-direction: column; gap: 1px; background: #fff; border: 1px solid var(--border); border-radius: 9px; padding: 7px 11px; min-width: 84px; }
+.fr-stat { display: flex; flex-direction: column; gap: 1px; background: var(--card); border: 1px solid var(--border); border-radius: 9px; padding: 7px 11px; min-width: 84px; }
 .fr-stat b { font-size: 17px; font-variant-numeric: tabular-nums; line-height: 1.1; }
 .fr-stat span { font-size: 10.5px; color: var(--muted); }
 .fr-stat.s-buy b { color: var(--green-d); }
@@ -316,7 +395,7 @@ tr.opt-detail .muted { color: var(--muted); }
 
 /* 2) Kısa vadeli fırsatlar */
 .fr-opps { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
-.fr-opp { border: 1px solid var(--border); border-radius: 11px; padding: 10px 12px; cursor: pointer; transition: border-color .12s, box-shadow .12s, transform .12s; background: #fff; }
+.fr-opp { border: 1px solid var(--border); border-radius: 11px; padding: 10px 12px; cursor: pointer; transition: border-color .12s, box-shadow .12s, transform .12s; background: var(--card); }
 .fr-opp:hover { border-color: #bcd3c4; box-shadow: 0 4px 14px rgba(31,122,72,.1); transform: translateY(-1px); }
 .fr-opp-top { display: flex; align-items: center; gap: 7px; }
 .fr-opp-top .sym { font-size: 15px; font-weight: 800; }
@@ -499,7 +578,7 @@ body.privacy [data-pm="1"] { user-select: none; }
 }
 .chart-tip {
   position: absolute; pointer-events: none; opacity: 0; z-index: 6;
-  background: #fff; border: 1px solid var(--line); border-radius: 10px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 10px;
   padding: 7px 10px; box-shadow: 0 8px 22px rgba(0,0,0,.14);
   transform: translate(-50%, -118%); white-space: nowrap; transition: opacity .1s;
 }
@@ -673,9 +752,10 @@ tfoot td.l { text-align: left; }
 .trade-form { border-top: 1px solid var(--line); padding-top: 18px; }
 .tf-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 13px; margin-bottom: 12px; }
 .tf-grid label { display: block; font-size: 12px; font-weight: 700; color: var(--ink2); margin: 0; }
+.tf-grid label[hidden] { display: none; }
 .tf-grid .tf-note { grid-column: 1 / -1; }
 .tf-grid input, .tf-grid select { width: 100%; margin-top: 6px; padding: 10px 12px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); font-family: inherit; font-size: 13.5px; background: var(--bg3); transition: border-color .15s ease, box-shadow .15s ease, background .15s ease; }
-.tf-grid input:focus, .tf-grid select:focus { outline: none; border-color: var(--green-l); box-shadow: var(--ring); background: #fff; }
+.tf-grid input:focus, .tf-grid select:focus { outline: none; border-color: var(--green-l); box-shadow: var(--ring); background: var(--card); }
 .tf-preview { font-size: 14px; font-weight: 700; color: var(--ink); margin-bottom: 14px; padding: 11px 14px; background: var(--bg2); border: 1px solid var(--line); border-radius: 11px; }
 .flow-historical { display: flex; align-items: flex-start; gap: 9px; margin: -2px 0 15px; color: var(--ink2); font-size: 12px; line-height: 1.45; }
 .flow-historical input { margin-top: 2px; accent-color: var(--green-d); flex: 0 0 auto; }
@@ -692,18 +772,18 @@ tfoot td.l { text-align: left; }
    büyük bir problem. Başlık ve eylem çubuğu artık YAPIŞKAN — ikisi de her an
    ekranda. Alanlar beyaz zemin + kalın kenarlık: gri-üstüne-gri "hazır form"
    hissi yerine dokunulacak yüzey gibi duruyorlar. */
-.modal { background: #fff; border-radius: var(--radius-lg); padding: 0 22px 0; width: 100%; max-width: 468px; box-shadow: var(--shadow-lg); max-height: 92vh; overflow-y: auto; animation: modalPop .26s cubic-bezier(.22,1,.36,1); }
+.modal { background: var(--card); border-radius: var(--radius-lg); padding: 0 22px 0; width: 100%; max-width: 468px; box-shadow: var(--shadow-lg); max-height: 92vh; overflow-y: auto; animation: modalPop .26s cubic-bezier(.22,1,.36,1); }
 @keyframes modalPop { from { opacity: 0; transform: translateY(12px) scale(.98); } to { opacity: 1; transform: none; } }
 .modal h3 {
   position: sticky; top: 0; z-index: 3; margin: 0 -22px 16px; padding: 17px 22px 13px;
-  background: #fff; border-bottom: 1px solid var(--line);
+  background: var(--card); border-bottom: 1px solid var(--line);
   font-size: 17px; font-weight: 800; letter-spacing: -.3px; color: var(--ink);
 }
 .modal label { display: block; font-size: 12.5px; font-weight: 700; color: var(--ink2); margin-bottom: 14px; letter-spacing: -.05px; }
 .modal label i { font-weight: 500; color: var(--muted); font-style: normal; }
 .modal input, .modal select {
   width: 100%; margin-top: 6px; padding: 12px 13px; border: 1.5px solid var(--line-strong);
-  border-radius: 10px; font-family: inherit; font-size: 15px; font-weight: 600; color: var(--ink); background: #fff;
+  border-radius: 10px; font-family: inherit; font-size: 15px; font-weight: 600; color: var(--ink); background: var(--card);
   transition: border-color .15s ease, box-shadow .15s ease;
 }
 .modal input:hover:not(:focus), .modal select:hover:not(:focus) { border-color: var(--muted); }
@@ -712,7 +792,7 @@ tfoot td.l { text-align: left; }
 /* Eylem çubuğu her an ekranda; üstünde ince bir gölge var ki içerik altına kaydığı belli olsun */
 .modal-actions {
   position: sticky; bottom: 0; z-index: 3; display: flex; gap: 10px; justify-content: flex-end;
-  margin: 18px -22px 0; padding: 14px 22px 17px; background: #fff; border-top: 1px solid var(--line);
+  margin: 18px -22px 0; padding: 14px 22px 17px; background: var(--card); border-top: 1px solid var(--line);
   box-shadow: 0 -10px 18px -14px rgba(18,20,15,.35);
 }
 /* Butonlar solid ve dokunulabilir: birincil koyu yeşil dolgu, ikincil belirgin kenarlık */
@@ -882,7 +962,7 @@ svg.ic-xs { width: 13px; height: 13px; display: inline-block; vertical-align: -2
 .cuma-hero { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
 .cuma-hero-title { font-size: 17px; font-weight: 800; letter-spacing: -.4px; color: #6b4e12; }
 .cuma-hero-sub { font-size: 12.5px; font-weight: 600; color: #9a7d3c; margin-top: 2px; font-variant-numeric: tabular-nums; }
-.cuma-refresh { background: #fff; border-color: #e6d29a; color: #6b4e12; }
+.cuma-refresh { background: var(--card); border-color: #e6d29a; color: #6b4e12; }
 .cuma-refresh:hover { background: #fbf3df; border-color: #d8bd72; }
 .cuma-note { font-size: 12px; line-height: 1.55; color: #5d5640; background: #fff8e7; border: 1px solid #f0e2b6; border-radius: 12px; padding: 10px 13px; margin: 14px 0 16px; }
 .cuma-note b { color: #6b4e12; }
@@ -964,8 +1044,10 @@ svg.ic-xs { width: 13px; height: 13px; display: inline-block; vertical-align: -2
 /* ===================== Grafik modalı ===================== */
 .chart-modal-bg { position: fixed; inset: 0; background: rgba(14,24,18,.58); display: flex; align-items: center; justify-content: center; z-index: var(--z-modal); padding: 24px; animation: modalFade .18s ease; }
 .chart-modal-bg[hidden] { display: none; }
-.chart-modal { background: #fff; border-radius: 16px; width: min(1720px, 97.5vw); height: min(94vh, 1040px); display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 24px 70px rgba(0,0,0,.3); }
+.chart-modal { background: var(--card); border-radius: 16px; width: min(1720px, 97.5vw); height: min(94vh, 1040px); display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 24px 70px rgba(0,0,0,.3); }
 .cm-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--border); }
+/* Pozisyon şeridi yalnız mobilde; masaüstünde aynı kart yan panelde duruyor. */
+.cm-posbar { display: none; }
 .cm-title { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .cm-sym { font-size: 20px; font-weight: 800; }
 .cm-name { font-size: 13px; color: var(--muted); }
@@ -1013,21 +1095,33 @@ svg.ic-xs { width: 13px; height: 13px; display: inline-block; vertical-align: -2
 .cm-grade.g-a { background: #1f7a48; color: #fff; }
 .cm-grade.g-b { background: #e7f4ed; color: var(--green-d); border: 1px solid var(--green-line); }
 .cm-grade.g-c { background: #fdf3df; color: #9a7416; border: 1px solid #f0dca8; }
-.cm-grade.g-d { background: #fff; color: var(--muted); border: 1px solid var(--border); }
+.cm-grade.g-d { background: var(--card); color: var(--muted); border: 1px solid var(--border); }
 .cm-r { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 5px 0; font-size: 13px; }
 .cm-k { color: var(--muted); }
 .cm-v { font-weight: 700; font-variant-numeric: tabular-nums; }
 .cm-v.i-entry { color: var(--sky-d); }
 .cm-hr { border: none; border-top: 1px solid var(--border); margin: 9px 0; }
-.cm-note { font-size: 12.5px; line-height: 1.5; color: var(--ink); background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 9px 11px; }
+.cm-note { font-size: 12.5px; line-height: 1.5; color: var(--ink); background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 9px 11px; }
 .cm-disc { font-size: 10.5px; color: var(--muted); margin-top: 8px; }
 .cm-legend { display: flex; flex-wrap: wrap; gap: 12px; padding: 9px 18px; border-top: 1px solid var(--border); font-size: 11.5px; color: var(--muted); }
 .cm-legend .lg { display: inline-flex; align-items: center; gap: 5px; }
 .cm-legend .lg i { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
 @media (max-width: 760px) {
   .cm-body { flex-direction: column; }
-  .cm-side { width: auto; border-left: none; border-top: 1px solid var(--border); max-height: 240px; }
-  .cm-chart { min-height: 320px; }
+  /* SABİT yükseklikler yerine ESNEK pay. max-height: 240px sabitti ve pozisyon
+     şeridi eklenince toplam 100dvh'yi aştı: lejant panelin üstüne bindi. Sabit
+     yükseklikleri toplayıp ekrana sığdırmaya çalışmak her yeni blokta yeniden
+     bozulur — grafiğe alt sınır, panele "kalanı" verilir. */
+  .cm-body { min-height: 0; }
+  .cm-chart { flex: 0 0 auto; min-height: 260px; }
+  .cm-side { width: auto; border-left: none; border-top: 1px solid var(--border);
+    flex: 1 1 0; min-height: 0; max-height: none; }
+  /* Lejant tek satır, yatay kayar: dört satıra sarınca grafikten çaldığı yer
+     taşıdığı bilgiden fazla. */
+  .cm-legend { flex: 0 0 auto; flex-wrap: nowrap; overflow-x: auto;
+    scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .cm-legend::-webkit-scrollbar { display: none; }
+  .cm-legend .lg { flex: 0 0 auto; }
 }
 
 /* ===================== Sol menü düzeni ===================== */
@@ -1680,7 +1774,7 @@ svg.ic-xs { width: 13px; height: 13px; display: inline-block; vertical-align: -2
 .chip.pat-bad  { background: var(--red-bg); color: var(--red); }
 .chip.pat-warn { background: var(--violet-soft); color: var(--violet-d); }
 
-.cm-pattern { border-radius: 9px; padding: 9px 11px; margin: 4px 0 10px; font-size: 12px; line-height: 1.5; border: 1px solid var(--border); background: #fff; }
+.cm-pattern { border-radius: 9px; padding: 9px 11px; margin: 4px 0 10px; font-size: 12px; line-height: 1.5; border: 1px solid var(--border); background: var(--card); }
 .cm-pattern.pat-good { background: #f1faf4; border-color: #cfe9d8; }
 .cm-pattern.pat-bad  { background: #fdf2f0; border-color: #f0d5d0; }
 .cm-pattern.pat-warn { background: #f6f3fd; border-color: #ddd3f4; }
@@ -1688,7 +1782,7 @@ svg.ic-xs { width: 13px; height: 13px; display: inline-block; vertical-align: -2
 .cm-pattern-h .muted { font-weight: 600; }
 .cm-pattern-d { color: var(--ink); }
 
-.cm-why { background: #fff; border: 1px solid var(--border); border-radius: 9px; padding: 9px 11px 9px; margin-bottom: 12px; }
+.cm-why { background: var(--card); border: 1px solid var(--border); border-radius: 9px; padding: 9px 11px 9px; margin-bottom: 12px; }
 .cm-why-h { font-size: 12px; font-weight: 800; margin-bottom: 6px; }
 .cm-why ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
 .cm-why li { position: relative; font-size: 11.5px; line-height: 1.45; padding: 4px 8px 4px 9px; border-radius: 6px; border-left: 3px solid var(--line); background: var(--bg2); color: var(--ink); }
@@ -1736,7 +1830,7 @@ svg.ic-xs { width: 13px; height: 13px; display: inline-block; vertical-align: -2
 /* Nöbet şeridi (Top-10 + insider/haber göstergesi) */
 .opp-watch { font-size: 12.5px; line-height: 1.55; color: var(--ink); background: var(--sky-soft); border: 1px solid var(--sky-line); border-radius: 10px; padding: 10px 13px; margin-bottom: 12px; }
 .opp-watch-syms { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-.ows-chip { font-family: var(--mono); font-size: 11.5px; font-weight: 700; background: #fff; border: 1px solid var(--sky-line); color: var(--sky-d); border-radius: 999px; padding: 3px 9px; white-space: nowrap; }
+.ows-chip { font-family: var(--mono); font-size: 11.5px; font-weight: 700; background: var(--card); border: 1px solid var(--sky-line); color: var(--sky-d); border-radius: 999px; padding: 3px 9px; white-space: nowrap; }
 
 /* Insider rozeti (fırsat kartı) */
 .opp-ins { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
@@ -1817,7 +1911,7 @@ svg.ic-xs { width: 13px; height: 13px; display: inline-block; vertical-align: -2
 .opp-news.empty { padding: 8px 11px; font-size: 11.5px; color: var(--muted); background: var(--bg2); }
 .opp-news-h { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); padding: 7px 11px 5px; }
 .opp-news-row { display: grid; grid-template-columns: 10px 1fr auto; align-items: center; gap: 8px; padding: 7px 11px; border-top: 1px solid var(--line); text-decoration: none; color: var(--ink); transition: background .12s ease; }
-.opp-news-row:hover { background: #fff; }
+.opp-news-row:hover { background: var(--card); }
 .onr-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--sky); }
 .onr-head { font-size: 12px; font-weight: 600; line-height: 1.35; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .onr-meta { font-size: 10.5px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
@@ -1833,7 +1927,7 @@ svg.ic-xs { width: 13px; height: 13px; display: inline-block; vertical-align: -2
 .chip.wk-warn { background: var(--bg2); color: var(--muted); }
 
 /* Kademeli giriş — grafik modalı */
-.cm-scaled { display: flex; flex-direction: column; gap: 6px; background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; }
+.cm-scaled { display: flex; flex-direction: column; gap: 6px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; }
 .cm-trr { display: grid; grid-template-columns: 38px 1fr auto; align-items: baseline; gap: 8px; font-size: 12.5px; }
 .cm-trp { font-weight: 800; color: var(--green-d); }
 .cm-trl { color: var(--muted); font-size: 11.5px; }
@@ -1903,6 +1997,9 @@ svg.ic-xs { width: 13px; height: 13px; display: inline-block; vertical-align: -2
 }
 
 /* ===================== Toast ===================== */
+/* Toast mobilde alt sekme çubuğunun ve home indicator'ın ÜSTÜNDE durur; aksi
+   halde cam kapsülün arkasında kalıp okunmuyordu (bildirim gördüğünü sanıyorsun,
+   yazıyı göremiyorsun). Masaüstünde çubuk yok, 26px yeterli. */
 .toast { position: fixed; left: 50%; bottom: 26px; transform: translate(-50%, 16px); z-index: var(--z-toast); background: var(--ink); color: #fff; font-size: 13.5px; font-weight: 600; padding: 12px 20px; border-radius: 12px; box-shadow: var(--shadow-lg); opacity: 0; pointer-events: none; transition: opacity .22s ease, transform .22s cubic-bezier(.22,1,.36,1); max-width: 90vw; }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 .toast.t-warn { background: #8a3b32; }
@@ -1912,7 +2009,7 @@ svg.ic-xs { width: 13px; height: 13px; display: inline-block; vertical-align: -2
 .confirm-bg { position: fixed; inset: 0; z-index: 450; display: grid; place-items: center; padding: 20px; background: rgba(14,24,18,.5); opacity: 0; transition: opacity .16s ease; }
 .confirm-bg.show { opacity: 1; }
 .confirm-bg.closing { opacity: 0; }
-.confirm-box { background: #fff; border-radius: var(--radius-lg); padding: 24px; width: 100%; max-width: 380px; box-shadow: var(--shadow-lg); transform: translateY(10px) scale(.98); transition: transform .2s cubic-bezier(.22,1,.36,1); }
+.confirm-box { background: var(--card); border-radius: var(--radius-lg); padding: 24px; width: 100%; max-width: 380px; box-shadow: var(--shadow-lg); transform: translateY(10px) scale(.98); transition: transform .2s cubic-bezier(.22,1,.36,1); }
 .confirm-bg.show .confirm-box { transform: none; }
 .confirm-title { font-size: 17px; font-weight: 800; letter-spacing: -.2px; }
 .confirm-msg { font-size: 13.5px; color: var(--muted); line-height: 1.5; margin-top: 8px; }
@@ -2895,7 +2992,7 @@ button.sw-goal-target:hover { background: var(--bg2); border-color: var(--line);
 .rz-edited { color: var(--green-d) !important; background: var(--green-soft) !important; border-color: var(--green-line) !important; }
 .prompt-field { display: flex; align-items: center; gap: 8px; margin: 14px 0 4px; }
 .prompt-input { flex: 1; min-width: 0; font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; padding: 10px 12px; border: 1.5px solid var(--line); border-radius: 10px; background: var(--surface-2); color: var(--ink); }
-.prompt-input:focus { outline: none; border-color: var(--green); background: #fff; }
+.prompt-input:focus { outline: none; border-color: var(--green); background: var(--card); }
 .prompt-suffix { font-size: 15px; font-weight: 700; color: var(--ink-soft); }
 
 /* ── 2026 Realize: satır aksiyonları (düzelt/sıfırla/sil) + düzeltildi rozeti ── */
@@ -3900,6 +3997,152 @@ svg.fx-pop { animation: fxPop .7s cubic-bezier(.22,1,.36,1) both; transform-orig
  * (2) lejant/şerit min-genişlikleri; (3) kaydırılamayan pill şeritleri. */
 
 /* Alt sekme çubuğu — masaüstünde gizli */
+/* ════════════════════════════════════════════════════════════════════════
+   MOBİL PANO (3 Eyl 2026) — Genel sekmesinin telefon yerleşimi
+   ════════════════════════════════════════════════════════════════════════
+   Masaüstünde YOK. Telefonda uygulamayı açınca ilk karşılaşılan şey CNN korku
+   endeksiydi; paranın nerede olduğunu görmek iki ekran kaydırmayı gerektiriyordu.
+   Bu blok hero + varlık gruplarını en üste alır ve piyasa göstergelerini aşağı
+   iter. Masaüstü yerleşimine (cardsTop + donut + tables) hiç dokunmaz — orada
+   ekran geniş, üç panel yan yana sığıyor ve sıra sorun değil.
+
+   Sıra NEDEN böyle: nakit → hisse → altın → opsiyon. Nakit en üstte, çünkü
+   "elimde ne kadar hazır para var" bir alım kararının İLK girdisi ve bugün
+   çekmecenin içinde gömülü duruyor. */
+#mobilPano { display: none; }
+
+@media (max-width: 760px) {
+  #mobilPano { display: block; margin: 0 -14px 4px; }
+
+  /* Genel sekmesi mobilde kolon olur ki sıra `order` ile kurulabilsin.
+     Panellerin kendi iç yerleşimi etkilenmez — burada yalnız üst düzey sıra var. */
+  #view-genel { display: flex; flex-direction: column; }
+  /* Order verilmeyen flex çocuğu 0 alır ve order:1'in ÖNÜNE geçer — ilk denemede
+     çekmece (home-drawer) böyle en tepeye çıktı. Varsayılanı önce yükselt, sonra
+     istisnaları yaz; yeni bir panel eklendiğinde de sona düşsün. */
+  #view-genel > * { order: 6; }
+  #view-genel > #mobilPano { order: 1; }
+  #view-genel > #alertStrip { order: 2; }
+  #view-genel > #huntStrip { order: 3; }
+  #view-genel > #feedStrip { order: 4; }
+  #view-genel > .sw2-sec { order: 5; }
+  /* Piyasa nabzı en sona: günde bir kez bakılan bir gösterge her açılışta
+     ekranın yarısını yemesin. Silinmiyor, sırası değişiyor. */
+  #view-genel > #sentimentRow { order: 9; }
+  /* Mobil panonun devraldığı bloklar: aynı sayı iki kez görünmesin. */
+  #view-genel > .view-head,
+  #view-genel > #cardsTop,
+  #view-genel > #cardsMetrics { display: none; }
+  #view-genel #cashPanel { display: none; }
+
+  /* ── hero ── */
+  .mp-hero { padding: 10px 20px 2px; }
+  .mp-hero-lbl { display: flex; align-items: center; gap: 6px; font-size: 14px;
+    font-weight: 600; color: var(--muted); margin-bottom: 1px; }
+  .mp-eye { width: 26px; height: 26px; border: 0; background: none; padding: 0;
+    color: var(--muted); display: grid; place-items: center; }
+  .mp-eye svg { width: 15px; height: 15px; }
+  .mp-hero-val { font-size: 40px; font-weight: 800; letter-spacing: -1.6px; color: var(--ink);
+    font-variant-numeric: tabular-nums; line-height: 1.08; }
+  /* Kuruşlar soluk: sayı bir bakışta okunsun, virgülden sonrası gürültü yapmasın. */
+  .mp-hero-val small { font-size: 26px; font-weight: 700; color: var(--ink-soft); letter-spacing: -.8px; }
+  .mp-hero-sub { display: flex; align-items: baseline; gap: 8px; margin-top: 4px;
+    font-variant-numeric: tabular-nums; }
+  .mp-hero-chg { font-size: 14.5px; font-weight: 700; }
+  .mp-hero-chg.up { color: var(--up); } .mp-hero-chg.down { color: var(--down); }
+  .mp-hero-per { font-size: 13px; color: var(--muted); font-weight: 600; }
+  .mp-hero-usd { margin-top: 3px; font-size: 12.5px; color: var(--ink-soft);
+    font-variant-numeric: tabular-nums; }
+
+  /* ── eylem pill'leri ── */
+  .mp-acts { display: flex; gap: 8px; padding: 14px 20px 2px; overflow-x: auto;
+    scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .mp-acts::-webkit-scrollbar { display: none; }
+  .mp-pill { flex: 0 0 auto; height: 38px; padding: 0 16px; border-radius: 19px;
+    border: 1px solid var(--line); background: var(--bg2); color: var(--ink2);
+    font-size: 13.5px; font-weight: 650; display: flex; align-items: center; gap: 6px; }
+  .mp-pill:active { transform: scale(.96); }
+  .mp-pill.main { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .mp-pill svg { width: 15px; height: 15px; fill: none; stroke: currentColor;
+    stroke-width: 2.2; stroke-linecap: round; }
+
+  /* ── durum şeridi ── */
+  .mp-status { display: flex; align-items: center; gap: 10px; width: calc(100% - 32px);
+    margin: 15px 16px 0; padding: 11px 13px; border-radius: 14px; text-align: left;
+    background: var(--bg2); border: 1px solid var(--line); }
+  .mp-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green);
+    flex: 0 0 auto; }
+  .mp-status.warn .mp-dot { background: var(--amber); }
+  .mp-status-t { font-size: 12.5px; color: var(--ink2); line-height: 1.4; flex: 1; min-width: 0; }
+  .mp-status-t b { color: var(--ink); font-weight: 700; }
+  .mp-chev { color: var(--ink-soft); font-size: 17px; line-height: 1; }
+
+  /* ── varlık grupları ── */
+  .mp-grp { margin-top: 24px; }
+  /* baseline, flex-end DEĞİL: sağ blok iki satır olduğu için alt kenar hizası
+     başlığı aşağı kaydırıyordu. Baseline ile grup adı toplamın ilk satırıyla
+     aynı çizgide oturur — Midas'ta da öyle. */
+  .mp-grp-h { display: flex; align-items: baseline; justify-content: space-between;
+    gap: 12px; padding: 0 20px 8px; }
+  .mp-grp-t { font-size: 19px; font-weight: 750; letter-spacing: -.4px; color: var(--ink); }
+  .mp-grp-r { text-align: right; font-variant-numeric: tabular-nums; flex: 0 0 auto; }
+  .mp-grp-v { display: block; font-size: 16px; font-weight: 750; color: var(--ink);
+    letter-spacing: -.3px; }
+  .mp-grp-c { display: block; font-size: 12.5px; font-weight: 650; margin-top: 1px;
+    color: var(--muted); }
+  .mp-grp-c.up { color: var(--up); } .mp-grp-c.down { color: var(--down); }
+
+  .mp-row { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+    padding: 12px 20px; border: 0; border-top: 1px solid var(--line); background: none; }
+  .mp-row:active { background: var(--bg3); }
+  .mp-logo { width: 36px; height: 36px; border-radius: 50%; flex: 0 0 auto; display: grid;
+    place-items: center; font-size: 12px; font-weight: 800; color: #fff; letter-spacing: -.3px; }
+  .mp-row-m { flex: 1; min-width: 0; }
+  .mp-row-s { display: block; font-size: 15px; font-weight: 700; color: var(--ink);
+    letter-spacing: -.2px; }
+  .mp-row-q { display: block; font-size: 12.5px; color: var(--ink-soft);
+    font-variant-numeric: tabular-nums; margin-top: 1px; }
+  .mp-row-r { text-align: right; font-variant-numeric: tabular-nums; flex: 0 0 auto; }
+  .mp-row-v { display: block; font-size: 15px; font-weight: 700; color: var(--ink); }
+  .mp-row-c { font-size: 12.5px; font-weight: 650; margin-top: 1px; }
+  .mp-row-c.up { color: var(--up); } .mp-row-c.down { color: var(--down); }
+
+  /* Delinen stop: renk BURADA hak edilir — bir şey yapman gerekiyor
+     (CLAUDE.md kural 3). Diğer satırlarda zemin nötr. */
+  .mp-row.uyari { background: linear-gradient(90deg, var(--down-soft), transparent 62%); }
+  .mp-rozet { font-style: normal; margin-left: 6px; font-size: 10px; font-weight: 800;
+    color: var(--down); background: var(--down-soft); padding: 2px 5px; border-radius: 5px;
+    letter-spacing: .3px; vertical-align: 1px; }
+
+  /* ── ölçüm kartları ── */
+  .mp-secline { display: flex; align-items: center; gap: 10px; padding: 0 20px;
+    margin: 28px 0 10px; }
+  .mp-secline b { font-size: 11px; font-weight: 800; letter-spacing: .7px;
+    text-transform: uppercase; color: var(--muted); }
+  .mp-ln { flex: 1; height: 1px; background: var(--line); }
+  .mp-mcards { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; padding: 0 16px; }
+  .mp-mcard { background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+    padding: 12px 13px; }
+  .mp-mc-l { font-size: 10px; font-weight: 800; text-transform: uppercase;
+    letter-spacing: .5px; color: var(--muted); }
+  /* Ölçüm sayısı NÖTR basılır: bunlar durum değil ölçüm, eylem çağırmıyorlar. */
+  .mp-mc-v { font-size: 20px; font-weight: 800; letter-spacing: -.5px; color: var(--ink);
+    margin-top: 5px; font-variant-numeric: tabular-nums; }
+  .mp-mc-s { font-size: 11px; color: var(--ink-soft); margin-top: 2px; line-height: 1.35; }
+
+  /* Bölüm etiketi mobilde SARAR. Tek satırda tutulunca "…pozisyon değil ortam
+     ölçer" ekran dışında kalıyordu ve cümle yarım okunuyordu — yazının varlık
+     sebebi o cümlenin tamamı (panelin ne ÖLÇMEDİĞİNİ söylüyor). */
+  .sec-label { flex-wrap: wrap; row-gap: 2px; }
+  .sec-label .sec-n { flex: 1 1 100%; }
+
+  /* Gizlilik modu mobil hero'yu da kapsar (masaüstünde .value bulanıklaşıyor). */
+  body.privacy .mp-hero-val, body.privacy .mp-hero-sub, body.privacy .mp-hero-usd,
+  body.privacy .mp-grp-r, body.privacy .mp-row-r, body.privacy .mp-mc-v {
+    filter: blur(7px); user-select: none;
+  }
+}
+
 .mnav { display: none; }
 
 @media (max-width: 640px) {
@@ -3945,8 +4188,45 @@ svg.fx-pop { animation: fxPop .7s cubic-bezier(.22,1,.36,1) both; transform-orig
   .modal-bg { padding: 0; place-items: end center; }
   .modal-bg .modal { width: 100%; max-width: 100%; border-radius: 20px 20px 0 0; max-height: 92dvh; overflow-y: auto; padding-bottom: calc(18px + env(safe-area-inset-bottom)); }
   .modal-bg:not([hidden]) .modal { animation: fxSheet .34s cubic-bezier(.22,1,.36,1) both; }
+  /* Sticky eylem çubuğu ana ekrana eklenmiş PWA'da iOS'un home indicator'ının
+     ÜSTÜNE biniyordu: "İptal / Kaydet" ile ekran kenarı arasında boşluk kalmıyor,
+     butona basmaya çalışırken sistem gesture'ı tetikleniyordu. .modal'ın
+     padding-bottom'u bunu çözmüyor — çubuk sticky, o padding'in üstünde duruyor. */
+  .modal-actions { padding-bottom: calc(17px + env(safe-area-inset-bottom)); }
+
+  /* ── Grafik modalı: tam ekran, ama başlık DURUM ÇUBUĞUNUN ALTINDA ──
+     3 Eyl 2026: PWA'da açılan grafik modalında "20:15" saati ile "WVE" başlığı
+     ve Yenile/TV/Kapat butonları iç içe geçiyordu. .mini-top'ta 19 Ağu'da
+     düzeltilen hatanın aynısı, bu kez modalda: standalone modda durum çubuğu
+     uygulama alanına dahildir ve inset eklenmezse içerik altına girer. */
   .chart-modal-bg { padding: 0; }
+  /* overflow-y: auto DENENDİ ve GERİ ALINDI: modal bir flex kolon (head → posbar →
+     body → legend) ve dış kaydırma eklenince body'nin flex:1 hesabı bozuldu —
+     lejant yan panelin üstüne bindi. Kaydırma iç bölümlerde kalır; modalın
+     kendisi tam ekranda sabit durur. */
   .chart-modal { width: 100vw; height: 100dvh; max-height: 100dvh; border-radius: 0; }
+  .cm-head {
+    position: sticky; top: 0; z-index: 5; background: var(--card);
+    padding-top: calc(14px + env(safe-area-inset-top));
+  }
+  .cm-legend { padding-bottom: calc(9px + env(safe-area-inset-bottom)); }
+  /* Pozisyon şeridi (aşağıda .cm-posbar) başlığın hemen altında duruyor; yan
+     panel eski yerinde, grafiğin altında kalır. Panelin sırasıyla oynamak
+     denendi ve HER denemede başka bir şeyi bozdu: sınırsız yükseklik grafiği
+     2000px aşağı itti, 46vh sınırı bu kez pozisyon kartını panelin kendi
+     kaydırmasında sakladı, panel içi order da fiyat planı kartının arkasına
+     düşürdü. Bilgi zaten tek bir HTML parçası — onu taşımak, üç kutunun
+     yerleşimini pazarlık etmekten basit. */
+  .cm-posbar { display: block; flex: 0 0 auto; padding: 10px 14px 0; background: var(--bg3);
+    border-bottom: 1px solid var(--border); }
+  .cm-posbar .cm-pos { margin-bottom: 10px; padding: 9px 11px; }
+  /* Satırlar iki sütun: dar ekranda adet ile değer yan yana
+     sığar, kart dört satır yerine iki satır olur ve grafik yukarıda kalır. */
+  .cm-posbar .cm-pos { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 14px; }
+  .cm-posbar .cm-pos-head { grid-column: 1 / -1; }
+
+
+  .toast { bottom: calc(84px + env(safe-area-inset-bottom)); }
 
   /* ── 6) Dokunma hedefleri ── */
   .btn { min-height: 40px; }
@@ -3971,14 +4251,20 @@ svg.fx-pop { animation: fxPop .7s cubic-bezier(.22,1,.36,1) both; transform-orig
     justify-content: space-around; align-items: stretch; gap: 2px;
     padding: 6px 7px;
     border-radius: 26px;
-    background: rgba(250, 249, 245, .62);
-    -webkit-backdrop-filter: blur(32px) saturate(190%);
-    backdrop-filter: blur(32px) saturate(190%);
-    border: 1px solid rgba(255, 255, 255, .55);
+    /* 3 Eyl: malzeme bir tur daha inceltildi. Önceki değerler (.62 opaklık,
+       blur 32) camı DOĞRU yapıyordu ama arkasındaki içerik zar zor okunuyordu;
+       iOS'un tab bar'ında altından geçen liste net biçimde seçilir. Üç oynama:
+       zemin .62 → .52, blur 32 → 40, saturate 190 → 205. Saturate önemli —
+       blur rengi soldurur, doygunluk geri verilmezse cam GRİ görünür ve
+       plastikleşir. */
+    background: rgba(250, 249, 245, .52);
+    -webkit-backdrop-filter: blur(40px) saturate(205%);
+    backdrop-filter: blur(40px) saturate(205%);
+    border: 1px solid rgba(255, 255, 255, .62);
     box-shadow:
-      0 1px 0 rgba(255, 255, 255, .85) inset,      /* cam kenarındaki ışık */
-      0 -1px 0 rgba(18, 20, 15, .04) inset,
-      0 10px 30px -8px rgba(18, 20, 15, .22),      /* yüzme gölgesi */
+      0 1px 0 rgba(255, 255, 255, .9) inset,       /* cam kenarındaki ışık */
+      0 -1px 0 rgba(18, 20, 15, .05) inset,
+      0 12px 34px -10px rgba(18, 20, 15, .24),     /* yüzme gölgesi */
       0 2px 8px -2px rgba(18, 20, 15, .10);
   }
   /* Etiket iOS ölçüsünde: küçük, ORTA kalınlıkta, harf aralığı sıfır. Mobilde
@@ -3997,10 +4283,13 @@ svg.fx-pop { animation: fxPop .7s cubic-bezier(.22,1,.36,1) both; transform-orig
   .mnav .nav-item:active { transform: scale(.9); }
   /* Aktif sekme: referanstaki gibi DOLU kapsül, ama opak değil — camın içinde
      duran ikinci bir cam. Opak bir kutu malzemeyi deler. */
+  /* Aktif kapsül de inceltildi (.72 → .58). Zemin saydamlaşınca üstündeki dolu
+     kapsül opak kalırsa camın içinde PLASTİK bir ada gibi durur; ikisi aynı
+     malzemeden olmalı, biri sadece bir ton daha parlak. */
   .mnav .nav-item.active {
     color: var(--green-d); font-weight: 700;
-    background: rgba(255, 255, 255, .72);
-    box-shadow: 0 1px 0 rgba(255,255,255,.9) inset, 0 2px 6px -2px rgba(18,20,15,.14);
+    background: rgba(255, 255, 255, .58);
+    box-shadow: 0 1px 0 rgba(255,255,255,.75) inset, 0 2px 7px -3px rgba(18,20,15,.16);
   }
   .mnav .nav-item.active::before { display: none; }   /* sidebar'ın sol ray göstergesi burada yok */
   .mnav .ni-ic { width: 24px; height: 24px; }
@@ -4481,4 +4770,367 @@ body:has(.cam.view.active)::before {
 }
 @media (max-width: 760px) {
   .content { padding-top: calc(12px + env(safe-area-inset-top)); }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   KOYU TEMA — bileşen düzeltmeleri (3 Eyl 2026)
+   ════════════════════════════════════════════════════════════════════════
+   Token'lar dosyanın BAŞINDA yeniden tanımlanıyor; bu blok DOSYANIN SONUNDA
+   olmak zorunda. Sebep aynı cascade tuzağı: `.mnav` ve `.cam` kuralları ~4700.
+   satırda ve saydam BEYAZ değerleri doğrudan yazıyorlar. Koyu karşılıklarını
+   başa koyunca eşit özgüllükte oldular ve sonraki kural kazandı — koyu temada
+   alt bar ve kartlar beyaz perde gibi durdu. Aynı ders 19 Ağu'da safe-area
+   padding'inde yaşanmıştı: eşit özgüllükte SIRA belirler.
+
+   Cam malzeme koyuda kendiliğinden ters çalışır: saydam beyaz bir zemin koyu
+   arka planın üstünde sis olur, içeriden gelen beyaz vurgu da parlak bir tel.
+   Koyuda malzemenin kendisi KOYU, vurgu ise çok düşük opaklıkta beyaz olmalı —
+   camın gövdesi değil, kenarındaki ışık. */
+@media (prefers-color-scheme: dark) {
+  /* ── Cam kartlar ── */
+  .cam .panel,
+  .cam .card:not(.hero),
+  .cam .asum {
+    background: rgba(26, 30, 20, .72);
+    border-color: rgba(255, 255, 255, .07);
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, .05) inset,
+      0 6px 20px -10px rgba(0, 0, 0, .6);
+  }
+  .cam .card:not(.hero):hover { border-color: rgba(255, 255, 255, .13); }
+  .cam .r26-stat, .cam .ch-kpi, .cam .rk-cell, .cam .sw2-sec-body > .panel,
+  .cam .db-card, .cam .hc-seg, .cam .lg-item {
+    background: rgba(255, 255, 255, .045);
+    border-color: rgba(255, 255, 255, .06);
+  }
+  .cam .card.hero {
+    box-shadow: 0 1px 0 rgba(255,255,255,.07) inset, 0 14px 40px -16px rgba(0, 0, 0, .8);
+  }
+  .cam .sw2-sec-rule { background: rgba(255, 255, 255, .10); }
+  /* Ortam gradyanları koyuda daha da kısılır: açık zeminde %7-9 opaklık göze
+     zar zor değiyordu, koyu zeminde aynı değer bulut gibi çıkıyor. */
+  body:has(.cam.view.active)::before {
+    background:
+      radial-gradient(58% 46% at 12% 6%,  rgba(69, 184, 119, .06), transparent 68%),
+      radial-gradient(48% 38% at 88% 20%, rgba(217, 161, 60, .045), transparent 70%),
+      radial-gradient(64% 44% at 52% 98%, rgba(127, 176, 221, .045), transparent 72%);
+  }
+
+  /* ── Alt sekme çubuğu ── */
+  .mnav {
+    background: rgba(26, 29, 21, .62);
+    border-color: rgba(255, 255, 255, .08);
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, .06) inset,
+      0 -1px 0 rgba(0, 0, 0, .3) inset,
+      0 12px 34px -10px rgba(0, 0, 0, .75),
+      0 2px 8px -2px rgba(0, 0, 0, .5);
+  }
+  .mnav .nav-item.active {
+    background: rgba(255, 255, 255, .07);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, .09) inset, 0 2px 7px -3px rgba(0, 0, 0, .6);
+  }
+  .mini-top { background: rgba(13, 15, 11, .84); }
+
+  /* ── Yerel krem/amber hex'ler (Cuma paneli, swing şeridi) ──
+     Token ailesine bağlanamayacak kadar yerel yazılmışlar; koyu karşılıkları. */
+  .cuma-card, .db-swstrip { background: #211c10; border-color: #453820; }
+  .cuma-note { background: #241e10; border-color: #453820; color: #d9cfa8; }
+  .cuma-refresh { background: var(--bg2); border-color: #4a3d1e; color: #e8bb66; }
+
+  /* ── Yarı saydam beyaz katmanlar ── */
+  .cm-grade.g-d { background: var(--bg2); }
+  .opp-news-row:hover { background: var(--bg3); }
+
+  /* Sabit beyaz kalan iki işaretçi (fiyat aralığı topuzu, grafik zirve noktası)
+     koyuda da beyaz: onlar zemin değil, üstünde durdukları grafikten ayrışan
+     nokta. Karartılsaydı görünmez olurlardı. */
+}
+
+/* ── Ters dönen metin/zemin çiftleri ──
+   Bir kural `background: var(--ink); color: #fff` yazdığında açık temada
+   doğrudur (koyu zemin, beyaz yazı) ama koyu temada --ink BEYAZA döner ve yazı
+   da beyaz kalır: buton görünür, üstündeki yazı görünmez. Aynı şey --green-d
+   için de geçerli — açıkta koyu yeşil, koyuda AÇIK yeşil.
+
+   Zemini token'a bağlamak yetmiyor; metin de token olmak zorunda. Burada
+   `color: var(--bg)` kullanılıyor: zemin hangi uçtaysa metin diğer uçtan gelir. */
+@media (prefers-color-scheme: dark) {
+  .toast { color: var(--bg); }
+  .mp-pill.main { color: var(--bg); }
+  .rb-tier.t-strong, .sw-grade.g-a, .sw-vb.v-good, .pill-opt.on, .vj-chip.active,
+  #cmMeasure.active, .note-fchip.active, .cm-tool.active { color: var(--bg); }
+  /* Aynı aile: koyu yeşil dolgulu rozetlerin gölgesi açık temada markanın
+     yeşilinden geliyordu; koyuda o gölge parlak bir hale olur. */
+  .pill-opt.on, .note-fchip.active { box-shadow: none; }
+}
+
+/* ── Pastel çip/rozet aileleri ──
+   Uygulamada 47 farklı açık pastel zemin, 36 koyu metin ve 20 açık kenarlık
+   doğrudan hex olarak yazılmış (chip.pos, sig-buy, opp-pos, cm-why li.s-good…).
+   Hiçbiri token değil ve olmamalı da: 19 farklı yeşil tonu kasıtlı — "iyi
+   sinyal" ile "hedefe ulaştı" aynı yeşilin iki tonu, tek token'a indirmek o
+   ayrımı siler.
+
+   Koyu karşılıkları TEK TEK ELLE yazılmadı; kaynak CSS taranıp her rengin
+   HUE'su korunarak dönüştürüldü (doygunluk ×0,62 · açıklık %10-12 zemin için,
+   metinde ters yön: %72). Böylece "hangi yeşil" bilgisi korunuyor, yalnız uç
+   değişiyor. Elle yazılsaydı 103 satırın birkaçı kaçınılmaz olarak atlanır ve
+   o panel gece açıldığında beyaz bir çip olarak ortaya çıkardı.
+
+   Sınır: bu dönüşüm ANLAM bilmiyor, yalnız renk biliyor. Bir zemin kasıtlı
+   olarak açık kalması gereken bir yerdeyse (grafik üstündeki işaretçi gibi)
+   buraya girmez — o yüzden liste üretimi background/color/border-color ile
+   sınırlı tutuldu, gradyanlara ve gölgelere dokunulmadı. */
+@media (prefers-color-scheme: dark) {
+  .bt-buy, .chip.auto, .chip.sw-breakout, .chip.swing-breakout, .gd-chip.gd-tgt, .gr-action.free, .gr-chip, .gr-eff.pos, .gr-hold-chip.free, .ls-target, .r1-clean, .regime-advice.deploy, .sig-buy, .sw-alert.target, .sw-chip, .sw-hold-chip, .sw-pos-realized, .sw-tag.tgt, .wk-hero.pos { background: #15211a; }
+  .cm-why li.s-warn, .gr-action.go, .gr-hold-chip, .opp-disclaimer, .opp-why li.s-warn, .r1-row.r1-warn, .r1-stat.warn, .sw-alert.near, .sw-tag.risk { background: #251f11; }
+  .chip.pat-good, .chip.wk-good, .cm-grade.g-b, .fr-range-tag.t-good, .hz-pill.active, .obt-pill.pos, .row-actions .btn.icon[data-edit]:hover, .type-pill.active { background: #15211a; }
+  .cm-why li.s-good, .db-swrow.target, .opp-hero-scorebox, .opp-pos, .opp-rank, .opp-row.open > .opp-row-head, .opp-why li.s-good, .r26-auto { background: #152119; }
+  .chip.sw-oversold, .chip.swing-oversold, .gd-chip.gd-near, .ls-timeout, .pt-chip.pt-medium { background: #251d11; }
+  .cm-why li.s-bad, .db-earn.s-bad, .db-swrow.stop, .opp-why li.s-bad, .sw-tag.stop { background: #251311; }
+  .ls-expired, .ls-wait, .pt-chip.pt-light, .regime-advice.ok { background: #1c1f1d; }
+  .chip.pos, .flow-tag.deposit { background: #172214; }
+  .cuma-board, .db-swstrip { background: #252011; }
+  .cc-pos, .cuma-refresh:hover { background: #251f11; }
+  .cc-verdict.v-good, .opp-ins.ins-buy { background: #132218; }
+  .cm-qm-size, .qm-size { background: #161f18; }
+  .bt-setup, .gd-chip.gd-earn { background: #111425; }
+  .btn.danger:hover { background: #241411; }
+  .stale-tag { background: #251f11; }
+  .rep-line.rep-note { background: #171e17; }
+  .fr-alerts li.fa-bad { background: #221514; }
+  .fr-alerts li.fa-good { background: #152118; }
+  .fr-range-tag.t-bad { background: #1f1616; }
+  .ayar { background: #251f11; }
+  .flow-tag.sell-tag { background: #251511; }
+  .chip.mini { background: #181e19; }
+  .chip.mini.cuma { background: #251f11; }
+  .cuma-note { background: #251f11; }
+  .cm-grade.g-c { background: #251e11; }
+  .gd-chip.gd-long { background: #181e19; }
+  .gd-chip.gd-thesis { background: #251a11; }
+  .pill.pos { background: #14211a; }
+  .cm-pattern.pat-good { background: #132318; }
+  .cm-pattern.pat-bad { background: #251411; }
+  .cm-pattern.pat-warn { background: #171125; }
+  .row-actions .btn.icon[data-trade]:hover { background: #1c1e1c; }
+  .chip.pos { background: #132217; }
+  .chip.neg { background: #251311; }
+  .gd-chip.gd-ok { background: #171e19; }
+  .tax-note { background: #252011; }
+  .db-swbtn.edit:hover { background: #252011; }
+  .sw-tag.rr { background: #111525; }
+  .sw-hold-chip:hover { background: #142219; }
+  .gr-hold-chip.opt-real { background: #151223; }
+  .cm-trend-row.bull { background: #14211a; }
+  .rz-reset:hover { background: #251111; }
+  .pr-corr .cc-m { background: #251a11; }
+  .pr-corr .cc-l { background: #252011; }
+  .pr-corr .cc-z { background: #1d1e17; }
+  .pr-corr .cc-n { background: #152019; }
+  .ch-setup.pb { background: #111925; }
+  .chip.sw-oversold, .chip.swing-oversold, .gd-chip.gd-near, .ls-timeout, .pt-chip.pt-medium, .r1-score.mid .r1-num, .stale-tag { color: #e4c78b; }
+  .cm-stats-grid .cs2 b.pos, .cm-stats-ov .cs-r b.good, .qm-rs.hi, .sw-d.good, .sw-qm-b.ok, .sw-rbadge.pos, ul.sw-qm-list li.ok span { color: #8fe0b4; }
+  .chip.mini.cuma, .sw-alert.near, .sw-calc-row.hi i, .sw-calc-warn, .sw-tag.risk { color: #e4c58b; }
+  .cc-pos, .cc-pos b, .cuma-hero-title, .cuma-note b, .cuma-refresh { color: #e4c78b; }
+  .cm-stats-grid .cs2 b.warn, .cm-stats-ov .cs-r b.warn, .sw-d.warn, .sw-qm-b.no, .sw-qm-bad { color: #e4c98b; }
+  .cm-stats-grid .cs2 b.neg, .cm-stats-ov .cs-r b.bad, .sw-rbadge.neg, ul.sw-qm-list li.no span { color: #e4968b; }
+  .qm-conc, .sw-qm-warn, .sx-disc.warn { color: #e4b18b; }
+  .cm-grade.g-c, .r1-stat.warn { color: #e4ca8b; }
+  .bt-setup, .gd-chip.gd-earn { color: #9890df; }
+  .gr-action.go, .gr-hold-chip { color: #e4c38b; }
+  .qm-regime.go, .sx-disc.ok { color: #92ddb3; }
+  .ayar { color: #e4ca8b; }
+  .gold-gram { color: #e4c98b; }
+  .flow-tag.sell-tag { color: #e2a88d; }
+  .rb-story { color: #c8bea7; }
+  .cuma-hero-sub { color: #d5c39a; }
+  .cuma-note { color: #c4beab; }
+  .cm-lt-cash { color: #d5ca9a; }
+  .gd-chip.gd-long { color: #afc0b6; }
+  .gd-chip.gd-thesis { color: #e4b38b; }
+  .chip.pos { color: #8be4ad; }
+  .gd-chip.gd-ok { color: #abc4b6; }
+  .db-swrow.stop { color: #e3968c; }
+  .sw-tag.rr { color: #97a1d8; }
+  .gr-hold-chip.opt-real { color: #a69fd0; }
+  .pr-corr .cc-h { color: #e09490; }
+  .pr-corr .cc-m { color: #e2b78d; }
+  .pr-corr .cc-l { color: #dcca94; }
+  .pr-corr .cc-z { color: #b8bdb2; }
+  .pr-corr .cc-n { color: #8fe0b5; }
+  .qm-ep { color: #e4b88b; }
+  .qm-rs.mid { color: #d9cb97; }
+  .qm-regime.warn { color: #e4c58b; }
+  .qm-regime.stop { color: #e3948c; }
+  .ch-setup.pb { color: #90b5df; }
+  .nav-item[data-view="notlar"] .nav-badge { color: #8be4c1; }
+  .fr-opp:hover { border-color: #2d3931; }
+  .rg-chip:hover { border-color: #313531; }
+  .cuma-refresh { border-color: #433b23; }
+  .gd-chip.gd-near { border-color: #433823; }
+  .gd-chip.gd-tgt { border-color: #293d31; }
+  .gd-chip.gd-earn { border-color: #232543; }
+  .gd-chip.gd-long { border-color: #2e3831; }
+  .gd-chip.gd-thesis { border-color: #433523; }
+  .cm-pattern.pat-good { border-color: #293d30; }
+  .cm-pattern.pat-bad { border-color: #412925; }
+  .cm-pattern.pat-warn { border-color: #2d2343; }
+  .opp-card.hot { border-color: #273f30; }
+  .db-swstrip { border-color: #423b24; }
+  .sw-tag.stop { border-color: #432723; }
+  .sw-tag.rr { border-color: #232943; }
+  .sw-tag.risk { border-color: #433a23; }
+  .sw-pos.a-target { border-color: #293d31; }
+  .gr-hold-chip.opt-real { border-color: #2b2541; }
+  .rz-reset:hover { border-color: #432323; }
+  .note-tag.note-thesis { border-color: #2d283e; }
+}
+
+/* Son iki yarı saydam beyaz: otomatik dönüşüm yalnız düz hex'leri gördü,
+   rgba() değerleri elle. */
+@media (prefers-color-scheme: dark) {
+  .sw-goalband-lbl { background: rgba(21, 24, 15, .85); }
+  .cam .sw2-sec-body > .panel { background: rgba(255, 255, 255, .04); }
+}
+
+/* Hamburger da cam: aynı kural, aynı ters çevirme (saydam beyaz → saydam koyu). */
+@media (prefers-color-scheme: dark) {
+  .menu-toggle {
+    background: rgba(26, 29, 21, .72);
+    border-color: rgba(255, 255, 255, .09);
+    box-shadow: 0 1px 0 rgba(255,255,255,.06) inset, 0 4px 14px -6px rgba(0,0,0,.6);
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   MOBİLDE TABLO → KART SATIRI (4 Eyl 2026)
+   ════════════════════════════════════════════════════════════════════════
+   Ölçüm (375px, dört sekme): radar 940px'lik tabloyla 1117 elemanı, swing 94'ü,
+   analiz 75'i ekran dışında tutuyordu. Sayfa yatay kaymıyordu — .tbl-wrap kendi
+   içinde kaydırıyor — ama telefonu tutarken sağdaki sütunların VARLIĞINDAN
+   haberin olmuyor. "Gerçek K/Z" ile "Fark" dışarıda kalıyordu ve o tabloya bakma
+   sebebin zaten onlar.
+
+   Satır bir karta dönüşür: başlık hücresi üstte, geri kalanı "etiket · değer"
+   çiftleri. Etiketler 11-mobil-tablo.js tarafından THEAD'den okunup data-mlbl
+   olarak yazılıyor — burada elle yazılmıyor, sütun eklenince kendiliğinden gelir.
+
+   Global `table { min-width: 700px }` (satır 563) burada sıfırlanmak ZORUNDA;
+   tema masasında aynı satır atlandığında tablo kart olduğu hâlde 700px'te
+   kalmış ve sarmalayıcı yine kaymıştı. */
+@media (max-width: 760px) {
+  .pg-table, .trade-table, .ky-tablo, .pr-size, .pt-table {
+    min-width: 0; width: 100%; border-collapse: separate; border-spacing: 0;
+  }
+  .pg-table, .pg-table tbody, .pg-table tr, .pg-table td,
+  .trade-table, .trade-table tbody, .trade-table tr, .trade-table td,
+  .ky-tablo, .ky-tablo tbody, .ky-tablo tr, .ky-tablo td,
+  .pr-size, .pr-size tbody, .pr-size tr, .pr-size td,
+  .pt-table, .pt-table tbody, .pt-table tr, .pt-table td {
+    display: block; width: 100%;
+  }
+  .pg-table thead, .trade-table thead, .ky-tablo thead,
+  .pr-size thead, .pt-table thead { display: none; }
+
+  .pg-table tbody tr, .trade-table tbody tr, .ky-tablo tbody tr,
+  .pr-size tbody tr, .pt-table tbody tr {
+    padding: 11px 0 12px; border-bottom: 1px solid var(--line);
+  }
+  .pg-table tbody tr:last-child, .trade-table tbody tr:last-child,
+  .ky-tablo tbody tr:last-child, .pr-size tbody tr:last-child,
+  .pt-table tbody tr:last-child { border-bottom: 0; }
+
+  /* Etiketli hücre: sol etiket · sağ değer. İki sütunlu bir mini tablo gibi,
+     ama gerçek tablo değil — o yüzden sütun genişliği içeriğe göre değil sabit,
+     alt alta gelen değerler hizalı okunuyor. */
+  .pg-table td[data-mlbl], .trade-table td[data-mlbl], .ky-tablo td[data-mlbl],
+  .pr-size td[data-mlbl], .pt-table td[data-mlbl] {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 14px;
+    padding: 3px 4px; text-align: right; font-variant-numeric: tabular-nums;
+  }
+  .pg-table td[data-mlbl]::before, .trade-table td[data-mlbl]::before,
+  .ky-tablo td[data-mlbl]::before, .pr-size td[data-mlbl]::before,
+  .pt-table td[data-mlbl]::before {
+    content: attr(data-mlbl);
+    flex: 0 0 auto; text-align: left; color: var(--muted);
+    font-size: 11.5px; font-weight: 600; letter-spacing: 0; text-transform: none;
+  }
+  /* Etiketsiz hücreler (ilk sütun ve eylem hücresi) kartın başlığı ve altı olur. */
+  .pg-table td:not([data-mlbl]), .trade-table td:not([data-mlbl]),
+  .ky-tablo td:not([data-mlbl]), .pr-size td:not([data-mlbl]),
+  .pt-table td:not([data-mlbl]) { padding: 2px 4px; text-align: left; }
+  /* Satırın İLK hücresi başlık: daha büyük, etiketsiz, kendi satırında. */
+  .pg-table tbody td:first-child, .trade-table tbody td:first-child,
+  .ky-tablo tbody td:first-child, .pr-size tbody td:first-child,
+  .pt-table tbody td:first-child {
+    font-size: 15px; font-weight: 700; color: var(--ink); margin-bottom: 4px;
+  }
+  .pg-table tbody td:first-child::before, .trade-table tbody td:first-child::before,
+  .ky-tablo tbody td:first-child::before, .pr-size tbody td:first-child::before,
+  .pt-table tbody td:first-child::before { display: none; }
+  /* "Kayıt yok" gibi tek hücreli satırlar kart olmaz (JS data-mt-tek işaretler). */
+  .trade-table tr[data-mt-tek] td, .pg-table tr[data-mt-tek] td {
+    text-align: center; color: var(--muted); }
+
+  /* Sarmalayıcı artık kaydırmıyor: içerik sığıyor. Kaydırma çubuğu kalırsa
+     kullanıcı hâlâ "sağda bir şey var" diye arar. */
+  .tbl-wrap:has(.pg-table), .tbl-wrap:has(.ky-tablo), .tbl-wrap:has(.pr-size),
+  .tbl-wrap:has(.pt-table), .trade-list-wrap { overflow-x: visible; }
+
+  /* ── Radar tablosu AYRI ──
+     214 satır × kart = 19.000px'lik bir sayfa olurdu; kartlaştırmak burada
+     çözüm değil, başka bir sorun. Dört sütun (Hisse · Fiyat · Skor · Kurulum)
+     iki satıra sıkıştırılıyor: üstte hisse ve fiyat, altta skor ve plan.
+     Tablo yapısı korunuyor, yalnız hücreler sarıyor. */
+  .rb-table { min-width: 0; width: 100%; table-layout: fixed; }
+  .rb-table thead { display: none; }
+  .rb-table td { padding: 9px 8px; vertical-align: top; word-break: break-word; }
+  .rb-table td:nth-child(2), .rb-table td:nth-child(3) { text-align: right; }
+  /* Kurulum · plan hücresi kendi satırına iner — en uzun metin o.
+     SINIF seçicisiyle, nth-child ile DEĞİL: ilk denemede td:nth-child(4) yazıldı
+     ve hiç tutmadı; hücrenin gerçek sınıfı .rb-swcell ve sırası satır tipine göre
+     değişiyor. Ölçüm 107 taşan eleman gösterdi, hepsi bu hücrenin içinden.
+     min-width: 150px de burada sıfırlanmak zorunda (satır 843) — 375px'lik
+     ekranda 150px'lik bir hücre, yanındaki üç sütunla birlikte taşar. */
+  /* Kurulum hücresi: ÇİP kalır, giriş/stop/hedef seviyeleri düşer.
+     İlk deneme hücreyi blok yapıp kendi satırına indirdi — taşma bitti ama
+     214 satırlık tablo 11.400px'ten 19.500px'e çıktı, yani bir sorun diğerine
+     çevrildi. Seviyeler ZATEN detay satırında duruyor (rb-detail > swBlock,
+     05-radar-view.js:79); satıra dokununca açılıyor. Burada silinmiyor,
+     kararın önünden çekiliyor — çip kalıyor ki hangi hissede kurulum olduğunu
+     tarayabilesin, sayılar bir dokunuş ötede. */
+  .rb-table .rb-swcell { min-width: 0; width: 30%; padding-left: 4px; }
+  .rb-table .rb-sw { display: flex; min-width: 0; max-width: 100%; flex-wrap: wrap; gap: 3px; }
+  .rb-table .rb-sw-lv { display: none; }
+  .rb-table .rb-kapi { max-width: 100%; white-space: normal; font-size: 10.5px; }
+  .rb-table .rb-swcell .chip { white-space: normal; font-size: 10.5px; padding: 2px 6px; }
+  /* Üç sütun yeniden dengelenir: sembol geniş, fiyat ve skor dar. */
+  .rb-table td:nth-child(1) { width: 40%; }
+  .rb-table td:nth-child(2) { width: 17%; }
+  .rb-table td:nth-child(3) { width: 13%; }
+  .rb-table .rb-name { display: none; }   /* şirket adı satırı şişiriyor; detayda var */
+  .tbl-wrap.rb-wrap { overflow-x: visible; }
+
+  /* Bölüm rayının alt yazısı da sarar (.sec-label ile aynı gerekçe): ray kendi
+     kanıt miktarını yazıyor ve o cümlenin sonu ekran dışında kalırsa ray ne
+     ölçtüğünü söylemiyor demektir (TASARIM DİLİ §1). */
+  .sw2-sec-h { flex-wrap: wrap; row-gap: 2px; }
+  .sw2-sec-n { flex: 1 1 100%; }
+
+  /* ── Dokunma hedefleri ──
+     Ölçümde 32px altında kalanlar: radar sekmeleri (.rt 28px), lab ön ayarları
+     (30px), risk masası düzenle düğmesi (22px). Apple'ın eşiği 44pt; burada
+     36-40px'e çekiliyor — sıkı bir arayüzde 44 her şeyi şişirir, ama 22px
+     parmakla ıskalanır. */
+  .rt, .lab-preset { min-height: 36px; padding-left: 12px; padding-right: 12px; }
+  .pr-edit-tg { min-height: 32px; min-width: 32px; }
+  /* Ölçümde 30px altında kalanlar (üç sekmede 85 düğme): realize tablosundaki
+     +/düzenle ikonları 26px, tema çipleri 22px, izleme listesi 28px. Apple'ın
+     eşiği 44pt ama bu arayüz yoğun — 44'e çıkarmak tabloları iki katına
+     çıkarırdı. 32-34px, ıskalamayı bitirecek en küçük değer. */
+  .rz-edit, .mp-eye { min-height: 32px; min-width: 32px; }
+  .tm-chip { min-height: 30px; padding-top: 5px; padding-bottom: 5px; }
+  .wl-mini, .hunt-pill { min-height: 34px; }
 }
