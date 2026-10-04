@@ -122,16 +122,31 @@ test("gunlukPct null iken sıçrama/gap üretmez ama stop yine çalışır", () 
 
 /* ── Bayat kaynak ── */
 
-test("bayat kaynak: yaş saate çevrilir, hata mesajı taşınır", () => {
-  const b = bayatKaynakBulgusu({ ad: "doviz-altin", yasDk: 200, sonBasari: "2026-08-04T10:00:00.000Z", sonHata: "gövde eksik" }, 180, BUGUN);
-  assert.equal(b.alert.sev, "warn");
-  assert.match(b.alert.headline, /3 saattir bayat/);
-  assert.match(b.alert.action, /gövde eksik/);
+/* 14 Eyl 2026: bayatlık artık tek başına posta sebebi değil. Eşiğin altındaki
+ * bulgu akışta "info" olarak durur — cebe bildirim köprüsü (feedPush) yalnız
+ * crit/warn/alfa iletiyor, dolayısıyla info sessizdir. Postaya çıkmak için
+ * kaynağın bir TAM GÜN tazelenememesi gerekir (3 Ağu'daki 9 günlük arıza). */
+
+test("eşiğin altında bayat: posta YOK, akışta sessiz iz var", () => {
+  const b = bayatKaynakBulgusu({ ad: "doviz-altin", yasDk: 200, degerVar: true, sonBasari: "2026-08-04T10:00:00.000Z", sonHata: "gövde eksik" }, 180, BUGUN);
+  assert.equal(b.alert, null, "3 saatlik bayatlık posta üretmemeli");
+  assert.equal(b.feed.sev, "info", "info = cebe bildirim gitmez");
+  assert.match(b.feed.detail, /3 saattir bayat/);
+  assert.match(b.feed.detail, /gövde eksik/);
   assert.equal(b.anahtar, `kaynak:doviz-altin:${BUGUN}`);
 });
 
-test("bayat kaynak: hiç veri yoksa bunu ayrıca söyler", () => {
-  const b = bayatKaynakBulgusu({ ad: "vix", yasDk: null, sonBasari: null, sonHata: null }, 180, BUGUN);
+test("bir tam gün tazelenemeyen kaynak POSTALANIR", () => {
+  const b = bayatKaynakBulgusu({ ad: "doviz-altin", yasDk: 1500, degerVar: true, sonBasari: "2026-08-03T10:00:00.000Z", sonHata: "gövde eksik" }, 180, BUGUN);
+  assert.equal(b.alert.sev, "warn");
+  assert.equal(b.feed.sev, "warn");
+  assert.match(b.alert.headline, /25 saattir bayat/);
+  assert.match(b.alert.action, /gövde eksik/);
+});
+
+test("bayat kaynak: hiç veri yoksa yaşı bilinmese de postalanır", () => {
+  const b = bayatKaynakBulgusu({ ad: "vix", yasDk: null, degerVar: false, sonBasari: null, sonHata: null }, 180, BUGUN);
+  assert.ok(b.alert, "gösterilecek değer bile yoksa bu her hâlde arızadır");
   assert.match(b.alert.headline, /hiç doğrulanmış veri yok/);
   assert.equal(b.alert.stats.find((s) => s.label === "Yaş").value, "—");
 });
@@ -141,12 +156,20 @@ test("bayat kaynak: hiç veri yoksa bunu ayrıca söyler", () => {
 test("tohumlanmış kaynak 'veri yok' DEMEZ — değer var, yaşı bilinmiyor", () => {
   const b = bayatKaynakBulgusu(
     { ad: "doviz-altin", yasDk: null, degerVar: true, tohumdan: true, tohumYasDk: 200,
-      sonBasari: null, sonHata: null }, 180, BUGUN);
+      sonBasari: null, sonHata: null }, 180, BUGUN, 100); // posta eşiği düşürüldü: cümle sınanıyor
   assert.doesNotMatch(b.alert.headline, /hiç doğrulanmış veri yok/, "yanlış alarm cümlesi kullanılmamalı");
   assert.match(b.alert.headline, /yeniden başladı/);
   assert.match(b.alert.headline, /200 dk/);
   assert.equal(b.alert.stats.find((s) => s.label === "Son başarı").value, "depodan");
   assert.equal(b.alert.stats.find((s) => s.label === "Yaş").value, "200 dk+");
+});
+
+test("tohumlanmış kaynak posta eşiğinin altındaysa sessiz kalır", () => {
+  const b = bayatKaynakBulgusu(
+    { ad: "doviz-altin", yasDk: null, degerVar: true, tohumdan: true, tohumYasDk: 200,
+      sonBasari: null, sonHata: null }, 180, BUGUN);
+  assert.equal(b.alert, null, "yeniden başlatma sonrası 200 dk posta sebebi değil");
+  assert.equal(b.feed.sev, "info");
 });
 
 test("gerçekten verisi olmayan kaynak HÂLÂ 'veri yok' der", () => {
@@ -158,10 +181,10 @@ test("gerçekten verisi olmayan kaynak HÂLÂ 'veri yok' der", () => {
   assert.match(b.alert.action, /429/);
 });
 
-test("gerçek yaşı bilinen bayat kaynak eski davranışını korur", () => {
+test("gerçek yaşı bilinen bayat kaynak cümlesini korur", () => {
   const b = bayatKaynakBulgusu(
     { ad: "doviz-altin", yasDk: 214, degerVar: true, tohumdan: false,
-      sonBasari: "2026-08-05T00:58:00.000Z", sonHata: "uç yanıt vermedi" }, 180, BUGUN);
+      sonBasari: "2026-08-05T00:58:00.000Z", sonHata: "uç yanıt vermedi" }, 180, BUGUN, 180);
   assert.match(b.alert.headline, /3 saattir bayat/);
   assert.equal(b.alert.stats.find((s) => s.label === "Yaş").value, "214 dk");
 });

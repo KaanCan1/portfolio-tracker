@@ -166,6 +166,7 @@ function renderDailyBoard() {
   const dayReturn = S.performance?.day?.ok ? S.performance.day : null;
   const dayUSD = dayReturn?.gainUSD ?? null;
   const dayPct = dayReturn?.pct ?? null;
+  const dayTRY = dayUSD != null && usdtry ? dayUSD * usdtry : null;
 
   /* ---------- free-roll / house-money toplamları ---------- */
   const frList = stocks.map((h) => ({ h, fr: freeRollOf(h) })).filter((x) => x.fr.costBasis != null);
@@ -201,6 +202,17 @@ function renderDailyBoard() {
       ${kpi("Risksiz Oran", `${freePct.toFixed(0)}<span class="db-kpi-pct">%</span>`, `${fmtUSD0(freeValue)} bedava değer`)}
     </div>`;
   }
+
+  /* MOBİL PANO KÖPRÜSÜ (3 Eyl 2026). Mobil hero ve ölçüm kartları BU değerleri
+   * kullanır — kendi toplamını kurmaz. Aynı sayının ikinci bir hesabı olsaydı
+   * masaüstü KPI'ı ile mobil hero er geç ayrışırdı (ön yüz ve sunucu farklı toplam gösterdi).
+   * Köprü tek yön: burada hesaplanır, orada okunur. */
+  window.MP_HERO = {
+    grandTotal: grandTRY, dayTRY, dayPct,
+    unrealUSD: totalUnreal, unrealPct,
+    freePct, freeValue,
+  };
+  if (typeof renderMobilPano === "function") renderMobilPano();
 
   /* ========== Yaklaşan Bilançolar ========== */
   const earn = [];
@@ -410,7 +422,7 @@ function renderFlows() {
     if (sign > 0) dep += try_; else wd += try_;
     return `<tr>
       <td class="l">${fmtDate(f.date)}</td>
-      <td class="l"><span class="flow-tag ${f.type}">${f.type === "withdraw" ? "Çekme" : "Yatırma"}</span>${f.note ? `<div class="tnote">${f.note}</div>` : ""}${f.cashApplied === false ? `<div class="tnote">Geçmiş bakiye zaten işlenmiş</div>` : ""}</td>
+      <td class="l"><span class="flow-tag ${f.type}">${f.type === "withdraw" ? "Çekme" : "Yatırma"}</span>${f.note ? `<div class="tnote">${esc(f.note)}</div>` : ""}${f.cashApplied === false ? `<div class="tnote">Geçmiş bakiye zaten işlenmiş</div>` : ""}</td>
       <td>${symFor(f.currency)}${fmtNum(f.amount, 2)}</td>
       <td class="${f.type === "withdraw" ? "neg" : "pos"}">${f.type === "withdraw" ? "−" : "+"}${fmtTRY0(try_)}</td>
       <td><button class="btn icon" data-delflow="${f.id}" title="Sil">${svgIcon("trash","ic-sm")}</button></td>
@@ -469,7 +481,7 @@ function renderAllTrades() {
     if (t.kind === "buy") {
       return `<tr>
         <td class="l">${fmtDate(t.date)}</td>
-        <td class="l"><span class="sym">${t.symbol}</span> <span class="flow-tag deposit">Alış</span>${t.note ? `<div class="tnote">${t.note}</div>` : ""}</td>
+        <td class="l"><span class="sym">${esc(t.symbol)}</span> <span class="flow-tag deposit">Alış</span>${t.note ? `<div class="tnote">${esc(t.note)}</div>` : ""}</td>
         <td>${fmtNum(t.shares, 4)}</td>
         <td>${fmtUSD(t.buyUSD)}</td>
         <td>—</td>
@@ -485,7 +497,7 @@ function renderAllTrades() {
     const isSwingSell = t.src === "swing" || /swing/i.test(t.note || "");
     return `<tr>
       <td class="l">${fmtDate(t.date)}</td>
-      <td class="l"><span class="sym">${t.symbol}</span>${isSwingSell ? ` <span class="tr-src-swing" title="Swing satışı — uzun vadeden ayrı değerlendirilir, toplama dahildir">swing</span>` : ` <span class="tr-src-port" title="Uzun vade (portföy) satışı">uzun</span>`}${t.note ? `<div class="tnote">${t.note}</div>` : ""}</td>
+      <td class="l"><span class="sym">${esc(t.symbol)}</span>${isSwingSell ? ` <span class="tr-src-swing" title="Swing satışı — uzun vadeden ayrı değerlendirilir, toplama dahildir">swing</span>` : ` <span class="tr-src-port" title="Uzun vade (portföy) satışı">uzun</span>`}${t.note ? `<div class="tnote">${esc(t.note)}</div>` : ""}</td>
       <td>${fmtNum(t.shares, 4)}</td>
       <td>${fmtUSD(t.buyUSD)}</td>
       <td>${fmtUSD(t.sellUSD)}</td>
@@ -563,7 +575,7 @@ function renderTrades() {
     if (t.kind === "buy") {
       return `<tr class="tr-buy">
         <td class="l">${fmtDate(t.date)}</td>
-        <td class="l"><span class="sym">${t.symbol}</span> <span class="flow-tag deposit">Alış</span>${t.note ? `<div class="tnote">${t.note}</div>` : ""}</td>
+        <td class="l"><span class="sym">${esc(t.symbol)}</span> <span class="flow-tag deposit">Alış</span>${t.note ? `<div class="tnote">${esc(t.note)}</div>` : ""}</td>
         <td>${fmtNum(t.shares, 4)}</td>
         <td>${fmtUSD(t.buyUSD)}</td>
         <td class="muted">—</td>
@@ -578,7 +590,7 @@ function renderTrades() {
     totUSD += pnl; totProceeds += t.shares * t.sellUSD; totCost += cost; sellCount++;
     return `<tr class="tr-sell ${pnl >= 0 ? "win" : "loss"}">
       <td class="l">${fmtDate(t.date)}</td>
-      <td class="l"><span class="sym">${t.symbol}</span> <span class="flow-tag sell-tag">Satış</span>${t.note ? `<div class="tnote">${t.note}</div>` : ""}</td>
+      <td class="l"><span class="sym">${esc(t.symbol)}</span> <span class="flow-tag sell-tag">Satış</span>${t.note ? `<div class="tnote">${esc(t.note)}</div>` : ""}</td>
       <td>${fmtNum(t.shares, 4)}</td>
       <td>${fmtUSD(t.buyUSD)}</td>
       <td>${fmtUSD(t.sellUSD)}</td>
@@ -655,13 +667,16 @@ tradeForm.addEventListener("submit", async (e) => {
   // Satırdan açıldıysa o sembolde kal; global ekleme ise listeyi açık tut
   openTrades(TRADE_SYMBOL || sym);
   $("#tfPreview").innerHTML = r.ok
-    ? `<b class="pos">✓ İşlem eklendi</b>${resp.sync ? ` · ${resp.sync}` : ""}`
-    : `<b class="neg">✗ ${resp.error || "İşlem eklenemedi"}</b>`;
+    ? `<b class="pos">✓ İşlem eklendi</b>${resp.sync ? ` · ${esc(resp.sync)}` : ""}`
+    : `<b class="neg">✗ ${esc(resp.error || "İşlem eklenemedi")}</b>`;
 });
 
 /* ---------------- Modal: para giriş/çıkış ---------------- */
 const flowModalBg = $("#flowModalBg");
 const flowForm = $("#flowForm");
+const flowTryInput = flowForm.elements.amountTRY;
+const flowTryLabel = $("#flowTryLabel");
+const flowToday = () => new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Istanbul" });
 
 function flowTRY(amount, currency) {
   const fx = STATE.fx || {};
@@ -672,23 +687,49 @@ function flowTRY(amount, currency) {
 function openFlow(type) {
   flowForm.reset();
   flowForm.type.value = type;
-  flowForm.date.value = new Date().toISOString().slice(0, 10);
+  flowForm.date.value = flowToday();
   flowForm.currency.value = "TL";
   flowForm.alreadyReflected.checked = false;
   $("#flowTitle").textContent = type === "withdraw" ? "Para Çek" : "Para Yatır";
-  $("#flowPreview").textContent = "≈ ₺ —";
+  updateFlowPreview(true);
   flowModalBg.hidden = false;
 }
-function updateFlowPreview() {
+function updateFlowPreview(resetTRY = false) {
   const amt = +flowForm.amount.value || 0;
   const cur = flowForm.currency.value;
-  $("#flowPreview").innerHTML = amt
-    ? `≈ <b>${fmtTRY(flowTRY(amt, cur))}</b>${cur !== "TL" ? ` (${cur} kuru: ${fmtNum(cur === "USD" ? STATE.fx.usdtry : STATE.fx.eurtry, 4)})` : ""}`
-    : "≈ ₺ —";
+  const foreign = cur !== "TL";
+  flowTryLabel.hidden = !foreign;
+  flowTryInput.required = foreign;
+  if (resetTRY || !foreign) {
+    flowTryInput.value = "";
+    flowTryInput.dataset.auto = "";
+    flowTryInput.dataset.manual = "";
+  }
+  const currentDate = flowForm.date.value === flowToday();
+  const estimated = flowTRY(amt, cur);
+  if (foreign && !currentDate && flowTryInput.dataset.auto) {
+    flowTryInput.value = "";
+    flowTryInput.dataset.auto = "";
+  }
+  if (foreign && currentDate && !flowTryInput.dataset.manual && amt > 0 && estimated > 0) {
+    flowTryInput.value = estimated.toFixed(2);
+    flowTryInput.dataset.auto = "1";
+  }
+  const tryAmount = foreign ? Number(flowTryInput.value) : amt;
+  $("#flowPreview").textContent = tryAmount > 0
+    ? `TL karşılığı: ${fmtTRY(tryAmount)}${foreign && currentDate && flowTryInput.dataset.auto ? " · güncel kur tahmini" : ""}`
+    : foreign ? "İşlem günündeki TL karşılığını gir; geçmiş hareket için bugünkü kur kullanılmaz." : "≈ ₺ —";
 }
-["amount", "currency"].forEach((n) => flowForm[n].addEventListener("input", updateFlowPreview));
+flowForm.amount.addEventListener("input", () => updateFlowPreview(Boolean(flowTryInput.dataset.manual)));
+flowForm.currency.addEventListener("change", () => updateFlowPreview(true));
+flowTryInput.addEventListener("input", () => {
+  flowTryInput.dataset.manual = "1";
+  flowTryInput.dataset.auto = "";
+  updateFlowPreview();
+});
 flowForm.date.addEventListener("change", () => {
-  flowForm.alreadyReflected.checked = flowForm.date.value < new Date().toISOString().slice(0, 10);
+  flowForm.alreadyReflected.checked = flowForm.date.value < flowToday();
+  updateFlowPreview(true);
 });
 
 $("#addDepositBtn").addEventListener("click", () => openFlow("deposit"));
@@ -699,15 +740,30 @@ flowModalBg.addEventListener("click", (e) => { if (e.target === flowModalBg) flo
 flowForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   const fd = Object.fromEntries(new FormData(flowForm).entries());
-  const amount = +fd.amount || 0;
-  if (!amount) return;
+  const amount = Number(fd.amount);
+  const amountTRY = fd.currency === "TL" ? amount : Number(fd.amountTRY);
+  if (!(amount > 0) || !(amountTRY > 0) || !Number.isFinite(amountTRY)) {
+    $("#flowPreview").textContent = "Pozitif tutar ve işlem günündeki TL karşılığı gerekli.";
+    return;
+  }
   const body = {
     type: fd.type, date: fd.date, currency: fd.currency, amount,
-    amountTRY: flowTRY(amount, fd.currency), alreadyReflected: fd.alreadyReflected === "on", note: fd.note || "",
+    amountTRY, alreadyReflected: fd.alreadyReflected === "on", note: fd.note || "",
   };
-  await fetch("/api/flows", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-  flowModalBg.hidden = true;
-  await load();
+  const submit = flowForm.querySelector('button[type="submit"]');
+  submit.disabled = true;
+  try {
+    const response = await fetch("/api/flows", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.error || "Para hareketi kaydedilemedi.");
+    flowModalBg.hidden = true;
+    await load();
+  } catch (error) {
+    flowModalBg.hidden = false;
+    $("#flowPreview").textContent = error.message || "Bağlantı hatası; tekrar dene.";
+  } finally {
+    submit.disabled = false;
+  }
 });
 
 /* ---- 2026 realize kazanç kaydı: modal + ekle/sil ---- */

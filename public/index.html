@@ -182,6 +182,14 @@
 
         <details class="desk-details" id="deskLegacyDetails"><summary>Piyasa, risk ve muhasebe ayrıntıları <span>Göstergeler ve tüm uyarılar</span></summary>
 
+        <!-- MOBİL PANO (3 Eyl 2026) — yalnız ≤760px'te görünür, masaüstünde display:none.
+             Neden ayrı bir bölüm: mobilde ilk ekranda karşılayan şey CNN korku endeksiydi;
+             paranın nerede olduğunu görmek için kaydırmak gerekiyordu. Bu blok hero + varlık
+             gruplarını en üste alır, masaüstü yerleşimine (cardsTop + tables) HİÇ dokunmaz.
+             Sayılar da o yerleşimle aynı kaynaktan gelir — renderMobilPano STATE'i okur,
+             kendi hesabını kurmaz (bkz. 10-mobil-pano.js başlığı). -->
+        <section id="mobilPano" hidden></section>
+
         <section id="feedStrip" hidden></section>
         <section id="alertStrip" hidden></section>
         <section id="huntStrip" hidden></section>
@@ -985,9 +993,10 @@
             </select>
           </label>
           <label>Tutar<input name="amount" type="number" step="any" placeholder="0" required /></label>
+          <label id="flowTryLabel" hidden>İşlem günündeki TL karşılığı<input name="amountTRY" type="number" min="0.01" step="0.01" placeholder="₺0,00" /></label>
           <label class="tf-note">Not (opsiyonel)<input name="note" placeholder="örn. banka havalesi" /></label>
         </div>
-        <div class="tf-preview" id="flowPreview">≈ ₺ —</div>
+        <div class="tf-preview" id="flowPreview" role="status" aria-live="polite">≈ ₺ —</div>
         <label class="flow-historical"><input type="checkbox" name="alreadyReflected" /> Bu eski işlem bakiyeden zaten düşülmüş/eklenmiş; bugünkü nakdi tekrar değiştirme</label>
         <div class="modal-actions">
           <button type="button" class="btn ghost" id="flowCancelBtn">İptal</button>
@@ -1068,6 +1077,10 @@
           <button class="btn ghost sm" id="cmClose">✕ Kapat</button>
         </div>
       </div>
+      <!-- Pozisyon şeridi: mobilde başlığın hemen altında, masaüstünde gizli
+           (orada aynı kart yan panelin içinde duruyor). Bir hisseye dokunduğunda
+           ilk görmen gereken şey kaç adedin olduğu ve ne kadar ettiği. -->
+      <div class="cm-posbar" id="cmPosBar" hidden></div>
       <div class="cm-body">
         <div class="cm-chart" id="cmChart"></div>
         <aside class="cm-side" id="cmSide"></aside>
@@ -1114,8 +1127,10 @@
   <script src="js/07-alfa-oneriler.js"></script>
   <script src="js/08-swing-defteri.js"></script>
   <script src="js/09-boot-notlar-ai.js"></script>
-  <script src="js/10-overview.js"></script>
+  <script src="js/10-mobil-pano.js"></script>
+  <script src="js/11-mobil-tablo.js"></script>
+  <script src="js/12-overview.js"></script>
   <script src="fx.js"></script>
-  <script type="module" src="js/11-allocation-three.js"></script>
+  <script type="module" src="js/13-allocation-three.js"></script>
 </body>
 </html>
