@@ -173,6 +173,19 @@ server.tool(
   },
 );
 
+server.tool(
+  "defter_sor",
+  "Kaan'ın karar günlüğünde (notlar, Claude yatırım tezleri, gün denetimleri) anlamsal arama + kaynaklı cevap (RAG). Kendi koyduğu kurallar, geçmiş kararlar ve gerekçeleri için kullan; cevap yalnız defterdeki kayıtlara dayanır ve kaynak listesiyle döner.",
+  {
+    soru: z.string().min(3).describe("Doğal dilde soru, ör. 'stopsuz pozisyon hakkında kuralım ne?'"),
+    sembol: z.string().optional().describe("Yalnız bu sembolün kayıtları (+ genel notlar) aransın"),
+  },
+  async ({ soru, sembol }) => {
+    const r = await api("/api/ai/ask", { method: "POST", body: JSON.stringify({ soru, symbol: sembol || "" }) });
+    return asText({ cevap: r.cevap, yeterliKanit: r.yeterliKanit, kaynaklar: r.kaynaklar, mod: r.iz?.mod });
+  },
+);
+
 const transport = new StdioServerTransport();
 await server.connect(transport);
 console.error(`portfoy MCP hazır → ${BASE}${PASSWORD ? " (şifreli)" : ""}`);

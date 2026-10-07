@@ -1,0 +1,29 @@
+{
+  "_README": "Altın soru seti. beklenen = cevabın dayanması gereken BELGE kimlikleri (parça değil). tur: sozcuk = sorgu ile metin aynı kelimeleri paylaşır; anlam = eş anlamlı/yeniden ifade (BM25 için zor); sembol = sembol filtresi; coklu = birden fazla belge gerekir; cevapsiz = defterde yok, model 'bulamadım' demeli. ifadeler = doğru cevapta geçmesi gereken anahtar olgular (deterministik cevap puanı).",
+  "sorular": [
+    { "id": "q01", "tur": "sozcuk", "soru": "Stopsuz pozisyon tutar mıyım?", "beklenen": ["not:n03"], "ifadeler": ["stop"] },
+    { "id": "q02", "tur": "sozcuk", "soru": "MU için ekleme planım neydi?", "beklenen": ["not:n01"], "ifadeler": ["300", "500"] },
+    { "id": "q03", "tur": "sozcuk", "soru": "Altının portföydeki oranı ne olmalı?", "beklenen": ["not:n11"], "ifadeler": ["10", "15"] },
+    { "id": "q04", "tur": "sozcuk", "soru": "Haftada en fazla kaç yeni işlem yapıyorum?", "beklenen": ["not:n15"], "ifadeler": ["3"] },
+    { "id": "q05", "tur": "sozcuk", "soru": "NVDA plan stop ve hedef seviyeleri neler?", "beklenen": ["not:n16", "tez:NVDA"], "ifadeler": ["118", "140"] },
+    { "id": "q06", "tur": "sozcuk", "soru": "Nakit oranı alt sınırım nedir?", "beklenen": ["not:n17"], "ifadeler": ["15"] },
+    { "id": "q07", "tur": "anlam", "soru": "Zarardaki hisseye ekleyip maliyeti aşağı çekmek konusunda kuralım ne?", "beklenen": ["not:n13", "denetim:2026-07-28"], "ifadeler": ["kâr"] },
+    { "id": "q08", "tur": "anlam", "soru": "Kâr eden bir pozisyonda anaparamı ne yapıyorum?", "beklenen": ["not:n02"], "ifadeler": ["çek"] },
+    { "id": "q09", "tur": "anlam", "soru": "Genel piyasa düşüş trendindeyken yeni alım yapar mıyım?", "beklenen": ["not:n06"], "ifadeler": ["rejim"] },
+    { "id": "q10", "tur": "anlam", "soru": "Bir hisse portföyde çok büyük yer kaplarsa ne yapmalıyım?", "beklenen": ["not:n08"], "ifadeler": ["20"] },
+    { "id": "q11", "tur": "anlam", "soru": "Zarar kes mesafemi nasıl belirliyorum?", "beklenen": ["not:n10"], "ifadeler": ["ADR"] },
+    { "id": "q12", "tur": "anlam", "soru": "Gün içinde gelen manşetlere göre işlem açmak hakkında ne demiştim?", "beklenen": ["not:n19", "denetim:2026-07-14"], "ifadeler": ["kapanış"] },
+    { "id": "q13", "tur": "sembol", "symbol": "TSLA", "soru": "Bu hissede satış kuralım neydi ve uyguladım mı?", "beklenen": ["not:n05", "not:n18", "denetim:2026-08-14", "tez:TSLA"], "ifadeler": ["250"] },
+    { "id": "q14", "tur": "sembol", "symbol": "AMD", "soru": "Ağırlık sınırı ne?", "beklenen": ["not:n07", "tez:AMD"], "ifadeler": ["5"] },
+    { "id": "q15", "tur": "sembol", "symbol": "MU", "soru": "Kırmızı çizgiler neler?", "beklenen": ["tez:MU"], "ifadeler": ["50 günlük"] },
+    { "id": "q16", "tur": "coklu", "soru": "MU'da kâr almayı ne zaman düşünüyorum ve tezdeki stop kaç?", "beklenen": ["not:n09", "tez:MU"], "ifadeler": ["%3", "92"] },
+    { "id": "q17", "tur": "coklu", "soru": "Disiplin puanımın en düşük olduğu gün ne hata yaptım?", "beklenen": ["denetim:2026-07-28"], "ifadeler": ["AMD"] },
+    { "id": "q18", "tur": "coklu", "soru": "NVDA eklemesini yaptığım gün süreç nasıl değerlendirildi?", "beklenen": ["denetim:2026-09-03"], "ifadeler": ["91"] },
+    { "id": "q19", "tur": "sozcuk", "soru": "ASML için neden bekliyorum?", "beklenen": ["not:n20"], "ifadeler": ["ihracat"] },
+    { "id": "q20", "tur": "sozcuk", "soru": "PLTR değerlemesi hakkında ne düşünüyorum?", "beklenen": ["not:n12"], "ifadeler": ["değerleme"] },
+    { "id": "q21", "tur": "cevapsiz", "soru": "Bitcoin pozisyonum için stop seviyem kaç?", "beklenen": [] },
+    { "id": "q22", "tur": "cevapsiz", "soru": "Meta hisselerini ne zaman satmayı planlıyorum?", "beklenen": [] },
+    { "id": "q23", "tur": "cevapsiz", "soru": "Opsiyon stratejimde hangi vadeleri tercih ediyorum?", "beklenen": [] },
+    { "id": "q24", "tur": "cevapsiz", "soru": "Gayrimenkul yatırım fonu ağırlığım ne olmalı?", "beklenen": [] }
+  ]
+}

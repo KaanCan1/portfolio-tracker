@@ -969,6 +969,36 @@ $("#aiDeskBox")?.addEventListener("change", (e) => {
   if (e.target.id === "aiDeskSym") { AI_DESK.sym = e.target.value; aiLoadCachedThesis(AI_DESK.sym); }
 });
 
+/* ---- Karar günlüğü · Defterime sor (RAG) ----
+ * /api/ai/ask: hibrit arama → Claude, yalnız bulunan kayıtlarla ve [K1]
+ * alıntılarıyla cevaplar. Sunucu alıntıları doğrular; burada yalnız gösterilir. */
+(async () => {
+  const form = $("#askForm"); if (!form) return;
+  if (!(await aiStatus()).enabled) return; // Claude yoksa kutu gizli kalır
+  form.hidden = false;
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const soru = $("#askInput").value.trim(); if (soru.length < 3) return;
+    const out = $("#askOut"), btn = $("#askGo");
+    out.innerHTML = `<div class="ai-loading">🤖 Defter taranıyor, Claude cevaplıyor…</div>`;
+    btn.disabled = true;
+    try {
+      const r = await fetch("/api/ai/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ soru }) });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || "cevap alınamadı");
+      const cevap = noteEsc(j.cevap).replace(/\[(K\d+)\]/g, '<sup class="ask-ref">$1</sup>');
+      const sn = j.iz?.asamalar?.toplam;
+      out.innerHTML = `<div class="ai-card">
+        <p class="ask-cevap${j.yeterliKanit ? "" : " ask-yok"}">${cevap}</p>
+        ${j.kaynaklar.length ? `<ul class="ask-kaynaklar">${j.kaynaklar.map((k) => `<li><span class="ask-ref">${noteEsc(k.etiket)}</span><span>${noteEsc(k.baslik)}</span><time>${noteEsc(k.tarih)}</time></li>`).join("")}</ul>` : ""}
+        <div class="ai-disclaimer">${noteEsc(j.iz?.mod || "")}${Number.isFinite(sn) ? ` · ${(sn / 1000).toFixed(1)} sn` : ""} · yalnız defterindeki kayıtlara dayanır</div>
+      </div>`;
+    } catch (err) {
+      out.innerHTML = `<div class="ai-err">${noteEsc(err.message)}</div>`;
+    } finally { btn.disabled = false; }
+  });
+})();
+
 /* ---- Raporlar · Claude gün denetimi ---- */
 async function daRenderAiSlot(date) {
   const box = $("#daAi"); if (!box) return;

@@ -1,0 +1,126 @@
+{
+  "_README": "RAG eval'i için SENTETİK defter. Gerçek portföy verisi değildir; panonun veri şekliyle (notes, aiTheses, aiDayReviews) birebir aynıdır. Soruların beklenen kaynakları eval/rag-sorular.json'da.",
+  "notes": [
+    { "id": "n01", "symbol": "MU", "label": "alacaklarim", "text": "Bu hafta 300-500 $ ekleme planı. HBM talebi güçlü, fiyat 20 günlük ortalamanın üstünde tutunuyor.", "createdAt": "2026-07-01T09:00:00Z" },
+    { "id": "n02", "symbol": "", "label": "tez", "text": "Ana tez: pozisyon kâra geçince ilk sermayeyi çek, kârı bedava bindir (sıfır maliyetli pozisyon).", "createdAt": "2026-06-20T09:00:00Z" },
+    { "id": "n03", "symbol": "", "label": "tez", "text": "Kural 1: önce sermayeyi koru. Stopsuz pozisyon tutmuyorum; her girişte stop seviyesi önceden yazılı olmalı.", "createdAt": "2026-06-21T09:00:00Z" },
+    { "id": "n04", "symbol": "NVDA", "label": "izliyorum", "text": "NVDA bilanço öncesi pozisyon büyütme. Bilanço haftası volatilite çok yüksek, giriş için bilanço sonrası ilk konsolidasyonu bekle.", "createdAt": "2026-07-10T09:00:00Z" },
+    { "id": "n05", "symbol": "TSLA", "label": "satacaklarim", "text": "TSLA'da 250 dolar üstü kapanış gelmezse pozisyonu yarıya indir. Teslimat rakamları zayıf, momentum kayboldu.", "createdAt": "2026-07-12T09:00:00Z" },
+    { "id": "n06", "symbol": "", "label": "tez", "text": "Piyasa rejimi kapalıyken (SPY 50 günlük ortalamanın altında) yeni swing girişi yapmıyorum, sadece mevcut pozisyonları yönetiyorum.", "createdAt": "2026-06-25T09:00:00Z" },
+    { "id": "n07", "symbol": "AMD", "label": "izliyorum", "text": "AMD veri merkezi gelirinde ivme var ama MI serisi siparişleri netleşmeden ağırlık %5'i geçmesin.", "createdAt": "2026-07-15T09:00:00Z" },
+    { "id": "n08", "symbol": "", "label": "tez", "text": "Tek bir hissenin portföy ağırlığı %20'yi geçerse fazlasını kırp. Yoğunlaşma riski benim en büyük zaafım.", "createdAt": "2026-06-28T09:00:00Z" },
+    { "id": "n09", "symbol": "MU", "label": "satacaklarim", "text": "MU 52 haftalık zirveye %3 kala kısmi kâr al; HBM hikâyesi fiyatlandı olabilir.", "createdAt": "2026-08-05T09:00:00Z" },
+    { "id": "n10", "symbol": "", "label": "tez", "text": "Stop mesafesi en fazla 1 ADR. Daha geniş stop gerekiyorsa kurulum hazır değildir, girme.", "createdAt": "2026-07-02T09:00:00Z" },
+    { "id": "n11", "symbol": "GLD", "label": "tez", "text": "Altın portföyün sigortası; toplam varlığın %10-15'i arasında tut, yeniden dengelemeyi çeyrekte bir yap.", "createdAt": "2026-06-30T09:00:00Z" },
+    { "id": "n12", "symbol": "PLTR", "label": "izliyorum", "text": "PLTR değerleme aşırı gergin, F/K anlamsız seviyede. Sadece güçlü bir tabandan kırılımda küçük bir deneme pozisyonu.", "createdAt": "2026-07-20T09:00:00Z" },
+    { "id": "n13", "symbol": "", "label": "tez", "text": "Kaybeden pozisyona asla ortalama düşürme yapmıyorum. Ekleme yalnız kârdaki pozisyona yapılır.", "createdAt": "2026-07-05T09:00:00Z" },
+    { "id": "n14", "symbol": "AAPL", "label": "alacaklarim", "text": "AAPL temettü ve geri alım için uzun vadeli çekirdek pozisyon. Her ay düzenli küçük alım (DCA).", "createdAt": "2026-07-03T09:00:00Z" },
+    { "id": "n15", "symbol": "", "label": "tez", "text": "Haftada en fazla 3 yeni işlem. Fazla işlem yaptığım haftalarda disiplin puanım düşüyor.", "createdAt": "2026-08-01T09:00:00Z" },
+    { "id": "n16", "symbol": "NVDA", "label": "alacaklarim", "text": "NVDA bilanço sonrası 10 günlük ortalamaya geri çekildi; plan stop 118, ilk hedef 140.", "createdAt": "2026-08-30T09:00:00Z" },
+    { "id": "n17", "symbol": "", "label": "tez", "text": "Nakit oranı %15'in altına düşmesin; fırsat çıktığında elimde mermi olsun.", "createdAt": "2026-07-08T09:00:00Z" },
+    { "id": "n18", "symbol": "TSLA", "label": "satacaklarim", "text": "TSLA pozisyonunu kapattım; 250 altında iki kapanış geldi, kuralı uyguladım.", "createdAt": "2026-08-14T09:00:00Z" },
+    { "id": "n19", "symbol": "", "label": "tez", "text": "Haber akışıyla gün içinde karar verme. Kararlar kapanıştan sonra, plan dosyasına yazılarak alınır.", "createdAt": "2026-07-18T09:00:00Z" },
+    { "id": "n20", "symbol": "ASML", "label": "izliyorum", "text": "ASML Çin ihracat kısıtları netleşene kadar beklemede. Litografi tekeli uzun vadede cazip.", "createdAt": "2026-07-22T09:00:00Z" }
+  ],
+  "aiTheses": {
+    "MU": {
+      "at": "2026-08-10T12:00:00Z",
+      "result": {
+        "karar": "TUT", "guven": 64,
+        "ozet": "HBM döngüsü MU için güçlü kalıyor ancak fiyat zirveye yakın ve risk/ödül daraldı. Ekleme yerine tutma ve kısmi kâr planı.",
+        "boga_tezi": ["HBM kapasitesi 2026 boyunca satılmış durumda", "Brüt marj genişliyor"],
+        "ayi_tezi": ["Bellek döngüsü tarihsel olarak sert dönüyor", "Fiyat 52 haftalık zirveye çok yakın"],
+        "riskler": ["Stok fazlası sinyali", "Yarı iletken sektöründe toplu satış"],
+        "kirmizi_cizgiler": ["Haftalık kapanış 50 günlük ortalamanın altında", "Brüt marj iki çeyrek üst üste daralırsa"],
+        "seviyeler": { "stop": 92, "hedef": 128, "aciklama": "Stop son tabanın altı, hedef ölçülen hareket." },
+        "kontrol_listesi": ["Eylül bilançosu", "DRAM spot fiyatları"]
+      }
+    },
+    "NVDA": {
+      "at": "2026-09-02T12:00:00Z",
+      "result": {
+        "karar": "EKLE", "guven": 71,
+        "ozet": "Bilanço sonrası sağlıklı geri çekilme tamamlandı; trend sağlam, kurulum ekleme için uygun.",
+        "boga_tezi": ["Veri merkezi geliri yıllık %80 büyüyor", "Yeni nesil çip talebi arzı aşıyor"],
+        "ayi_tezi": ["Müşteri yoğunlaşması yüksek", "Değerleme beklentileri fiyatlıyor"],
+        "riskler": ["İhracat kısıtları", "Hiper ölçekli müşterilerin capex kesintisi"],
+        "kirmizi_cizgiler": ["Fiyat 118 altında günlük kapanış", "Veri merkezi büyümesi %40'ın altına inerse"],
+        "seviyeler": { "stop": 118, "hedef": 140, "aciklama": "Plan stop ile uyumlu." },
+        "kontrol_listesi": ["Kasım bilançosu", "Hiper ölçekli capex açıklamaları"]
+      }
+    },
+    "TSLA": {
+      "at": "2026-07-25T12:00:00Z",
+      "result": {
+        "karar": "AZALT", "guven": 68,
+        "ozet": "Momentum kayboldu ve teslimatlar zayıf; pozisyonu küçültmek disiplinle uyumlu.",
+        "boga_tezi": ["Enerji depolama segmenti büyüyor"],
+        "ayi_tezi": ["Otomotiv marjları eriyor", "Teslimatlar beklentinin altında"],
+        "riskler": ["Fiyat savaşı"],
+        "kirmizi_cizgiler": ["250 altında iki günlük kapanış"],
+        "seviyeler": { "stop": 245, "hedef": null, "aciklama": "Hedef türetilemedi; trend aşağı." },
+        "kontrol_listesi": ["Çeyreklik teslimat raporu"]
+      }
+    },
+    "AMD": {
+      "at": "2026-08-20T12:00:00Z",
+      "result": {
+        "karar": "GRI_BOLGE", "guven": 48,
+        "ozet": "Veri merkezi ivmesi umut verici ama sipariş görünürlüğü düşük; karar için veri yetersiz.",
+        "boga_tezi": ["Veri merkezi geliri hızlanıyor"],
+        "ayi_tezi": ["Rekabette pazar payı kaybı riski"],
+        "riskler": ["Sipariş iptalleri"],
+        "kirmizi_cizgiler": ["Portföy ağırlığı %5'i aşarsa kırp"],
+        "seviyeler": { "stop": null, "hedef": null, "aciklama": "Teknik kurulum yok." },
+        "kontrol_listesi": ["MI serisi sipariş haberleri"]
+      }
+    }
+  },
+  "aiDayReviews": {
+    "2026-07-14": {
+      "at": "2026-07-14T21:00:00Z",
+      "result": {
+        "genel": "Gün planlı başladı ama öğleden sonra haberle yapılan iki işlem disiplini bozdu.",
+        "disiplin_notu": 52,
+        "islemler": [
+          { "symbol": "PLTR", "karar": "HATALI", "gerekce": "Haber başlığıyla plansız giriş, stop yazılmamış.", "ders": "Haberle gün içi giriş yapma." },
+          { "symbol": "AAPL", "karar": "DOGRU", "gerekce": "Planlı DCA alımı.", "ders": "Plan işledi." }
+        ],
+        "yarin_kurali": "Kapanıştan önce plan dosyasında olmayan hiçbir emri girme."
+      }
+    },
+    "2026-08-14": {
+      "at": "2026-08-14T21:00:00Z",
+      "result": {
+        "genel": "Kurala sadık bir gün: TSLA zararı kural gereği kesildi.",
+        "disiplin_notu": 88,
+        "islemler": [
+          { "symbol": "TSLA", "karar": "DOGRU", "gerekce": "250 altı iki kapanış kuralı uygulandı.", "ders": "Kuralı tereddütsüz uygulamak zararı sınırlar." }
+        ],
+        "yarin_kurali": "Kapatılan pozisyonun yerine aynı gün yeni giriş yapma."
+      }
+    },
+    "2026-07-28": {
+      "at": "2026-07-28T21:00:00Z",
+      "result": {
+        "genel": "Kaybeden AMD pozisyonuna ortalama düşürme yapıldı; bu yazılı kurala aykırı.",
+        "disiplin_notu": 35,
+        "islemler": [
+          { "symbol": "AMD", "karar": "HATALI", "gerekce": "Zarardaki pozisyona ekleme, ortalama düşürme kuralı çiğnendi.", "ders": "Ekleme yalnız kârdaki pozisyona." }
+        ],
+        "yarin_kurali": "Zarardaki pozisyon için tek izinli emir stop'tur."
+      }
+    },
+    "2026-09-03": {
+      "at": "2026-09-03T21:00:00Z",
+      "result": {
+        "genel": "NVDA eklemesi plan stop ve hedefle birlikte yapıldı; süreç temiz.",
+        "disiplin_notu": 91,
+        "islemler": [
+          { "symbol": "NVDA", "karar": "DOGRU", "gerekce": "Tezle uyumlu, stop 118 önceden yazılı.", "ders": "Plan önce, emir sonra." }
+        ],
+        "yarin_kurali": "Yeni girişlerde ağırlık %20 sınırını kontrol et."
+      }
+    }
+  }
+}
