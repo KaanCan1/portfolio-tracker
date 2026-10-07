@@ -8,7 +8,8 @@
     "start": "node server.js",
     "dev": "node --watch server.js",
     "pull-data": "node scripts/pull-data.mjs",
-    "test": "node --test test/*.test.mjs"
+    "test": "node --test test/*.test.mjs",
+    "eval:rag": "node scripts/rag-eval.mjs"
   },
   "engines": {
     "node": ">=20"

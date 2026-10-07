@@ -21,6 +21,9 @@ import { digestHtml, digestSubject } from "./guard-mail.js";
 import { kaynak, kaynakDefteri } from "./sources.js";
 import { adrAt as chAdrAt, seansIciGirisSinyali } from "./entry-modes.js";
 import { depoOlustur, appDataYaz, jsonMetin } from "./store.js";
+import { askClaudeOlustur } from "./claude.js";
+import { voyageIstemci } from "./embeddings.js";
+import { sor as ragSor } from "./rag-hat.js";
 import { swingKapsam, sayilanPay } from "./swing-kapsam.js";
 import { kiyasHesapla, kiyasHukum } from "./kiyas.js";
 import { performansHesapla, performansDogrula } from "./performans.js";
@@ -7096,27 +7099,15 @@ app.delete("/api/notes/:id", async (req, res) => {
 
 /* ===== Claude AI katmanı — tez masası + günlük işlem denetimi ==============
  * ANTHROPIC_API_KEY tanımlı değilse uçlar 503 döner, UI düğmeleri gizler.
- * Yapılandırılmış çıktı: output_config.format (json_schema) → yanıt her zaman
- * şemaya uyan saf JSON. Sonuçlar data'da saklanır (Supabase) → denetim izi +
+ * Yapılandırılmış çıktı (claude.js): json_schema → yanıt her zaman şemaya
+ * uyan saf JSON. Sonuçlar data'da saklanır (Supabase) → denetim izi +
  * maliyet kontrolü (tez 24 saat, gün denetimi tarihe kilitli önbellek). */
 const AI_MODEL = process.env.AI_MODEL || "claude-opus-4-8";
 const aiEnabled = () => !!process.env.ANTHROPIC_API_KEY;
 let _anthropic = null;
 const aiClient = () => (_anthropic ||= new Anthropic());
 
-async function askClaude({ system, payload, schema, maxTokens = 16000 }) {
-  const r = await aiClient().messages.create({
-    model: AI_MODEL,
-    max_tokens: maxTokens,
-    thinking: { type: "adaptive" },
-    system,
-    output_config: { format: { type: "json_schema", schema } },
-    messages: [{ role: "user", content: JSON.stringify(payload, null, 1) }],
-  });
-  if (r.stop_reason === "refusal") throw new Error("Claude isteği güvenlik gerekçesiyle reddetti");
-  const txt = (r.content || []).find((b) => b.type === "text")?.text || "";
-  return { result: JSON.parse(txt), model: r.model, usage: { in: r.usage?.input_tokens, out: r.usage?.output_tokens } };
-}
+const askClaude = askClaudeOlustur({ istemci: aiClient, model: AI_MODEL });
 function aiErrMsg(e) {
   if (e?.status === 401) return "Anthropic API anahtarı geçersiz — ANTHROPIC_API_KEY'i kontrol et";
   if (e?.status === 429) return "Claude hız sınırı — birkaç dakika sonra tekrar dene";
@@ -7260,7 +7251,7 @@ async function buildThesisContext(data, symbol) {
   };
 }
 
-app.get("/api/ai/status", (_req, res) => res.json({ enabled: aiEnabled(), model: AI_MODEL }));
+app.get("/api/ai/status", (_req, res) => res.json({ enabled: aiEnabled(), model: AI_MODEL, ragVektor: !!voyage() }));
 
 app.get("/api/ai/thesis", async (req, res) => {
   try {
@@ -7332,6 +7323,50 @@ app.post("/api/ai/day-review", async (req, res) => {
     await veriIslem(async (d) => { d.aiDayReviews = d.aiDayReviews || {}; d.aiDayReviews[date] = rec; });
     res.json(rec);
   } catch (e) { res.status(500).json({ error: aiErrMsg(e) }); }
+});
+
+/* ===== Defterime sor — notlar/tezler/denetimler üzerinde RAG =================
+ * Hat rag-hat.js'te: hibrit arama (BM25 + Voyage vektörleri, RRF) → rerank →
+ * Claude (json_schema, yalnız verilen kaynaklarla, [K1] alıntılı) → alıntı
+ * doğrulama. VOYAGE_API_KEY yoksa saf BM25'e düşer.
+ *
+ * Kalıcılık:
+ *   rag_vektor  → { [içerik özeti]: vektör } — değişmeyen parça yeniden gömülmez
+ *   rag_iz      → son 50 çağrının izi (aşama süreleri, token, düşürülen alıntı)
+ *                 /api/ai/ask/iz'den okunur — gecikme/maliyet gözlemi için.
+ *                 Bellekte de tutulur: DB yokken (dosya modu) iz kaybolmasın. */
+const ragVektorDepo = depo("rag_vektor", { varsayilan: {} });
+const ragIzDepo = depo("rag_iz", { varsayilan: [] });
+let ragIzler = null;
+const ragIzleri = async () => (ragIzler ||= await ragIzDepo.oku().catch(() => []));
+let _voyage;
+const voyage = () => (_voyage === undefined ? (_voyage = voyageIstemci()) : _voyage);
+
+app.post("/api/ai/ask", async (req, res) => {
+  try {
+    if (!aiEnabled()) return res.status(503).json({ error: "ANTHROPIC_API_KEY tanımlı değil — Render/.env ortamına ekle" });
+    const soru = String(req.body?.soru || "").trim().slice(0, 500);
+    if (soru.length < 3) return res.status(400).json({ error: "soru zorunlu" });
+    const symbol = String(req.body?.symbol || "").toUpperCase().replace(/[^A-Z0-9.\-]/g, "").slice(0, 12);
+    const [data, onbellek] = await Promise.all([loadData(), ragVektorDepo.oku()]);
+    // Claude/Voyage çağrıları saniyeler sürer — veriIslem kilidinin DIŞINDA.
+    const sonuc = await ragSor({ data, soru, symbol, voyage: voyage(), onbellek, llm: askClaude });
+    if (sonuc.yeniVektorSayisi) await ragVektorDepo.yaz(onbellek);
+    const iz = { at: new Date().toISOString(), soru, symbol, ...sonuc.iz };
+    console.log("rag:", JSON.stringify({ mod: iz.mod, ms: iz.asamalar, token: iz.token, kaynak: sonuc.kaynaklar.length, dusen: iz.dusurulenAlinti }));
+    ragIzler = [iz, ...(await ragIzleri())].slice(0, 50);
+    ragIzDepo.yaz(ragIzler).catch(() => {});
+    res.json({ cevap: sonuc.cevap, yeterliKanit: sonuc.yeterliKanit, kaynaklar: sonuc.kaynaklar, iz });
+  } catch (e) { res.status(500).json({ error: e?.message?.startsWith("Voyage") ? e.message : aiErrMsg(e) }); }
+});
+
+app.get("/api/ai/ask/iz", async (_req, res) => {
+  try {
+    const izler = await ragIzleri();
+    const sure = izler.map((x) => x.asamalar?.toplam).filter(Number.isFinite).sort((a, b) => a - b);
+    const yuzde = (p) => (sure.length ? sure[Math.min(sure.length - 1, Math.floor(p * sure.length))] : null);
+    res.json({ adet: izler.length, p50ms: yuzde(0.5), p95ms: yuzde(0.95), izler });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.post("/api/options", async (req, res) => {

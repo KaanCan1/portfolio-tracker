@@ -133,6 +133,15 @@
         <p id="noteError" class="desk-error" role="alert" hidden></p>
         </form>
 
+        <header class="sw2-sec-h notes-sec"><h3>Defterime sor</h3><span class="sw2-sec-rule"></span>
+          <span class="tip" data-tip="Notların, Claude tezlerin ve gün denetimlerin arasında anlamsal arama yapar; Claude yalnız bulunan kayıtlara dayanarak ve kaynak göstererek cevap verir. Defterde yoksa 'bulamadım' der.">?</span></header>
+        <form class="ask-box" id="askForm" hidden>
+          <input id="askInput" class="note-search" type="search" maxlength="500" autocomplete="off"
+            placeholder="ör. Zarardaki pozisyona ekleme hakkında kuralım ne?" aria-label="Deftere soru" />
+          <button type="submit" class="btn primary sm" id="askGo">Sor</button>
+        </form>
+        <div id="askOut" aria-live="polite"></div>
+
         <header class="sw2-sec-h notes-sec"><h3>Notların</h3><span class="sw2-sec-rule"></span>
           <span class="sw2-sec-n" id="notesSecN">yükleniyor…</span></header>
 
