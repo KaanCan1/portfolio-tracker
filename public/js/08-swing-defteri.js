@@ -1015,6 +1015,9 @@ function openSwingModal(id, prefill) {
   setPillGroup("swConf", swingForm.conf, "conf", null);
   setPillGroup("swSetup", swingForm.setupKind, "setup", null);
   const t = id ? SWINGDECK.trades.find((x) => x.id === id) : null;
+  // 11 Eki: yeni planda kısa form; düzenlemede mevcut karar notu görünür kalsın.
+  const journal = swingForm.querySelector(".sw-journal");
+  if (journal) journal.open = !!(t?.thesis || t?.conf || t?.setupKind);
   if (t) {
     $("#swingModalTitle").textContent = "Swing Pozisyonu Düzenle";
     swingForm.id.value = t.id;

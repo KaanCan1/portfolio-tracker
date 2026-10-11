@@ -505,9 +505,9 @@ function toggleFields() {
     const hz = $("#hzSel")?.value || "long";
     hzWrap.querySelectorAll(".hz-pill").forEach((p) => p.classList.toggle("active", p.dataset.hz === hz));
   }
-  // Altın için alındığı tarih önemli → gelişmiş alanı aç
+  // 11 Eki: altının tarih/maliyet alanları ana formda; hisse planını diğer türlerde kapat.
   const adv = $("#advFields");
-  if (adv && t === "gold") adv.open = true;
+  if (adv && t !== "stock") adv.open = false;
 }
 // Vade seçimi: pill'ler (gizli #hzSel'i sürer); swing seçilince stop/hedef alanını aç
 $("#hzPills")?.addEventListener("click", (e) => {
@@ -523,6 +523,7 @@ $("#typePills")?.addEventListener("click", (e) => {
   const p = e.target.closest(".type-pill");
   if (!p) return;
   $("#typeSel").value = p.dataset.type;
+  if (p.dataset.type === "gold" && !$("#symbolInput").value.trim()) $("#symbolInput").value = "GRA";
   toggleFields();
   $("#symbolInput")?.focus();
 });
@@ -540,7 +541,7 @@ function buildSymbolSuggestions() {
   const dl = $("#symbolSuggestions");
   if (!dl) return;
   dl.innerHTML = Object.keys(SYM_NAMES).sort().map((sym) =>
-    `<option value="${sym}">${SYM_NAMES[sym] || ""}</option>`).join("");
+    `<option value="${esc(sym)}">${esc(SYM_NAMES[sym] || "")}</option>`).join("");
 }
 // Sembol yazınca / seçince adı boşsa otomatik doldur
 function autofillName(inputEl, nameEl) {
@@ -553,7 +554,8 @@ $("#symbolInput")?.addEventListener("change", () => autofillName($("#symbolInput
 function openAdd() {
   form.reset();
   form.id.value = "";
-  $("#modalTitle").textContent = "Varlık Ekle";
+  $("#modalTitle").textContent = "Varlık ekle";
+  window.PortfolioEntry?.reset(form);
   buildSymbolSuggestions();
   const adv = $("#advFields"); if (adv) adv.open = false;
   toggleFields();
@@ -563,7 +565,9 @@ function openAdd() {
 function openEdit(id) {
   const h = STATE.holdings.find((x) => x.id === id);
   if (!h) return;
-  $("#modalTitle").textContent = "Varlık Düzenle";
+  form.reset();
+  window.PortfolioEntry?.reset(form);
+  $("#modalTitle").textContent = "Pozisyonu düzenle";
   form.id.value = h.id;
   form.type.value = h.type;
   form.symbol.value = h.symbol;
@@ -584,7 +588,7 @@ function openEdit(id) {
 }
 $("#addBtn").addEventListener("click", openAdd);
 $("#cancelBtn").addEventListener("click", () => (modalBg.hidden = true));
-modalBg.addEventListener("click", (e) => { if (e.target === modalBg) modalBg.hidden = true; });
+modalBg.addEventListener("click", (e) => { if (e.target === modalBg && form.dataset.saving !== "true") modalBg.hidden = true; });
 
 form.addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -592,15 +596,23 @@ form.addEventListener("submit", async (e) => {
   const id = fd.id;
   delete fd.id;
   if (fd.type !== "gold") { delete fd.ayar; delete fd.purchaseDate; }
-  if (fd.type !== "stock") { delete fd.planStop; delete fd.planTarget; delete fd.horizon; }
+  if (fd.type !== "stock") { delete fd.planStop; delete fd.planTarget; delete fd.horizon; delete fd.costUSD; }
   ["quantity", "costUSD", "costTRY", "purchaseDate"].forEach((k) => { if (fd[k] === "") delete fd[k]; });
   // Plan alanları: boş bırakmak = planı temizlemek (PUT merge'inde eski değer kalmasın)
   ["planStop", "planTarget"].forEach((k) => { if (fd[k] === "") fd[k] = null; });
   const method = id ? "PUT" : "POST";
   const url = id ? `/api/holdings/${id}` : "/api/holdings";
-  await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(fd) });
-  modalBg.hidden = true;
-  load();
+  if (fd.type === "stock" && !id) delete fd.costTRY;
+  fd.symbol = String(fd.symbol || "").trim().toUpperCase();
+  if (!fd.symbol || !(Number(fd.quantity) > 0)) {
+    window.PortfolioEntry.feedback(form, "Sembol ve sıfırdan büyük bir miktar gir.");
+    return;
+  }
+  await window.PortfolioEntry.save(form, { url, method, body: fd, onSuccess: async () => {
+    modalBg.hidden = true;
+    window.PortfolioEntry.notify(id ? "Pozisyon güncellendi." : "Varlık portföyüne eklendi.");
+    await load();
+  } });
 });
 
 

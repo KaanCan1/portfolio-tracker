@@ -126,6 +126,9 @@
     const holdings = Array.isArray(snapshot.holdings) ? snapshot.holdings : [];
     const hasPortfolio = holdings.length > 0 || Number(snapshot.metrics?.cashTRY) !== 0;
     if (!hasPortfolio && snapshot.healthy) {
+      // 11 Eki: son pozisyon kaldırılınca grafik düğümü render sırasında kaybolmasın.
+      const chart = document.getElementById("portfolioChartPanel");
+      if (chart && host.contains(chart)) host.after(chart);
       host.innerHTML = emptyTemplate();
       syncPrivacy();
       return;
@@ -154,7 +157,7 @@
 
     const gap = snapshot.performanceWarning;
     const health = gap
-      ? `<div class="desk-health is-warning"><span aria-hidden="true">!</span><div><b>Geçmiş nakit hareketleri doğrulanmalı</b><small>${safe(gap)}</small></div></div>`
+      ? `<details class="desk-health is-warning desk-health-detail"><summary><span aria-hidden="true">!</span> Geçmiş para hareketlerinde eksik kayıt var <small>Ayrıntıyı göster</small></summary><p>${safe(gap)}</p></details>`
       : snapshot.healthy
       ? `<div class="desk-health is-ok"><span aria-hidden="true">●</span> Veriler güncel <small>${updateLabel}</small></div>`
       : `<div class="desk-health is-warning"><span aria-hidden="true">!</span><div><b>Kısmi veri · son güvenilir toplam gösteriliyor</b>${(snapshot.healthIssues || []).map((item) => `<small>${safe(item)}</small>`).join("") || "<small>Bazı fiyatlar veya kurlar henüz doğrulanmadı.</small>"}</div></div>`;
@@ -181,22 +184,31 @@
       ?.closest(".desk-allocation-card")
       ?.querySelector(".desk-three-toggle");
     host.innerHTML = `
-      ${health}
       <section class="desk-hero-grid">
         <article class="desk-total-card">
-          <p class="desk-kicker">TOPLAM PORTFÖY</p>
-          <div class="desk-total-value desk-sensitive">${fx ? moneyUSD(displayTotal / fx) : moneyTRY(displayTotal)}</div>
-          <div class="desk-total-try desk-sensitive">${fx ? `≈ ${moneyTRY(displayTotal)}` : "Muhasebe para birimi TRY"}</div>
-          <div class="desk-total-delta ${tone(metrics.dayPct)}"><span>${percent(metrics.dayPct)}</span> bugün</div>
-          <button type="button" class="desk-text-action" data-desk-action="positions">Pozisyonları gör <span aria-hidden="true">→</span></button>
+          <div class="desk-balance-head"><p class="desk-kicker">TOPLAM PORTFÖYÜN</p><span class="desk-update">${snapshot.healthy ? "Güncel" : "Son güvenilir değer"} · ${updateLabel}</span></div>
+          <div class="desk-balance-row"><div>
+            <div class="desk-total-value desk-sensitive">${fx ? moneyUSD(displayTotal / fx) : moneyTRY(displayTotal)}</div>
+            <div class="desk-total-try desk-sensitive">${fx ? `≈ ${moneyTRY(displayTotal)}` : "Muhasebe para birimi TRY"}</div>
+          </div><div class="desk-total-delta ${tone(metrics.dayPct)}"><span>${percent(metrics.dayPct)}</span><small>bugünkü değişim</small></div></div>
+          <div class="desk-metric-strip">
+            <article><small>Açık pozisyon kâr / zarar</small><b class="desk-sensitive ${tone(metrics.profitTRY)}">${fx ? moneyUSD(Number(metrics.profitTRY) / fx) : moneyTRY(metrics.profitTRY)}</b><span>${percent(metrics.profitPct)} · maliyete göre</span></article>
+            <article><small>Gerçekleşen kâr / zarar</small><b class="desk-sensitive ${tone(metrics.realizedUSD)}">${moneyUSD(metrics.realizedUSD)}</b><span>Kaydedilen satışlardan</span></article>
+          </div>
         </article>
-        <div class="desk-metric-strip">
-          <article><small>Açık pozisyon K/Z</small><b class="desk-sensitive ${tone(metrics.profitTRY)}">${fx ? moneyUSD(Number(metrics.profitTRY) / fx) : moneyTRY(metrics.profitTRY)}</b><span>${percent(metrics.profitPct)}</span></article>
-          <article><small>Realize K/Z</small><b class="desk-sensitive ${tone(metrics.realizedUSD)}">${moneyUSD(metrics.realizedUSD)}</b><span>satışlardan</span></article>
-          <article><small>Kanıtlanmış swing katkısı</small><b class="desk-sensitive ${tone(proven?.perMonth)}">${proven?.perMonth != null ? `${moneyUSD(proven.perMonth)}/ay` : "Ölçülmüyor"}</b><span>${swing?._valid === false ? "veri alınamadı" : proven?.verdict === "yetersiz" || !proven ? "yeterli örnek yok" : proven.verdict === "gurultu" ? "gürültüden ayrışmıyor" : "ölçülen katkı"}</span></article>
-        </div>
+        <article class="desk-surface desk-actions-card">
+          <header><div><p class="desk-kicker">HIZLI İŞLEMLER</p><h2>Portföyünü güncelle</h2></div><span class="desk-action-decoration" aria-hidden="true">↗</span></header>
+          <div class="desk-quick-actions">
+            <button type="button" data-desk-action="add"><span aria-hidden="true">＋</span><b>Varlık ekle</b><small>Hisse, fon veya altın</small></button>
+            <button type="button" data-desk-action="trade"><span aria-hidden="true">⇄</span><b>Alış / satış</b><small>İşlemini kaydet</small></button>
+            <button type="button" data-desk-action="deposit"><span aria-hidden="true">↓</span><b>Para yatır</b><small>Portföye transfer</small></button>
+            <button type="button" data-desk-action="withdraw"><span aria-hidden="true">↑</span><b>Para çek</b><small>Portföy dışına transfer</small></button>
+          </div>
+          <button type="button" class="desk-text-action" data-desk-action="positions">Tüm pozisyonlarını gör <span aria-hidden="true">→</span></button>
+        </article>
         <div class="desk-chart-slot" id="deskChartSlot"></div>
       </section>
+      ${health}
 
       <section class="desk-overview-grid">
         <article class="desk-surface desk-allocation-card">
@@ -217,6 +229,7 @@
             <div><span>Nakit payı</span><b>${cash ? `%${cash.pct.toLocaleString("tr-TR", { maximumFractionDigits: 1 })}` : "%0"}</b></div>
             <div><span>Tetiklenmiş alarm</span><b class="${firedAlerts ? "is-negative" : ""}">${firedAlerts}</b></div>
             <div><span>Açık swing planı</span><b>${openSwing.length}</b></div>
+            <div class="desk-risk-evidence"><span>Ölçülen swing katkısı</span><b class="desk-sensitive">${proven?.perMonth != null ? `${moneyUSD(proven.perMonth)}/ay` : "Yeterli veri yok"}</b></div>
           </div>
         </article>
         <article class="desk-surface desk-upcoming-card">
@@ -274,6 +287,8 @@
     if (action === "retry") { if (typeof load === "function") load(); return; }
     if (action === "retry-feed") { if (typeof loadFeed === "function") loadFeed(); return; }
     if (action === "add") { if (typeof openAdd === "function") openAdd(); return; }
+    if (action === "trade") { openTrades(null, "buy"); return; }
+    if (action === "deposit" || action === "withdraw") { openFlow(action); return; }
     const view = { positions: "pozisyonlar", analysis: "analiz", swing: "swingdefteri", radar: "radar", challenge: "challenge" }[action];
     if (view && typeof showView === "function") showView(view);
   });

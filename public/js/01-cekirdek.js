@@ -1370,12 +1370,15 @@ function drawChart() {
   const vals = pts.map((p) => p.total);
   let min = Math.min(...vals), max = Math.max(...vals);
   if (min === max) { min -= 1; max += 1; }
+  // 11 Eki: çizgi karta yapışmasın; sıfır tabanı ve gerçek gözlemler aynı kalır.
+  const verticalSpace = (max - min) * 0.16;
+  min -= verticalSpace; max += verticalSpace;
   const times = isPerformance ? pts.map((p) => Date.parse(`${p.date}T00:00:00Z`)) : [];
   const timeScale = isPerformance && times.every(Number.isFinite) && times[pts.length - 1] > times[0]
     && times.every((t, i) => i === 0 || t > times[i - 1]);
   const px = (i) => pad.l + (timeScale ? (times[i] - times[0]) / (times[pts.length - 1] - times[0]) : i / (pts.length - 1)) * (W - pad.l - pad.r);
   const py = (v) => pad.t + (1 - (v - min) / (max - min)) * (H - pad.t - pad.b);
-  const color = "#096e75";
+  const color = "#0b8884";
   const lastX = px(pts.length - 1), lastY = py(last);
   const coords = pts.map((p, i) => [px(i), py(p.total)]);
   const lineD = smoothPath(coords);
@@ -1394,11 +1397,13 @@ function drawChart() {
     `<span class="chart-observation" aria-hidden="true" style="left:${((px(i) / W) * 100).toFixed(2)}%;top:${((py(pts[i].total) / H) * 100).toFixed(2)}%;--c:${color}"></span>`
   ).join("") : "";
 
+  const tickCount = Math.min(pts.length, box.clientWidth < 500 ? 2 : 4);
+  const tickIndices = Array.from({ length: tickCount }, (_, i) => Math.round(i * (pts.length - 1) / (tickCount - 1)));
   box.innerHTML = `
     <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" class="chart-svg" aria-hidden="true">
       <defs>
         <linearGradient id="cg" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="${color}" stop-opacity="0.2"/>
+          <stop offset="0%" stop-color="${color}" stop-opacity="0.16"/>
           <stop offset="100%" stop-color="${color}" stop-opacity="0"/>
         </linearGradient>
       </defs>
@@ -1410,7 +1415,7 @@ function drawChart() {
     ${peaks}${observations}
     <div class="chart-enddot" style="left:${((lastX / W) * 100).toFixed(2)}%; top:${((lastY / H) * 100).toFixed(2)}%; --c:${color}"></div>
     <div class="chart-cursor"></div><div class="chart-hot" style="background:${color}"></div><div class="chart-tip"></div>
-    <div class="chart-axis">${(intraday ? pickTicks(pts, 4) : [pts[0].label, pts[pts.length - 1].label]).map((label) => `<span>${label}</span>`).join("")}</div>
+    <div class="chart-axis">${tickIndices.map((i, k) => `<span style="left:${(px(i) / W * 100).toFixed(2)}%;transform:translateX(${k === 0 ? "0" : k === tickCount - 1 ? "-100%" : "-50%"})">${pts[i].label}</span>`).join("")}</div>
     <span class="chart-sr-only" aria-live="polite"></span>`;
 
   attachHover(box, pts, { px, py, W, H, first, isPerformance });
