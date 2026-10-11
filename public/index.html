@@ -19,6 +19,7 @@
   <link rel="stylesheet" href="css/redesign.css" />
   <link rel="stylesheet" href="css/overview.css" />
   <link rel="stylesheet" href="css/three-allocation.css" />
+  <link rel="stylesheet" href="css/refresh.css" />
 </head>
 <body class="desk-app">
   <div class="layout">
@@ -160,7 +161,7 @@
         <section class="panel chart-panel" id="portfolioChartPanel" aria-labelledby="chartTitle">
           <div class="panel-head chart-panel-head">
             <div class="chart-heading">
-              <p class="desk-kicker">PORTFÖY SEYRİ</p>
+              <p class="desk-kicker">PERFORMANS</p>
               <h2 id="chartTitle">Yatırım getirisi</h2>
               <div class="chart-summary">
                 <strong class="chart-main-value" id="chartMainValue">—</strong>
@@ -617,73 +618,60 @@
     </main>
   </div>
 
-  <!-- Varlık ekle/düzenle modal -->
+  <!-- 11 Eki 2026: temel girişler önce; isteğe bağlı plan bilgileri katlanır. -->
   <div class="modal-bg" id="modalBg" hidden>
-    <div class="modal">
-      <h3 id="modalTitle">Varlık Ekle</h3>
+    <div class="modal entry-modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <h3 id="modalTitle">Varlık ekle</h3>
+      <button class="entry-close" type="button" data-entry-close aria-label="Pencereyi kapat">×</button>
+      <p class="entry-intro">Ne aldın, kaç adet ve hangi fiyattan? Portföyünü birlikte güncelleyelim.</p>
       <form id="holdingForm">
         <input type="hidden" name="id" />
-        <div class="type-pills" id="typePills" role="tablist" aria-label="Varlık türü">
-          <button type="button" class="type-pill active" data-type="stock">Hisse</button>
-          <button type="button" class="type-pill" data-type="fund">Fon</button>
-          <button type="button" class="type-pill" data-type="gold">Altın</button>
+        <div class="type-pills" id="typePills" role="group" aria-label="Varlık türü">
+          <button type="button" class="type-pill active" data-type="stock" aria-pressed="true"><span>↗</span><b>Hisse</b><small>ABD · USD</small></button>
+          <button type="button" class="type-pill" data-type="fund" aria-pressed="false"><span>▦</span><b>Fon</b><small>TEFAS · TL</small></button>
+          <button type="button" class="type-pill" data-type="gold" aria-pressed="false"><span>◇</span><b>Altın</b><small>Gram · TL</small></button>
         </div>
-        <select name="type" id="typeSel" hidden>
-          <option value="stock">Hisse (ABD)</option>
-          <option value="fund">Fon (TEFAS)</option>
-          <option value="gold">Altın (gram)</option>
-        </select>
-        <div class="hz-pills" id="hzPills" role="tablist" aria-label="Hisse vadesi">
-          <button type="button" class="hz-pill active" data-hz="long">Uzun Vade</button>
-          <button type="button" class="hz-pill" data-hz="swing">Swing (stop / hedef)</button>
-        </div>
-        <input type="hidden" name="horizon" id="hzSel" value="long" />
-        <label>Sembol / Fon Kodu
-          <input name="symbol" id="symbolInput" placeholder="örn. NVDA, PHE, GRA" list="symbolSuggestions" autocomplete="off" required />
+        <select name="type" id="typeSel" hidden><option value="stock">Hisse (ABD)</option><option value="fund">Fon (TEFAS)</option><option value="gold">Altın (gram)</option></select>
+        <div class="entry-section"><span class="entry-step">01</span><h4>Varlığını seç</h4></div>
+        <label><span id="symbolCaption">Hisse sembolü</span>
+          <input name="symbol" id="symbolInput" placeholder="Örn. NVDA" list="symbolSuggestions" autocomplete="off" autocapitalize="characters" spellcheck="false" required />
+          <small id="symbolHint" class="entry-hint">Sembolü yaz veya önerilerden seç.</small>
         </label>
         <datalist id="symbolSuggestions"></datalist>
-        <label>Ad (opsiyonel)
-          <input name="name" id="nameInput" placeholder="sembol yazınca otomatik gelir" />
-        </label>
+        <div class="hz-pills" id="hzPills" role="group" aria-label="Hisse vadesi">
+          <button type="button" class="hz-pill active" data-hz="long" aria-pressed="true">Uzun vade</button>
+          <button type="button" class="hz-pill" data-hz="swing" aria-pressed="false">Swing · stop ve hedef</button>
+        </div>
+        <input type="hidden" name="horizon" id="hzSel" value="long" />
+        <div class="entry-section"><span class="entry-step">02</span><h4>Miktar ve maliyet</h4></div>
         <div class="field-row">
-          <label id="qtyLabel">Adet / Miktar
-            <input name="quantity" type="number" step="any" placeholder="0" required />
+          <label id="qtyLabel">Adet
+            <input name="quantity" type="number" inputmode="decimal" min="0.00000001" step="any" placeholder="Örn. 10" required />
           </label>
           <label id="ayarLabel" style="display:none">Ayar
-            <select name="ayar">
-              <option value="24">24 Ayar</option>
-              <option value="22">22 Ayar</option>
-              <option value="18">18 Ayar</option>
-              <option value="14">14 Ayar</option>
-            </select>
+            <select name="ayar"><option value="24">24 ayar</option><option value="22">22 ayar</option><option value="18">18 ayar</option><option value="14">14 ayar</option></select>
           </label>
-          <label id="costUsdLabel">Ödenen Fiyat ($ / birim)
-            <input name="costUSD" type="number" step="any" placeholder="0" />
+          <label id="costUsdLabel">Birim alış fiyatı ($)
+            <input name="costUSD" type="number" inputmode="decimal" min="0" step="any" placeholder="Örn. 120,50" />
           </label>
         </div>
+        <label id="costTryLabel">Toplam alış maliyeti (₺ · isteğe bağlı)
+          <input name="costTRY" type="number" inputmode="decimal" min="0" step="any" placeholder="Tüm adetler için ödediğin toplam" />
+        </label>
+        <label id="dateLabel" style="display:none">Alış tarihi (isteğe bağlı)<input name="purchaseDate" type="date" /></label>
+        <div id="holdingPreview" class="entry-preview" aria-live="polite"></div>
         <details class="adv-fields" id="advFields">
-          <summary>⚙️ Gelişmiş <span>stop · hedef · maliyet ₺ · tarih</span></summary>
+          <summary>İsteğe bağlı bilgiler <span>ad · işlem planı</span></summary>
           <div class="adv-body">
+            <label>Varlık adı<input name="name" id="nameInput" placeholder="Sembol biliniyorsa otomatik dolar" /></label>
             <div class="field-row">
-              <label id="planStopLabel">Plan: Stop ($ · ops.)
-                <input name="planStop" type="number" step="any" placeholder="boş = oto. iz süren stop" />
-              </label>
-              <label id="planTargetLabel">Plan: Hedef ($ · ops.)
-                <input name="planTarget" type="number" step="any" placeholder="kâr-al seviyesi" />
-              </label>
+              <label id="planStopLabel">Stop fiyatı ($)<input name="planStop" type="number" inputmode="decimal" min="0" step="any" placeholder="Zarar-kes seviyesi" /></label>
+              <label id="planTargetLabel">Hedef fiyatı ($)<input name="planTarget" type="number" inputmode="decimal" min="0" step="any" placeholder="Kâr-al seviyesi" /></label>
             </div>
-            <label>Maliyet Bedeli (₺ toplam · ops.)
-              <input name="costTRY" type="number" step="any" placeholder="0" />
-            </label>
-            <label id="dateLabel" style="display:none">Alındığı Tarih
-              <input name="purchaseDate" type="date" />
-            </label>
           </div>
         </details>
-        <div class="modal-actions">
-          <button type="button" class="btn ghost" id="cancelBtn">İptal</button>
-          <button type="submit" class="btn primary">Kaydet</button>
-        </div>
+        <p class="entry-feedback" data-entry-feedback role="alert" hidden></p>
+        <div class="modal-actions"><button type="button" class="btn ghost" id="cancelBtn">Vazgeç</button><button type="submit" class="btn primary" id="holdingSaveBtn">Varlığı ekle</button></div>
       </form>
     </div>
   </div>
@@ -790,7 +778,7 @@
         <label>Not (opsiyonel)
           <input name="note" placeholder="örn. 50g ortalama üstü kırılım" />
         </label>
-        <div class="sw-journal">
+        <details class="sw-journal entry-history"><summary>Karar defteri <span>tez · güven · kurulum</span></summary>
           <div class="sw-journal-h">📓 Karar defteri <i>karar kalitesi karnene girer · opsiyonel</i></div>
           <label class="sw-jthesis">Tez <i>neden giriyorsun?</i>
             <input name="thesis" maxlength="200" placeholder="örn. kırılım + hacim teyidi, EMA8 üstü, önceki hamle güçlü" />
@@ -814,7 +802,7 @@
             </div>
           </div>
           <input type="hidden" name="conf" /><input type="hidden" name="setupKind" />
-        </div>
+        </details>
         <div class="sw-calc">
           <div class="sw-calc-head">
             <span>💰 Pozisyon boyutu</span>
@@ -943,45 +931,31 @@
 
   <!-- Realize edilen işlemler modal -->
   <div class="modal-bg" id="tradeModalBg" hidden>
-    <div class="modal wide">
-      <h3 id="tradeTitle">Hisse İşlemleri</h3>
-      <p class="modal-note">Sattığın hisseleri buraya gir; realize ettiğin kâr/zararı geriye dönük takip et.</p>
-
-      <div class="trade-summary" id="tradeSummary"></div>
-
-      <div class="trade-list-wrap">
-        <table class="trade-table">
-          <thead><tr>
-            <th class="l">Tarih</th><th class="l">Sembol</th><th>Adet</th>
-            <th>Alış $</th><th>Satış $</th><th>Realize K/Z</th><th>%</th><th></th>
-          </tr></thead>
-          <tbody id="tradeRows"></tbody>
-        </table>
-      </div>
-
+    <div class="modal entry-modal" role="dialog" aria-modal="true" aria-labelledby="tradeTitle">
+      <h3 id="tradeTitle">Alış / satış kaydet</h3>
+      <button class="entry-close" type="button" data-entry-close aria-label="Pencereyi kapat">×</button>
+      <p class="entry-intro">İşlemini kaydet; adet, nakit ve ortalama maliyet birlikte güncellensin.</p>
       <form id="tradeForm" class="trade-form">
         <input type="hidden" name="name" />
+        <div class="entry-segment" id="tradeKindPills" role="group" aria-label="İşlem türü"><button type="button" data-kind="buy">↗ Alış yaptım</button><button type="button" data-kind="sell">↙ Satış yaptım</button></div>
+        <select name="kind" id="tfKind" hidden><option value="sell">Satış</option><option value="buy">Alış</option></select>
+        <label>Sembol<input name="symbol" list="symbolSuggestions" placeholder="Örn. NVDA" autocomplete="off" autocapitalize="characters" required style="text-transform:uppercase" /></label>
+        <p class="entry-hint" id="tradeHoldingHint"></p>
         <div class="tf-grid">
-          <label>İşlem Türü
-            <select name="kind" id="tfKind">
-              <option value="sell">Satış</option>
-              <option value="buy">Alış</option>
-            </select>
-          </label>
-          <label>Sembol<input name="symbol" placeholder="örn. CIFR" required style="text-transform:uppercase" /></label>
+          <label id="tfSharesLabel">Adet (satılan)<input name="shares" type="number" inputmode="decimal" min="0.00000001" step="any" placeholder="Örn. 5" required /></label>
           <label>Tarih<input name="date" type="date" required /></label>
-          <label id="tfSharesLabel">Adet (satılan)<input name="shares" type="number" step="any" placeholder="0" required /></label>
-          <label id="tfBuyLabel">Alış Fiyatı ($)<input name="buyUSD" type="number" step="any" placeholder="0" /></label>
-          <label id="tfSellLabel">Satış Fiyatı ($)<input name="sellUSD" type="number" step="any" placeholder="0" /></label>
-          <label class="tf-note">Not (opsiyonel)<input name="note" placeholder="örn. kısmi satış" /></label>
+          <label id="tfBuyLabel">Alış fiyatı ($)<input name="buyUSD" type="number" inputmode="decimal" min="0" step="any" placeholder="Birim alış fiyatı" /></label>
+          <label id="tfSellLabel">Satış fiyatı ($)<input name="sellUSD" type="number" inputmode="decimal" min="0.00000001" step="any" placeholder="Birim satış fiyatı" /></label>
         </div>
-        <p class="modal-note">Varlıklar otomatik senkronlanır: <b>Alış</b> pozisyona eklenir (ort. maliyet ağırlıklı güncellenir), <b>Satış</b> pozisyondan düşülür; tamamı satılırsa varlık listeden kalkar. Satışta alış fiyatını boş bırakırsan pozisyonun ortalama maliyeti kullanılır.</p>
-        <div class="tf-preview" id="tfPreview">Realize: —</div>
-        <div class="modal-actions">
-          <button type="button" class="btn ghost" id="tradeCloseBtn">Kapat</button>
-          <button type="submit" class="btn primary">İşlem Ekle</button>
-        </div>
+        <div class="tf-preview entry-preview" id="tfPreview" aria-live="polite">İşlem tutarını görmek için adet ve fiyat gir.</div>
+        <details class="adv-fields"><summary>İşlem notu <span>isteğe bağlı</span></summary><label>Not<input name="note" placeholder="Örn. kısmi satış" /></label></details>
+        <p class="entry-feedback" data-entry-feedback role="alert" hidden></p>
+        <div class="modal-actions"><button type="button" class="btn ghost" id="tradeCloseBtn">Vazgeç</button><button type="submit" class="btn primary">İşlemi kaydet</button></div>
       </form>
+      <details class="entry-history"><summary>Geçmiş işlemleri göster</summary>
+        <div class="trade-summary" id="tradeSummary"></div>
+        <div class="trade-list-wrap"><table class="trade-table"><thead><tr><th class="l">Tarih</th><th class="l">Sembol</th><th>Adet</th><th>Alış $</th><th>Satış $</th><th>Realize K/Z</th><th>%</th><th></th></tr></thead><tbody id="tradeRows"></tbody></table></div>
+      </details>
     </div>
   </div>
 
@@ -1139,6 +1113,7 @@
   <script src="js/10-mobil-pano.js"></script>
   <script src="js/11-mobil-tablo.js"></script>
   <script src="js/12-overview.js"></script>
+  <script src="js/14-entry-experience.js"></script>
   <script src="fx.js"></script>
   <script type="module" src="js/13-allocation-three.js"></script>
 </body>

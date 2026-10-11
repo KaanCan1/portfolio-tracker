@@ -542,17 +542,20 @@ function renderAllTrades() {
   );
 }
 
-function openTrades(symbol) {
+function openTrades(symbol, kind = "sell") {
   TRADE_SYMBOL = symbol || null;
   const h = symbol && STATE.holdings.find((x) => x.symbol === symbol && x.type === "stock");
   tradeForm.reset();
+  window.PortfolioEntry?.reset(tradeForm);
+  buildSymbolSuggestions();
+  tradeForm.kind.value = kind;
   tradeForm.symbol.value = symbol || "";
   tradeForm.symbol.readOnly = !!symbol;        // satırdan açıldıysa sembol sabit
   tradeForm.name.value = h?.name || "";
-  tradeForm.date.value = new Date().toISOString().slice(0, 10);
+  tradeForm.date.value = new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Istanbul" });
   // Satış için ortalama maliyeti otomatik doldur — K/Z gerçek maliyetten hesaplansın
   if (h?.costUSD != null) tradeForm.buyUSD.value = h.costUSD;
-  $("#tradeTitle").textContent = symbol ? `${symbol} · Hisse İşlemleri` : "Yeni İşlem Ekle";
+  $("#tradeTitle").textContent = symbol ? `${symbol} · İşlem kaydet` : "Alış / satış kaydet";
   toggleTradeKind();
   renderTrades();
   tradeModalBg.hidden = false;
@@ -561,6 +564,13 @@ function openTrades(symbol) {
 // Alış/Satış'a göre form alanlarını ayarla
 function toggleTradeKind() {
   const buy = tradeForm.kind.value === "buy";
+  tradeForm.buyUSD.required = buy;
+  tradeForm.buyUSD.min = buy ? "0.00000001" : "0";
+  tradeForm.sellUSD.required = !buy;
+  document.querySelectorAll("#tradeKindPills button").forEach((button) => {
+    button.classList.toggle("active", button.dataset.kind === tradeForm.kind.value);
+    button.setAttribute("aria-pressed", String(button.dataset.kind === tradeForm.kind.value));
+  });
   $("#tfSellLabel").style.display = buy ? "none" : "";
   $("#tfSharesLabel").firstChild.textContent = buy ? "Adet (alınan)" : "Adet (satılan)";
   $("#tfBuyLabel").firstChild.textContent = buy ? "Alış Fiyatı ($)" : "Alış Fiyatı ($ · boşsa ort. maliyet)";
@@ -620,7 +630,10 @@ function renderTrades() {
 
 function updateTradePreview() {
   const sh = +tradeForm.shares.value || 0;
-  const buy = +tradeForm.buyUSD.value || 0;
+  const existing = STATE.holdings.find((item) => item.type === "stock" && item.symbol === tradeForm.symbol.value.trim().toUpperCase());
+  const buy = tradeForm.buyUSD.value === "" && tradeForm.kind.value === "sell" ? Number(existing?.costUSD) || 0 : +tradeForm.buyUSD.value || 0;
+  const hint = $("#tradeHoldingHint");
+  if (hint) hint.textContent = existing ? `Portföyünde ${fmtNum(existing.quantity, 4)} adet var${existing.costUSD != null ? ` · ort. maliyet ${fmtUSD(existing.costUSD)}` : ""}. Swing'e ayrılan adetler normal satışla satılamaz.` : "Yeni bir hisse için sembolü yazabilirsin. Satış için portföyde pozisyon olmalı.";
   const sell = +tradeForm.sellUSD.value || 0;
   if (tradeForm.kind.value === "buy") {
     const usdtry = STATE.fx?.usdtry || 0;
@@ -629,7 +642,7 @@ function updateTradePreview() {
       : "Maliyet: —";
     return;
   }
-  if (!sh || (!buy && !sell)) { $("#tfPreview").textContent = "Realize: —"; return; }
+  if (!(sh > 0) || !(sell > 0) || !(buy > 0)) { $("#tfPreview").textContent = "Satış özetini görmek için adet, satış fiyatı ve alış maliyetini gir."; return; }
   const pnl = sh * (sell - buy);
   const pct = sh * buy ? (pnl / (sh * buy)) * 100 : 0;
   $("#tfPreview").innerHTML = `Realize: <b class="${cls(pnl)}">${fmtUSD(pnl)} (${fmtPct(pct)})</b> · Satış ${fmtUSD(sh * sell)}`;
@@ -646,7 +659,7 @@ $("#tradeRangeTabs").addEventListener("click", (e) => {
   renderAllTrades();
 });
 $("#tradeCloseBtn").addEventListener("click", () => (tradeModalBg.hidden = true));
-tradeModalBg.addEventListener("click", (e) => { if (e.target === tradeModalBg) tradeModalBg.hidden = true; });
+tradeModalBg.addEventListener("click", (e) => { if (e.target === tradeModalBg && tradeForm.dataset.saving !== "true") tradeModalBg.hidden = true; });
 
 tradeForm.addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -660,15 +673,11 @@ tradeForm.addEventListener("submit", async (e) => {
   };
   // Varlık senkronu (alışta ekleme/ortalama, satışta düşme/kapanış) sunucuda
   // tek noktadan yapılır; dönen "sync" mesajı ne olduğunu söyler.
-  const r = await fetch("/api/trades", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-  const resp = await r.json().catch(() => ({}));
-
-  await load();
-  // Satırdan açıldıysa o sembolde kal; global ekleme ise listeyi açık tut
-  openTrades(TRADE_SYMBOL || sym);
-  $("#tfPreview").innerHTML = r.ok
-    ? `<b class="pos">✓ İşlem eklendi</b>${resp.sync ? ` · ${esc(resp.sync)}` : ""}`
-    : `<b class="neg">✗ ${esc(resp.error || "İşlem eklenemedi")}</b>`;
+  await window.PortfolioEntry.save(tradeForm, { url: "/api/trades", body, onSuccess: async (resp) => {
+    tradeModalBg.hidden = true;
+    window.PortfolioEntry.notify(`İşlem kaydedildi.${resp.sync ? ` ${resp.sync}` : ""}`);
+    await load();
+  } });
 });
 
 /* ---------------- Modal: para giriş/çıkış ---------------- */
