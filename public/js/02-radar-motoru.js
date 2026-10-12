@@ -897,6 +897,9 @@ async function openChartModal(sym, ctx = null, fresh = false) {
   $("#cmSym").textContent = sym;
   $("#cmName").textContent = "";
   $("#cmPrice").textContent = "";
+  // 12 Eki: yeni sembol yüklenirken önceki hissenin mobil pozisyon kartı görünmesin.
+  $("#cmPosBar").replaceChildren();
+  $("#cmPosBar").hidden = true;
   $("#cmTV").href = `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(sym)}`;
   const chartEl = $("#cmChart"), sideEl = $("#cmSide"), legEl = $("#cmLegend");
   chartEl.innerHTML = `<div class="cm-skel"><div class="cm-skel-bars">${

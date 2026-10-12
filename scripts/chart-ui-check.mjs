@@ -58,6 +58,7 @@ await page.evaluate(()=>closeChartModal());
 let release;
 await context.route('**/api/chart?symbol=NVDA',async route=>{await new Promise(resolve=>release=resolve);await route.fulfill({json:data});});
 await page.evaluate(()=>{openChartModal('NVDA');});while(!release)await page.waitForTimeout(20);
+assert.equal(await page.locator('#cmPosBar').getAttribute('hidden'),'');
 await page.evaluate(()=>openChartModal('AAPL'));await page.waitForSelector('.cm-layer-controls button');release();await page.waitForTimeout(100);assert.equal(await page.locator('#cmSym').innerText(),'AAPL');
 await page.evaluate(()=>closeChartModal());assert.equal(await page.evaluate(()=>cmChart),null);assert.equal(await page.evaluate(()=>CM_DRAW.cleanup.length),0);
 assert.deepEqual(errors,[]);console.log(JSON.stringify({passed:true,api:data.analysis.state,closedBar:data.analysis.quality.barDate,tests:'API, overlap accounting, layers, draw save/reload/clear, invalid storage, zoom/resize, measure conflicts, Escape, mobile, dark, request race and cleanup'}));await browser.close();
