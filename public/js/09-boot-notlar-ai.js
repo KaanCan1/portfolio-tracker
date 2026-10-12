@@ -223,16 +223,16 @@ const QM_STAGE = {
 };
 
 // Grafik modalı için Qullamaggie paneli (d.qm'den) — "girmeli miyim, stop ne?"
-function qmChartPanel(qm) {
+function qmChartPanel(qm, analysis = null) {
   const rowQ = (k, val, c = "") => `<div class="cm-r"><span class="cm-k">${k}</span><span class="cm-v ${c}">${val}</span></div>`;
   if (!qm || !qm.ok || qm.setup === "none") {
     return `<div class="cm-qm cm-qm-none"><div class="cm-qm-h">Qullamaggie</div>
       <div class="cm-qm-verdict v-early">Şu an QM kurulumu yok — büyük hamle + sıkışma yok ya da ADR/likidite yetersiz. Zorlama, başka aday bekle (Kural 1).</div></div>`;
   }
   const su = QM_SETUP[qm.setup] || QM_SETUP.breakout;
-  const stg = QM_STAGE[qm.stage] || QM_STAGE.early;
+  const stg = qm.stage === "breaking-out" ? { lbl: "PİVOT ÜSTÜ · GÜNLÜK", cls: "qm-st-set" } : QM_STAGE[qm.stage] || QM_STAGE.early;
   const verdict = {
-    "breaking-out": { cls: "go", txt: `<b>Tetik aktif</b> — pivot ${fmtUSD(qm.pivotHigh)} kırılıyor. QM girişi: gün-içi <b>opening range high</b>'da al, stop <b>günün dibi</b> (≤1×ADR).` },
+    "breaking-out": { cls: "go", txt: `<b>Günlük pivot referansı.</b> Seviye ${fmtUSD(qm.pivotHigh)}. Açılış aralığı ve gün içi stop bu günlük veriden doğrulanamaz.` },
     "setting-up": { cls: "set", txt: `<b>Henüz girme — bekle.</b> Pivot <b>${fmtUSD(qm.pivotHigh)}</b> kırılana kadar dur (pivota %${qm.consolidation?.nearHighPct} kaldı). Kırarsa 1-2 ay swing adayı.` },
     "extended": { cls: "ext", txt: `<b>Kovalama.</b> 10MA'dan ${qm.extendedOverMA10}×ADR uzak (gergin). Geri çekilip ortalamaya yaklaşınca tekrar değerlendir.` },
     "early": qm.setup === "watch"
@@ -240,7 +240,7 @@ function qmChartPanel(qm) {
       : { cls: "early", txt: `<b>Erken.</b> Hamle var ama pivottan uzak — sıkışma olgunlaşsın, izle.` },
   }[qm.stage] || { cls: "early", txt: "—" };
   const chk = (qm.checklist || []).map((c) => `<span class="qm-chk ${c.pass ? "ok" : "no"}" title="${esc(c.k)}: ${esc(String(c.val))}">${c.pass ? "✓" : "✕"} ${c.k}</span>`).join("");
-  const why = (qm.reasons || []).map((r) => `<div>• ${r}</div>`).join("");
+  const why = (qm.reasons || []).map((r) => `<div>• ${esc(r.includes("ORH") ? "Günlük pivot referansı; gün içi tetik doğrulanmadı." : r)}</div>`).join("");
   return `<div class="cm-qm">
     <div class="cm-qm-h">Qullamaggie <span class="qm-setup ${su.cls}">${su.lbl}</span><span class="qm-stage ${stg.cls}">${stg.lbl}</span><span class="cm-qm-score">${qm.score}</span></div>
     <div class="cm-qm-verdict v-${verdict.cls}">${verdict.txt}</div>
@@ -248,7 +248,7 @@ function qmChartPanel(qm) {
     ${rowQ("Stop (≤1×ADR)", `${fmtUSD(qm.stop)} <span class="muted">−%${qm.stopPct}</span>`, "neg")}
     ${rowQ("Hedef 2R · 3R", `${fmtUSD(qm.rTargets.r2)} · ${fmtUSD(qm.rTargets.r3)}`, "pos")}
     ${rowQ("ADR · Önceki hamle", `%${qm.adrPct} · +%${Math.round(qm.priorMovePct)}`)}
-    ${qmSizeLine(qm)}
+    ${analysis && ["blocked", "data-warning", "unverified", "ambiguous", "invalidated", "extended"].includes(analysis.state) ? `<div class="cm-entry-evidence">${esc(analysis.label)} · işlem boyutu önerilmez.</div>` : qmSizeLine(qm)}
     <div class="cm-qm-checks">${chk}</div>
     ${why ? `<div class="cm-qm-why">${why}</div>` : ""}
   </div>`;
@@ -263,7 +263,7 @@ function qmSizeLine(qm) {
   const cc = cashContext();
   const cashWarn = cc && cc.cashPct < cc.tgt[0] - 1
     ? ` <span class="neg">· nakit %${cc.cashPct.toFixed(0)} hedef altı, dikkat</span>` : "";
-  return `<div class="cm-qm-size"><b>Boyut:</b> ${parts}${cashWarn}</div>`;
+  return `<div class="cm-qm-size"><b>Varsayımsal boyut:</b> ${parts}${cashWarn}</div>`;
 }
 
 const VIEWS = ["notlar", "genel", "pozisyonlar", "swingdefteri", "buyume", "radar", "analiz", "challenge", "raporlar"];
@@ -560,6 +560,7 @@ const PM_SEL = [
   ".trade-table td:not(.l)", ".ts-item b",
   ".desk-sensitive", ".desk-total-delta", ".desk-metric-strip article > span",
   ".desk-priority em", ".desk-risk-list b",
+  ".cm-pos .cm-v",
 ].join(", ");
 function maskEl(el) {
   if (el.dataset.pm === "1") {
@@ -1065,47 +1066,19 @@ document.addEventListener("click", (e) => {
  * Yan panelin EN ÜSTÜNDE, en kritik 3 seviye büyük ve renkli: giriş/stop/hedef.
  * Öncelik: QM kurulumu > açık pozisyon planı > uzun vade biriktirme. */
 function cmHeroLevels(d, pos, pl) {
-  const cur = pl?.currentPrice ?? d.price;
-  const dist = (p) => (cur && p) ? ((p / cur - 1) * 100) : null;
-  const cell = (lbl, price, kind, sub) => price == null ? "" :
-    `<div class="cm-hc ${kind}"><span>${lbl}</span><b>${fmtUSD(price)}</b><i>${sub || ""}</i></div>`;
-  const qm = d.qm;
-  if (qm?.ok && qm.setup !== "none" && qm.entryTrigger != null) {
-    const dd = dist(qm.entryTrigger);
-    const head = qm.stage === "breaking-out"
-      ? "Tetik AKTİF — pivot kırılıyor, ORH girişini değerlendir"
-      : qm.stage === "extended"
-        ? "Gergin — kovalama, geri çekilme bekle"
-        : "BU FİYATI BEKLE — pivot kırılmadan girme";
-    return `<div class="cm-hero ${qm.stage === "breaking-out" ? "live" : ""}">
-      <div class="cm-hero-h">${head}</div>
-      <div class="cm-hero-row">
-        ${cell("GİRİŞ", qm.entryTrigger, "entry", dd != null ? (dd >= 0 ? `+%${dd.toFixed(1)} uzakta` : "fiyat üstünde") : "")}
-        ${cell("STOP", qm.stop, "stop", qm.stopPct != null ? `girişten −%${qm.stopPct}` : "")}
-        ${cell("HEDEF 2R", qm.rTargets?.r2, "target", qm.rTargets?.r3 ? `3R → ${fmtUSD(qm.rTargets.r3)}` : "")}
-      </div></div>`;
-  }
-  if (pos?.qty > 0 && (pos.guard?.stop != null || pos.guard?.target != null || pos.costUSD != null)) {
-    const sd = dist(pos.guard?.stop);
-    return `<div class="cm-hero pos">
-      <div class="cm-hero-h">Pozisyon planın — bu seviyeleri izle</div>
-      <div class="cm-hero-row">
-        ${cell("MALİYET", pos.costUSD, "cost", pos.profitPct != null ? fmtPct(pos.profitPct) : "")}
-        ${cell("İZ SÜREN STOP", pos.guard?.stop, "stop", pos.guard?.breached ? "İHLAL — çık!" : sd != null ? `%${Math.abs(sd).toFixed(1)} altta` : "")}
-        ${cell("PLAN HEDEF", pos.guard?.target, "target", pos.guard?.targetHit ? "hedefe ULAŞTI" : dist(pos.guard?.target) != null ? `+%${dist(pos.guard?.target).toFixed(1)} yukarıda` : "")}
-      </div></div>`;
-  }
-  const z = pl?.longterm?.zones?.[0];
-  if (z) {
-    return `<div class="cm-hero lt">
-      <div class="cm-hero-h">Uzun vade — kademeli biriktirme bölgesi</div>
-      <div class="cm-hero-row">
-        ${cell("1. BÖLGE", z.price, "entry", z.isNow ? "ŞİMDİ bölgede" : dist(z.price) != null ? `%${Math.abs(dist(z.price)).toFixed(1)} uzakta` : "")}
-        ${cell("200g DÖNÜŞ", pl?.longterm?.reclaim, "cost", "")}
-        ${cell("FİYAT", cur, "now", "")}
-      </div></div>`;
-  }
-  return "";
+  const analysis = d.analysis;
+  if (!analysis) return `<div class="cm-entry-card"><h3>Giriş teyidi bekleniyor</h3><p>Analizi yenileyerek günlük kaynak ve seviye kontrolünü al.</p></div>`;
+  const levels = analysis.levels;
+  const state = ["close-confirmed", "waiting"].includes(analysis.state) ? "candidate" : "caution";
+  const cell = (label,price) => `<div><small>${label}</small><b>${fmtUSD(price)}</b></div>`;
+  return `<section class="cm-entry-card ${state}">
+    <p class="cm-entry-kicker">GÜNLÜK GİRİŞ SENARYOSU</p><h3>${esc(analysis.label)}</h3>
+    ${levels ? `<div class="cm-entry-levels">${cell("Tetik",levels.entry)}${cell("Geçersizleşme / stop",levels.stop)}${cell("Varsayımsal 2R",levels.target2)}</div>
+    <p class="cm-entry-risk">Birim risk ${fmtUSD(levels.risk)} · %${levels.riskPct.toFixed(2)}${levels.roomR != null ? ` · yakın dirence ${levels.roomR.toFixed(2)}R` : ""}</p>
+    <p class="cm-entry-condition"><b>Teyit:</b> günlük kapanışın tetik üzerinde olması ve giriş filtrelerinin doğrulanması. Gün içi açılış aralığı bu grafikte ölçülmez.</p>` : ""}
+    ${(analysis.reasons || []).length ? `<ul>${analysis.reasons.map(reason=>`<li>${esc(reason)}</li>`).join("")}</ul>` : ""}
+    <p class="cm-entry-evidence">${esc(analysis.evidence)}</p>
+  </section>`;
 }
 
 /* ====================== Grafik çizim araçları (TradingView tarzı, kalıcı) ======================
@@ -1116,122 +1089,116 @@ const CM_DRAW = { tool: null, canvas: null, ctx: null, chart: null, series: null
 const cmDrawKey = (sym) => "cmDraw:" + sym;
 function cmDrawLoad(sym) { try { return JSON.parse(localStorage.getItem(cmDrawKey(sym))) || []; } catch { return []; } }
 function cmDrawSave() { try { localStorage.setItem(cmDrawKey(CM_DRAW.sym), JSON.stringify(CM_DRAW.items)); } catch {} }
-
-function initDrawings(chartEl, chart, series, candles, sym) {
-  CM_DRAW.cleanup.forEach((f) => { try { f(); } catch {} });
-  CM_DRAW.cleanup = [];
-  const canvas = document.createElement("canvas");
-  canvas.className = "cm-draw-canvas";
-  chartEl.appendChild(canvas);
-  Object.assign(CM_DRAW, { canvas, ctx: canvas.getContext("2d"), chart, series, sym, tool: null, pending: null });
-  CM_DRAW.timeIdx = new Map(candles.map((c, i) => [c.time, i]));
-  CM_DRAW.idxTime = candles.map((c) => c.time);
-  CM_DRAW.items = cmDrawLoad(sym);
-  cmSetTool(null);
-
-  const logicalOf = (p) => {
-    if (p.ext != null) return CM_DRAW.idxTime.length - 1 + p.ext; // son mumun sağına uzatılmış nokta
-    const i = CM_DRAW.timeIdx.get(p.time);
-    return i == null ? null : i;
-  };
+function cleanupChartDrawings() {
+  CM_DRAW.cleanup.forEach((fn) => { try { fn(); } catch {} });
+  Object.assign(CM_DRAW, { cleanup: [], tool: null, pending: null, redraw: null, canvas: null, ctx: null, sym: null, chart: null, series: null });
+  document.querySelectorAll(".cm-tool").forEach(button => button.classList.remove("active"));
+}
+function initDrawings(chartEl, chart, series, candles, sym, options = {}) {
+  cleanupChartDrawings();
+  const canvas = document.createElement("canvas"), cloud = document.createElement("canvas");
+  canvas.className = "cm-draw-canvas"; cloud.className = "cm-cloud-canvas";
+  chartEl.append(cloud, canvas);
+  const ctx = canvas.getContext("2d"), cloudCtx = cloud.getContext("2d");
+  const times = new Map(candles.map((bar, i) => [bar.time, i]));
+  Object.assign(CM_DRAW, { canvas, ctx, chart, series, sym, tool: null, pending: null, timeIdx: times, idxTime: candles.map(bar => bar.time), items: ChartTools.drawings(cmDrawLoad(sym), candles.at(-1)?.time) });
+  cmDrawSave(); cmSetTool(null);
+  const slow = new Map((options.ema21 || []).map(point => [point.time, point.value]));
+  const cloudPoints = (options.ema8 || []).filter(point => times.has(point.time) && Number.isFinite(point.value) && Number.isFinite(slow.get(point.time))).map(point => ({ logical: times.get(point.time), fast: point.value, slow: slow.get(point.time) }));
+  const plotSize = () => ({ width: chart.timeScale().width(), height: Math.max(0, chartEl.clientHeight - chart.timeScale().height()) });
   function redraw() {
-    const { ctx } = CM_DRAW;
-    const r = chartEl.getBoundingClientRect();
-    ctx.clearRect(0, 0, r.width, r.height);
-    const px = (l) => chart.timeScale().logicalToCoordinate(l);
+    const { width, height } = plotSize();
+    ctx.clearRect(0, 0, chartEl.clientWidth, chartEl.clientHeight);
+    cloudCtx.clearRect(0, 0, chartEl.clientWidth, chartEl.clientHeight);
+    ctx.save(); ctx.beginPath(); ctx.rect(0, 0, width, height); ctx.clip();
+    cloudCtx.save(); cloudCtx.beginPath(); cloudCtx.rect(0, 0, width, height); cloudCtx.clip();
+    const px = (logical) => chart.timeScale().logicalToCoordinate(logical);
     const py = (price) => series.priceToCoordinate(price);
-    const drawTrend = (p1, p2, preview) => {
-      const l1 = logicalOf(p1), l2 = logicalOf(p2);
+    const trend = (p1, p2, preview = false) => {
+      const l1 = ChartTools.logical(p1, times), l2 = ChartTools.logical(p2, times);
       if (l1 == null || l2 == null) return;
       const x1 = px(l1), x2 = px(l2), y1 = py(p1.price), y2 = py(p2.price);
-      if ([x1, x2, y1, y2].some((v) => v == null)) return;
-      ctx.strokeStyle = "#7c5cff"; ctx.lineWidth = 2; ctx.setLineDash(preview ? [5, 4] : []);
-      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); ctx.setLineDash([]);
-      ctx.fillStyle = "#7c5cff";
-      [[x1, y1], [x2, y2]].forEach(([x, y]) => { ctx.beginPath(); ctx.arc(x, y, 3, 0, 7); ctx.fill(); });
+      if ([x1,x2,y1,y2].some(v => v == null || !Number.isFinite(v))) return;
+      ctx.strokeStyle = "#9b83ee"; ctx.lineWidth = 2; ctx.setLineDash(preview ? [5,4] : []);
+      ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle = "#9b83ee";
+      [[x1,y1],[x2,y2]].forEach(([x,y])=>{ctx.beginPath();ctx.arc(x,y,3,0,Math.PI*2);ctx.fill();});
     };
-    const drawH = (price) => {
-      const y = py(price); if (y == null) return;
-      ctx.strokeStyle = "#e07b2f"; ctx.lineWidth = 1.5; ctx.setLineDash([7, 5]);
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(r.width, y); ctx.stroke(); ctx.setLineDash([]);
-      ctx.fillStyle = "#e07b2f"; ctx.font = "700 11px " + (getComputedStyle(document.body).fontFamily || "sans-serif");
-      ctx.fillText("$" + (+price).toFixed(2), 8, y - 5);
-    };
-    for (const it of CM_DRAW.items) it.t === "trend" ? drawTrend(it.p1, it.p2) : drawH(it.price);
-    if (CM_DRAW.pending?.p1 && CM_DRAW.pending.p2) drawTrend(CM_DRAW.pending.p1, CM_DRAW.pending.p2, true);
+    for (const item of CM_DRAW.items) {
+      if (item.t === "trend") { trend(item.p1,item.p2); continue; }
+      const y = py(item.price); if (y == null || !Number.isFinite(y)) continue;
+      ctx.strokeStyle = "#da9943"; ctx.lineWidth = 1.5; ctx.setLineDash([7,5]);
+      ctx.beginPath(); ctx.moveTo(0,y);ctx.lineTo(width,y);ctx.stroke();ctx.setLineDash([]);
+      ctx.fillStyle = "#da9943";ctx.font = "600 11px sans-serif";ctx.fillText(fmtUSD(item.price),8,y-5);
+    }
+    if (CM_DRAW.pending?.p2) trend(CM_DRAW.pending.p1,CM_DRAW.pending.p2,true);
+    if (options.cloudVisible?.()) {
+      for (let i=1;i<cloudPoints.length;i++) {
+        const a={...cloudPoints[i-1],x:px(cloudPoints[i-1].logical)}, b={...cloudPoints[i],x:px(cloudPoints[i].logical)};
+        if (a.x == null || b.x == null || b.x < 0 || a.x > width) continue;
+        for (const part of ChartTools.cloudParts(a,b)) {
+          const y=[py(part.a.fast),py(part.b.fast),py(part.b.slow),py(part.a.slow)];
+          if (y.some(v=>v==null || !Number.isFinite(v))) continue;
+          cloudCtx.fillStyle=part.bull ? "rgba(11,136,132,.15)" : "rgba(198,93,84,.15)";
+          cloudCtx.beginPath();cloudCtx.moveTo(part.a.x,y[0]);cloudCtx.lineTo(part.b.x,y[1]);cloudCtx.lineTo(part.b.x,y[2]);cloudCtx.lineTo(part.a.x,y[3]);cloudCtx.closePath();cloudCtx.fill();
+        }
+      }
+    }
+    ctx.restore();cloudCtx.restore();
   }
-  CM_DRAW.redraw = redraw;
-
+  CM_DRAW.redraw=redraw;
   function sizeCanvas() {
-    const r = chartEl.getBoundingClientRect();
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = r.width * dpr; canvas.height = r.height * dpr;
-    canvas.style.width = r.width + "px"; canvas.style.height = r.height + "px";
-    CM_DRAW.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const dpr=window.devicePixelRatio || 1;
+    [canvas,cloud].forEach((layer)=>{layer.width=Math.round(chartEl.clientWidth*dpr);layer.height=Math.round(chartEl.clientHeight*dpr);layer.style.width=chartEl.clientWidth+"px";layer.style.height=chartEl.clientHeight+"px";layer.getContext("2d").setTransform(dpr,0,0,dpr,0,0);});
     redraw();
   }
-  function pointAt(ev) {
-    const r = canvas.getBoundingClientRect();
-    const logical = chart.timeScale().coordinateToLogical(ev.clientX - r.left);
-    const price = series.coordinateToPrice(ev.clientY - r.top);
-    if (logical == null || price == null) return null;
-    const i = Math.round(logical), n = CM_DRAW.idxTime.length;
-    if (i >= n) return { ext: i - (n - 1), price };
-    return { time: CM_DRAW.idxTime[Math.max(0, Math.min(n - 1, i))], price };
+  function pointAt(event) {
+    const rect=canvas.getBoundingClientRect(), x=event.clientX-rect.left, y=event.clientY-rect.top, size=plotSize();
+    if(x<0 || x>size.width || y<0 || y>size.height) return null;
+    const logical=chart.timeScale().coordinateToLogical(x),price=series.coordinateToPrice(y);
+    if(logical==null || logical<0 || !(price>0)) return null;
+    const i=Math.round(logical),last=candles.length-1;
+    return i>last ? {anchor:candles[last].time,ext:i-last,price} : {time:candles[i].time,price};
   }
-  canvas.addEventListener("click", (ev) => {
-    if (!CM_DRAW.tool) return;
-    const p = pointAt(ev); if (!p) return;
-    if (CM_DRAW.tool === "hline") {
-      CM_DRAW.items.push({ t: "h", price: p.price });
-      cmDrawSave(); cmSetTool(null); redraw();
-      toast(`Yatay seviye kaydedildi — $${(+p.price).toFixed(2)}`);
-    } else if (CM_DRAW.tool === "trend") {
-      if (!CM_DRAW.pending) CM_DRAW.pending = { p1: p, p2: null };
-      else {
-        CM_DRAW.items.push({ t: "trend", p1: CM_DRAW.pending.p1, p2: p });
-        CM_DRAW.pending = null; cmDrawSave(); cmSetTool(null);
-        toast("Trend çizgisi kaydedildi");
-      }
-      redraw();
-    }
-  });
-  canvas.addEventListener("mousemove", (ev) => {
-    if (CM_DRAW.tool === "trend" && CM_DRAW.pending) { const p = pointAt(ev); if (p) { CM_DRAW.pending.p2 = p; redraw(); } }
-  });
-  const esc = (ev) => { if (ev.key === "Escape" && CM_DRAW.tool) { cmSetTool(null); redraw(); } };
-  document.addEventListener("keydown", esc);
-  CM_DRAW.cleanup.push(() => document.removeEventListener("keydown", esc));
-  const sub = () => redraw();
-  chart.timeScale().subscribeVisibleLogicalRangeChange(sub);
-  CM_DRAW.cleanup.push(() => { try { chart.timeScale().unsubscribeVisibleLogicalRangeChange(sub); } catch {} });
-  const ro = new ResizeObserver(sizeCanvas);
-  ro.observe(chartEl);
-  CM_DRAW.cleanup.push(() => ro.disconnect());
+  const controller=new AbortController(), signal=controller.signal;
+  canvas.addEventListener("click",(event)=>{
+    if(!CM_DRAW.tool) return;
+    const point=pointAt(event);if(!point)return;
+    if(CM_DRAW.tool==="hline") {CM_DRAW.items.push({t:"h",price:point.price});cmDrawSave();cmSetTool(null);toast("Yatay seviye kaydedildi");}
+    else if(!CM_DRAW.pending) CM_DRAW.pending={p1:point,p2:null};
+    else {CM_DRAW.items.push({t:"trend",p1:CM_DRAW.pending.p1,p2:point});cmDrawSave();cmSetTool(null);toast("Trend çizgisi kaydedildi");}
+    redraw();
+  },{signal});
+  canvas.addEventListener("pointermove",(event)=>{if(CM_DRAW.tool==="trend" && CM_DRAW.pending){CM_DRAW.pending.p2=pointAt(event);redraw();}},{signal});
+  const rangeChange=()=>redraw();chart.timeScale().subscribeVisibleLogicalRangeChange(rangeChange);
+  const observer=new ResizeObserver(sizeCanvas);observer.observe(chartEl);
+  // 12 Eki: LC 4.2 fiyat ölçeği değişim olayı sunmaz; iki koordinat imzası yalnız değişince yeniden çizer.
+  let frame=0,signature="";
+  const sync=()=>{
+    const range=chart.timeScale().getVisibleLogicalRange();
+    const next=[range?.from,range?.to,series.priceToCoordinate(candles[0].low),series.priceToCoordinate(candles.at(-1).high),chartEl.clientWidth,chartEl.clientHeight].join(":");
+    if(signature!==next){signature=next;redraw();}
+    frame=requestAnimationFrame(sync);
+  };
+  frame=requestAnimationFrame(sync);
+  CM_DRAW.cleanup.push(()=>controller.abort(),()=>observer.disconnect(),()=>cancelAnimationFrame(frame),()=>chart.timeScale().unsubscribeVisibleLogicalRangeChange(rangeChange));
   sizeCanvas();
 }
 function cmSetTool(tool) {
-  CM_DRAW.tool = tool;
-  CM_DRAW.pending = null;
-  if (CM_DRAW.canvas) {
-    CM_DRAW.canvas.style.pointerEvents = tool ? "auto" : "none";
-    CM_DRAW.canvas.style.cursor = tool ? "crosshair" : "default";
-  }
-  $("#cmToolTrend")?.classList.toggle("active", tool === "trend");
-  $("#cmToolHline")?.classList.toggle("active", tool === "hline");
+  if(tool && MEASURE.mode) resetMeasure();
+  CM_DRAW.tool=tool;CM_DRAW.pending=null;
+  if(CM_DRAW.canvas){CM_DRAW.canvas.style.pointerEvents=tool?"auto":"none";CM_DRAW.canvas.style.cursor=tool?"crosshair":"default";}
+  $("#cmToolTrend")?.classList.toggle("active",tool==="trend");$("#cmToolHline")?.classList.toggle("active",tool==="hline");
+  $("#cmToolTrend")?.setAttribute("aria-pressed",String(tool==="trend"));$("#cmToolHline")?.setAttribute("aria-pressed",String(tool==="hline"));
+  CM_DRAW.redraw?.();
 }
-// Araç çubuğu ikonları: emoji (📏/🗑) yerine çizgi-ikon — bir kez, açılışta doldurulur
 $("#cmMeasure")?.insertAdjacentHTML("afterbegin", svgIcon("ruler", "ic-sm"));
 $("#cmToolClear")?.insertAdjacentHTML("afterbegin", svgIcon("trash", "ic-sm"));
-$("#cmToolTrend")?.addEventListener("click", () => cmSetTool(CM_DRAW.tool === "trend" ? null : "trend"));
-$("#cmToolHline")?.addEventListener("click", () => cmSetTool(CM_DRAW.tool === "hline" ? null : "hline"));
-$("#cmToolClear")?.addEventListener("click", () => {
-  if (!CM_DRAW.sym) return;
-  CM_DRAW.items = [];
-  cmDrawSave();
-  CM_DRAW.redraw?.();
-  toast("Bu sembolün çizimleri silindi");
-});
+$("#cmToolTrend")?.addEventListener("click",()=>cmSetTool(CM_DRAW.tool==="trend"?null:"trend"));
+$("#cmToolHline")?.addEventListener("click",()=>cmSetTool(CM_DRAW.tool==="hline"?null:"hline"));
+$("#cmToolClear")?.addEventListener("click",()=>{if(!CM_DRAW.sym)return;CM_DRAW.items=[];cmDrawSave();cmSetTool(null);});
+
+
 
 
 /* ====================== Cep bildirimleri (PWA + Web Push) ======================

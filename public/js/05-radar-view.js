@@ -416,5 +416,23 @@ $("#cmRefresh")?.addEventListener("click", () => {
   openChartModal(cmCurrent.sym, cmCurrent.ctx, true).finally(() => { b.disabled = false; b.textContent = "↻ Analizi Yenile"; });
 });
 $("#chartModalBg")?.addEventListener("click", (e) => { if (e.target.id === "chartModalBg") closeChartModal(); });
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeChartModal(); });
 
+
+// 12 Eki: Escape önce yarım çizimi/ölçümü bırakır, sonra pencereyi kapatır.
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape" || $("#chartModalBg")?.hidden) return;
+  event.preventDefault();
+  if (CM_DRAW.tool) { cmSetTool(null); return; }
+  if (MEASURE.mode) { resetMeasure(); return; }
+  closeChartModal();
+});
+
+// 12 Eki: klavye odağı açık grafik penceresinden arka portföye kaçmasın.
+document.addEventListener("keydown", (event) => {
+  const bg = $("#chartModalBg");
+  if (event.key !== "Tab" || !bg || bg.hidden) return;
+  const items = [...bg.querySelectorAll("button, a[href], summary, [tabindex='0']")].filter(item => !item.disabled && item.getClientRects().length);
+  const first = items[0], last = items.at(-1);
+  if (event.shiftKey && (document.activeElement === first || !bg.contains(document.activeElement))) { event.preventDefault(); last?.focus(); }
+  else if (!event.shiftKey && (document.activeElement === last || !bg.contains(document.activeElement))) { event.preventDefault(); first?.focus(); }
+});

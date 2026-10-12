@@ -213,3 +213,46 @@ body.desk-app { background: var(--desk-page); }
 
 .desk-chart-slot .chart-axis { display: block; position: relative; height: 15px; }
 .desk-chart-slot .chart-axis span { position: absolute; white-space: nowrap; }
+/* 12 Eki 2026: katmanlar ayrı açılır; fiyat seviyeleri ve günlük teyit karıştırılmaz. */
+.chart-open { overflow: hidden; }
+.chart-modal { border-radius: 20px; background: var(--desk-surface); border: 1px solid var(--desk-line); }
+.cm-head { background: var(--desk-surface); border-color: var(--desk-line); }
+.cm-analysis-meta { padding: 9px 18px; font-size: 11px; color: var(--desk-muted); border-top: 1px solid var(--desk-line); line-height: 1.5; }
+.cm-layer-controls { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 18px 12px; border-bottom: 1px solid var(--desk-line); }
+.cm-layer-controls button { padding: 7px 11px; border: 1px solid var(--desk-line); border-radius: 8px; background: var(--desk-surface); color: var(--desk-muted); font: 500 11px/1.3 "Plus Jakarta Sans",sans-serif; cursor: pointer; }
+.cm-layer-controls button[aria-pressed="true"] { background: var(--desk-accent-soft); color: var(--desk-accent); border-color: var(--desk-accent); }
+.cm-layer-controls button:focus-visible { outline: 3px solid var(--desk-accent); outline-offset: 2px; }
+.cm-side { background: var(--desk-page); width: 350px; border-color: var(--desk-line); padding: 16px; }
+.cm-entry-card { padding: 18px; border: 1px solid var(--desk-line); border-radius: 14px; background: var(--desk-surface); margin-bottom: 16px; }
+.cm-entry-kicker { color: var(--desk-accent); font-size: 9px; font-weight: 600; letter-spacing: .1em; margin: 0 0 8px; }
+.cm-entry-card h3 { color: var(--desk-text); font-size: 17px; letter-spacing: -.03em; margin: 0 0 15px; }
+.cm-entry-levels { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.cm-entry-levels > div:last-child { grid-column: 1 / -1; }
+.cm-entry-levels small { display: block; font-size: 10px; color: var(--desk-muted); margin-bottom: 5px; }
+.cm-entry-levels b { font: 600 20px/1.2 "Plus Jakarta Sans",sans-serif; color: var(--desk-text); }
+.cm-entry-risk { margin: 14px 0; padding-top: 12px; border-top: 1px solid var(--desk-line); font-size: 10px; color: var(--desk-muted); line-height: 1.6; }
+.cm-entry-condition, .cm-entry-card li { font-size: 11px; line-height: 1.65; color: var(--desk-text); }
+.cm-entry-card ul { padding-left: 16px; margin: 14px 0; }
+.cm-entry-card li + li { margin-top: 7px; }
+.cm-entry-evidence { color: var(--desk-muted); font-size: 10px; line-height: 1.6; margin: 14px 0 0; }
+.cm-extra { border-top: 1px solid var(--desk-line); border-bottom: 1px solid var(--desk-line); padding: 12px 0; margin: 16px 0; }
+.cm-extra summary { color: var(--desk-muted); font-size: 11px; cursor: pointer; }
+.cm-extra[open] .cm-qm { margin-top: 16px; }
+.cm-cloud-canvas { position: absolute; inset: 0; z-index: 3; pointer-events: none; }
+.cm-legend { font-size: 10px; line-height: 1.6; color: var(--desk-muted); border-color: var(--desk-line); }
+@media (max-width: 767px) {
+  .chart-modal { width: 100%; height: 100dvh; max-height: 100dvh; border-radius: 0; }
+  .cm-head { flex-wrap: wrap; gap: 10px; padding: 12px; }
+  .cm-actions { flex-wrap: wrap; gap: 6px; }
+  .cm-analysis-meta { padding: 8px 12px; font-size: 10px; }
+  .cm-layer-controls { padding: 0 12px 10px; gap: 5px; }
+  .cm-layer-controls button { padding: 7px 9px; font-size: 10px; }
+  .cm-side { width: auto; padding: 14px; }
+  .cm-entry-levels { grid-template-columns: repeat(3,minmax(0,1fr)); }
+  .cm-entry-levels > div:last-child { grid-column: auto; }
+  .cm-entry-levels b { font-size: 17px; }
+}
+
+.cm-stats-ov { background: var(--desk-surface); border-color: var(--desk-line); color: var(--desk-text); }
+.cm-stats-ov .cs-r > span { color: var(--desk-muted); }
+.cm-grade { background: var(--desk-accent-soft); color: var(--desk-accent); border-color: var(--desk-line); }

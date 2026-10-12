@@ -412,17 +412,18 @@ function scaledEntryPlan(pl) {
 /* ---- Uzun Vade paneli: kademeli biriktirme bölgeleri + nakit oranı koruması ---- */
 function longtermPanel(lt) {
   if (!lt) return "";
-  const vcls = ({ buy: "go", watch: "set", wait: "ext" })[lt.verdict.key] || "set";
+  const vcls = "set";
+  const referenceLabel = lt.reclaim ? "200g altında" : lt.verdict.key === "buy" ? "Ortalama yakınında" : lt.verdict.key === "wait" ? "Ortalamadan uzak" : "Trend referansları";
   const val = lt.valuation || {};
   const vchip = (lbl, pct) => pct == null ? "" :
     `<span class="lt-vchip ${pct <= 0 ? "below" : "above"}">${lbl} ${pct >= 0 ? "+" : ""}${pct}%</span>`;
   const zonesHTML = lt.zones.length
     ? lt.zones.map((z) => `<div class="lt-zone${z.isNow ? " now" : ""}">
-        <span class="lt-zpct">%${z.pct}</span><span class="lt-zlbl">${z.label}</span><b>${fmtUSD(z.price)}</b>
+        <span class="lt-zlbl">${z.isNow ? "Son kapanış · ortalama yakını" : esc(z.label)}</span><b>${fmtUSD(z.price)}</b>
       </div>`).join("")
-    : (lt.reclaim != null ? `<div class="lt-zone"><span class="lt-zlbl">200g üstüne dönüş tetiği</span><b>${fmtUSD(lt.reclaim)}</b></div>` : "");
+    : (lt.reclaim != null ? `<div class="lt-zone"><span class="lt-zlbl">200g ortalama referansı</span><b>${fmtUSD(lt.reclaim)}</b></div>` : "");
   return `<div class="cm-lt">
-    <div class="cm-lt-h">Uzun Vade <span class="lt-verdict v-${vcls}">${lt.verdict.label}</span></div>
+    <div class="cm-lt-h">Ortalama bölgeleri <span class="lt-verdict v-${vcls}">${referenceLabel}</span></div>
     <div class="lt-val"><span class="lt-vlbl">Ort. uzaklık</span>${vchip("20g", val.to20)}${vchip("50g", val.to50)}${vchip("200g", val.to200)}</div>
     ${zonesHTML ? `<div class="lt-zones">${zonesHTML}</div>` : ""}
   </div>`;
@@ -710,13 +711,23 @@ function renderOpportunities() {
 
 /* ---------------- Grafik modalı: Lightweight Charts + oto-seviyeler -------- */
 let cmChart = null, cmResizeHandler = null, cmCandle = null, cmCandles = null;
+let cmRequest = 0, cmAbort = null, cmReturnFocus = null;
+function disposeChart() {
+  if (cmResizeHandler) { window.removeEventListener("resize", cmResizeHandler); cmResizeHandler = null; }
+  cleanupChartDrawings();
+  resetMeasure();
+  if (cmChart) { try { cmChart.remove(); } catch {} }
+  cmChart = cmCandle = cmCandles = null;
+}
 
 function closeChartModal() {
   const bg = $("#chartModalBg");
+  cmRequest++;
+  cmAbort?.abort();
   if (bg) bg.hidden = true;
-  if (cmResizeHandler) { window.removeEventListener("resize", cmResizeHandler); cmResizeHandler = null; }
-  resetMeasure();
-  if (cmChart) { try { cmChart.remove(); } catch {} cmChart = null; cmCandle = null; cmCandles = null; }
+  document.body.classList.remove("chart-open");
+  disposeChart();
+  if (cmReturnFocus?.isConnected) cmReturnFocus.focus();
 }
 
 /* ===== Ölçüm aracı (TradingView measure tool) — grafikte basılı tutup çek:
@@ -744,6 +755,7 @@ function resetMeasure() {
 }
 function toggleMeasure() {
   if (!cmChart || !cmCandle) return;
+  if (!MEASURE.mode) cmSetTool(null);
   MEASURE.mode = !MEASURE.mode;
   $("#cmMeasure")?.classList.toggle("active", MEASURE.mode);
   $("#cmChart")?.classList.toggle("measuring", MEASURE.mode);
@@ -850,10 +862,12 @@ function resolveChartPosition(sym, ctx) {
     horizon = horizon || (h.horizon === "swing" ? "swing" : "long");
     earnings = earnings || h.earnings || null;
   }
+  let covered = Number(h?.quantity) || 0;
   for (const p of sws) {
-    const q = Number(p.qty) || 0;
-    qty += q; costUSDw += (Number(p.entry) || 0) * q;
-    if (p.valueUSD != null) { mvUSD += p.valueUSD; hasMv = true; }
+    const extra = ChartTools.swingContribution(p, covered);
+    covered = extra.covered;
+    qty += extra.qty; costUSDw += extra.cost;
+    if (extra.qty > 0 && extra.value != null) { mvUSD += extra.value; hasMv = true; }
     if (!guard && p.guard) guard = { stop: p.guard.stop, distPct: p.guard.distPct, breached: p.guard.breached, target: p.target ?? null, targetHit: p.guard.targetHit };
     horizon = horizon || "swing";
   }
@@ -869,8 +883,17 @@ function resolveChartPosition(sym, ctx) {
 async function openChartModal(sym, ctx = null, fresh = false) {
   const bg = $("#chartModalBg");
   if (!bg) return;
+  if (bg.hidden) cmReturnFocus = document.activeElement;
+  const request = ++cmRequest;
+  cmAbort?.abort();
+  cmAbort = new AbortController();
+  const signal = cmAbort.signal;
+  disposeChart();
+  document.querySelectorAll(".cm-tool").forEach(button => { button.disabled = true; });
   cmCurrent = { sym, ctx };
   bg.hidden = false;
+  document.body.classList.add("chart-open");
+  $("#cmClose")?.focus();
   $("#cmSym").textContent = sym;
   $("#cmName").textContent = "";
   $("#cmPrice").textContent = "";
@@ -878,15 +901,17 @@ async function openChartModal(sym, ctx = null, fresh = false) {
   const chartEl = $("#cmChart"), sideEl = $("#cmSide"), legEl = $("#cmLegend");
   chartEl.innerHTML = `<div class="cm-skel"><div class="cm-skel-bars">${
     Array.from({ length: 28 }, (_, i) => `<span style="height:${20 + Math.round(60 * Math.abs(Math.sin(i / 2.3)))}%"></span>`).join("")
-  }</div><div class="cm-skel-label">↻ ${sym} grafiği hazırlanıyor…</div></div>`;
+  }</div><div class="cm-skel-label">↻ ${esc(sym)} grafiği hazırlanıyor…</div></div>`;
   sideEl.innerHTML = ""; legEl.innerHTML = "";
+  $("#cmLayers").innerHTML = "";
+  $("#cmAnalysisMeta").textContent = "Günlük mumlar ve seviyeler kontrol ediliyor…";
   if (cmChart) { try { cmChart.remove(); } catch {} cmChart = null; }
 
   // Önbellekteyse anında gelir; değilse tek bir canlı çekim (kısa). Geçici
   // "kaynak meşgul" durumunda bir kez otomatik tekrar dener.
   let d;
   const tryFetch = async () => {
-    const r = await fetch(`/api/chart?symbol=${encodeURIComponent(sym)}${fresh ? "&fresh=1" : ""}`);
+    const r = await fetch(`/api/chart?symbol=${encodeURIComponent(sym)}${fresh ? "&fresh=1" : ""}`, { signal });
     if (!r.ok) { const e = new Error((await r.json().catch(() => ({}))).error || "veri yok"); e.status = r.status; throw e; }
     return r.json();
   };
@@ -894,14 +919,16 @@ async function openChartModal(sym, ctx = null, fresh = false) {
     try {
       d = await tryFetch();
     } catch (e1) {
-      if (e1.status === 502) { await new Promise((r) => setTimeout(r, 2500)); d = await tryFetch(); }
+      if (e1.status === 502 && request === cmRequest) { await new Promise((r) => setTimeout(r, 1500)); if (signal.aborted) return; d = await tryFetch(); }
       else throw e1;
     }
   } catch (e) {
-    chartEl.innerHTML = `<div class="cm-loading">📉 ${sym} grafiği yüklenemedi.<br><span style="color:var(--muted);font-size:13px">${String(e.message || e)}</span><br><button class="btn ghost sm" id="cmRetry" style="margin-top:12px">↻ Tekrar dene</button> <a class="btn ghost sm" href="https://www.tradingview.com/chart/?symbol=${encodeURIComponent(sym)}" target="_blank" rel="noopener" style="margin-top:12px">TradingView ↗</a></div>`;
+    if (request !== cmRequest || signal.aborted) return;
+    chartEl.innerHTML = `<div class="cm-loading">📉 ${esc(sym)} grafiği yüklenemedi.<br><span style="color:var(--muted);font-size:13px">${esc(String(e.message || e))}</span><br><button class="btn ghost sm" id="cmRetry" style="margin-top:12px">↻ Tekrar dene</button> <a class="btn ghost sm" href="https://www.tradingview.com/chart/?symbol=${encodeURIComponent(sym)}" target="_blank" rel="noopener" style="margin-top:12px">TradingView ↗</a></div>`;
     $("#cmRetry")?.addEventListener("click", () => openChartModal(sym, ctx));
     return;
   }
+  if (request !== cmRequest || signal.aborted || bg.hidden) return;
   if (!window.LightweightCharts) {
     chartEl.innerHTML = `<div class="cm-loading">Grafik kütüphanesi yüklenemedi (internet?).</div>`;
     return;
@@ -914,48 +941,46 @@ async function openChartModal(sym, ctx = null, fresh = false) {
   // --- Lightweight Charts ---
   chartEl.innerHTML = "";
   const LC = window.LightweightCharts;
+  const palette = getComputedStyle(document.documentElement);
+  const surface = palette.getPropertyValue("--desk-surface").trim() || "#ffffff";
+  const ink = palette.getPropertyValue("--desk-muted").trim() || "#667c88";
+  const grid = palette.getPropertyValue("--desk-line").trim() || "#e3ebed";
+  const groups = new Map();
+  function group(key, label, visible = false) {
+    if (!groups.has(key)) groups.set(key, { key, label, visible, items: [] });
+    return groups.get(key);
+  }
+  function addSeries(key, label, series, data, visible = true) {
+    const g = group(key, label, visible);
+    series.setData(data); series.applyOptions({ visible: g.visible }); g.items.push(series);
+  }
   const chart = LC.createChart(chartEl, {
     // open-design: sıcak kağıt ailesiyle hizalı grafik yüzeyi — ılık ızgara/metin
-    layout: { background: { color: "#ffffff" }, textColor: "#4a4f45", fontFamily: "inherit" },
-    grid: { vertLines: { color: "#f1efe9" }, horzLines: { color: "#f1efe9" } },
-    rightPriceScale: { borderColor: "#e5e2d9" },
-    timeScale: { borderColor: "#e5e2d9", timeVisible: false },
+    layout: { background: { color: surface }, textColor: ink, fontFamily: "Plus Jakarta Sans, sans-serif" },
+    grid: { vertLines: { color: grid }, horzLines: { color: grid } },
+    rightPriceScale: { borderColor: grid },
+    timeScale: { borderColor: grid, timeVisible: false, lockVisibleTimeRangeOnResize: true },
     crosshair: { mode: LC.CrosshairMode.Normal },
     autoSize: true,
   });
   cmChart = chart;
 
-  // ── EMA Cloud (Ripster 8/21) — EN ALTTA: iki-çizgi-arası bulut dolgusu ──
-  // Z-order = ekleme sırası. Bulut önce (altta), mumlar sonra (üstte) → mumlar gizlenmez.
-  // 8 EMA momentum, 21 EMA trend. Bulut yeşil=8>21 (boğa), kırmızı=8<21 (ayı).
-  let emaCloud = null;
-  if (d.ema8?.length && d.ema21?.length) {
-    const tmap21 = new Map(d.ema21.map((p) => [p.time, p.value]));
-    const last8 = d.ema8[d.ema8.length - 1];
-    const bull = last8.value >= (tmap21.get(last8.time) ?? last8.value);
-    const cloudCol = bull ? "rgba(16,185,129,.16)" : "rgba(216,68,47,.14)";
-    const lo = [], hi = [];
-    for (const p of d.ema8) { const v21 = tmap21.get(p.time); if (v21 == null) continue; lo.push({ time: p.time, value: Math.min(p.value, v21) }); hi.push({ time: p.time, value: Math.max(p.value, v21) }); }
-    // hi: bulut rengiyle scale-altına kadar dolu · lo: arka plan rengiyle üstünü kapatır → sadece 8↔21 arası renkli kalır
-    chart.addAreaSeries({ lineWidth: 0, topColor: cloudCol, bottomColor: cloudCol, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false }).setData(hi);
-    chart.addAreaSeries({ lineWidth: 0, topColor: "#ffffff", bottomColor: "#ffffff", priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false }).setData(lo);
-    emaCloud = { bull };
-  }
-
+  // 12 Eki: bulut gerçek EMA kesişimlerini canvas katmanında boyar; ölçeği/geniş alanı kapatmaz.
+  group("cloud", "EMA bulutu", true);
   const candle = chart.addCandlestickSeries({
     upColor: "#2f8f57", downColor: "#d8442f", borderVisible: false,
-    wickUpColor: "#2f8f57", wickDownColor: "#d8442f",
+    wickUpColor: "#2f8f57", wickDownColor: "#d8442f", priceLineVisible: false,
   });
   candle.setData(d.candles);
   cmCandle = candle; cmCandles = d.candles; resetMeasure(); // ölçüm aracı için referanslar
-  initDrawings(chartEl, chart, candle, d.candles, sym);      // kalıcı trend/yatay çizim katmanı
+  initDrawings(chartEl, chart, candle, d.candles, sym, { ema8: d.ema8, ema21: d.ema21, cloudVisible: () => groups.get("cloud")?.visible });      // kalıcı trend/yatay çizim katmanı
   // MA paleti — sakin veri tonları (aksan değil): SMA'lar ince/soluk, EMA'lar işlevsel vurgulu
-  if (d.sma20?.length) chart.addLineSeries({ color: "#7fa8c9", lineWidth: 1, priceLineVisible: false, lastValueVisible: false }).setData(d.sma20);
-  if (d.sma50?.length) chart.addLineSeries({ color: "#cfa143", lineWidth: 1, priceLineVisible: false, lastValueVisible: false }).setData(d.sma50);
-  if (d.sma200?.length) chart.addLineSeries({ color: "#9a8fd8", lineWidth: 1, priceLineVisible: false, lastValueVisible: false }).setData(d.sma200);
+  if (d.sma20?.length) addSeries("ma", "Ortalamalar", chart.addLineSeries({ color: "#7fa8c9", lineWidth: 1, priceLineVisible: false, lastValueVisible: false }), d.sma20);
+  if (d.sma50?.length) addSeries("ma", "Ortalamalar", chart.addLineSeries({ color: "#cfa143", lineWidth: 1, priceLineVisible: false, lastValueVisible: false }), d.sma50);
+  if (d.sma200?.length) addSeries("ma", "Ortalamalar", chart.addLineSeries({ color: "#9a8fd8", lineWidth: 1, priceLineVisible: false, lastValueVisible: false }), d.sma200);
   // EMA çizgileri EN ÜSTTE (bulutun ve mumların üstünde)
-  if (d.ema21?.length) chart.addLineSeries({ color: "#e0940f", lineWidth: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false }).setData(d.ema21);
-  if (d.ema8?.length) chart.addLineSeries({ color: "#0f9d8f", lineWidth: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false }).setData(d.ema8);
+  if (d.ema21?.length) addSeries("ma", "Ortalamalar", chart.addLineSeries({ color: "#e0940f", lineWidth: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false }), d.ema21);
+  if (d.ema8?.length) addSeries("ma", "Ortalamalar", chart.addLineSeries({ color: "#0f9d8f", lineWidth: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false }), d.ema8);
 
   // Hacim histogramı (alt %18'lik bantta)
   const volData = d.candles.filter((c) => c.volume != null).map((c) => ({
@@ -970,43 +995,41 @@ async function openChartModal(sym, ctx = null, fresh = false) {
 
   const pl = d.plan || {};
   const DS = LC.LineStyle;
-  const line = (price, color, style, title, width = 2) => {
-    if (price == null || !isFinite(price)) return;
-    candle.createPriceLine({ price, color, lineWidth: width, lineStyle: style, axisLabelVisible: true, title });
+  const line = (price, color, style, title, width = 2, key = "context") => {
+    if (typeof price !== "number" || !Number.isFinite(price) || price <= 0) return;
+    const g = group(key, ({ reference: "Son kapanış", entry: "Giriş senaryosu", position: "Pozisyonum", year: "52 hafta", long: "Ortalama bölgeleri", context: "Destek / direnç", pattern: "Formasyonlar" })[key], key === "reference" || key === "position" || key === "entry");
+    g.items.push(candle.createPriceLine({ price, color, lineWidth: width, lineStyle: style, axisLabelVisible: g.visible, lineVisible: g.visible, title }));
   };
   // Güncel fiyat referansı (gri ince) — giriş seviyelerinden ayırt etmek için
-  if (pl.currentPrice != null) line(pl.currentPrice, "#94a39a", DS.Dotted, "Fiyat", 1);
+  if (pl.currentPrice != null) line(pl.currentPrice, "#94a39a", DS.Dotted, "Son kapanış", 1, "reference");
   // 52 hafta zirve/dip (TradingView tarzı High/Low çizgileri)
-  if (d.stats?.w52High != null) line(d.stats.w52High, "#d8442f", DS.Dashed, "52h Zirve", 1);
-  if (d.stats?.w52Low != null) line(d.stats.w52Low, "#5a8fb0", DS.Dashed, "52h Dip", 1);
-  // ── SWING (Qullamaggie) — tek giriş otoritesi: pivot kırılımı + stop + R hedef
-  if (d.qm?.ok && d.qm.setup !== "none") {
-    line(d.qm.entryTrigger, "#0a8f6e", DS.Solid, "Swing Giriş", 2);
-    line(d.qm.stop, "#ab272c", DS.Dashed, "Swing Stop", 2);
-    if (d.qm.rTargets?.r2) line(d.qm.rTargets.r2, "#1f7a48", DS.Dashed, "Hedef 2R", 1);
-    if (d.qm.rTargets?.r3) line(d.qm.rTargets.r3, "#1f7a48", DS.Dotted, "Hedef 3R", 1);
+  if (d.stats?.w52High != null) line(d.stats.w52High, "#d8442f", DS.Dashed, "52h Zirve", 1, "year");
+  if (d.stats?.w52Low != null) line(d.stats.w52Low, "#5a8fb0", DS.Dashed, "52h Dip", 1, "year");
+  const levels = d.analysis?.levels;
+  if (levels) {
+    line(levels.entry, "#0b8884", DS.Solid, "Günlük tetik", 2, "entry");
+    line(levels.stop, "#c65d54", DS.Dashed, "Senaryo stop", 2, "entry");
+    line(levels.target2, "#708ba4", DS.Dashed, "2R referansı", 1, "entry");
   }
   // ── UZUN VADE — kademeli biriktirme bölgeleri (yeşil-gri, swing'le karışmaz)
   (pl.longterm?.zones || []).forEach((z, i) =>
-    line(z.price, z.isNow ? "#2f8f57" : "#7fae8e", z.isNow ? DS.Solid : DS.Dashed, `Biriktir %${z.pct}`, z.isNow ? 2 : 1));
-  if (pl.longterm?.reclaim != null) line(pl.longterm.reclaim, "#7fae8e", DS.Dashed, "200g dönüş", 1);
+    line(z.price, z.isNow ? "#2f8f57" : "#7fae8e", z.isNow ? DS.Solid : DS.Dashed, `MA bölgesi · ${z.label}`, 1, "long"));
+  if (pl.longterm?.reclaim != null) line(pl.longterm.reclaim, "#7fae8e", DS.Dashed, "200g dönüş", 1, "long");
   // Destek / Direnç (ince noktalı, bağlam)
-  (d.levels?.support || []).forEach((v, i) => line(v, "#9aa7a0", DS.Dotted, i === 0 ? "Destek" : "", 1));
-  (d.levels?.resistance || []).forEach((v, i) => line(v, "#c98a3a", DS.Dotted, i === 0 ? "Direnç" : "", 1));
+  (d.levels?.support || []).slice(0, 2).forEach((v, i) => line(v, "#9aa7a0", DS.Dotted, i === 0 ? "Destek" : "", 1, "context"));
+  (d.levels?.resistance || []).slice(0, 2).forEach((v, i) => line(v, "#c98a3a", DS.Dotted, i === 0 ? "Direnç" : "", 1, "context"));
   // Pozisyon: ortalama maliyet çizgisi (mor)
-  if (pos?.costUSD != null && isFinite(pos.costUSD)) line(pos.costUSD, "#8b7fd6", DS.Solid, "Maliyet", 1);
+  if (pos?.costUSD != null && isFinite(pos.costUSD)) line(pos.costUSD, "#8b7fd6", DS.Solid, "Maliyet", 1, "position");
   // Pozisyon Bekçisi: iz süren stop (turuncu) + manuel hedef
-  if (pos?.guard?.stop != null) line(pos.guard.stop, "#e07b2f", DS.Dashed, "İz süren stop");
-  if (pos?.guard?.target != null) line(pos.guard.target, "#1f7a48", DS.Solid, "Plan hedef", 1);
+  if (pos?.guard?.stop != null) line(pos.guard.stop, "#e07b2f", DS.Dashed, "Pozisyon stop", 2, "position");
+  if (pos?.guard?.target != null) line(pos.guard.target, "#1f7a48", DS.Solid, "Plan hedef", 1, "position");
 
   // --- EĞİMLİ trend çizgileri + formasyon şekli (otomatik çizim) ---
   const pats = d.patterns || {};
   const tline = (ln, color, style, width = 2) => {
-    if (!ln?.p1 || !ln?.p2) return;
-    const data = [{ time: ln.p1.time, value: ln.p1.value }, { time: ln.p2.time, value: ln.p2.value }]
-      .sort((a, b) => (a.time < b.time ? -1 : 1));
-    if (data[0].time === data[1].time) return; // dejenere (tek nokta) çizgi atla
-    chart.addLineSeries({ color, lineWidth: width, lineStyle: style, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false }).setData(data);
+    const data = ChartTools.trendData(ln);
+    if (data.length !== 2) return;
+    addSeries("pattern", "Formasyonlar", chart.addLineSeries({ color, lineWidth: Math.round(width), lineStyle: style, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false }), data, false);
   };
   // Eğimli trend çizgileri: düşen direnç (tepe) belirgin koyu, yükselen destek (dip) mavi
   (pats.trendlines || []).forEach((t) => {
@@ -1021,17 +1044,28 @@ async function openChartModal(sym, ctx = null, fresh = false) {
     const pt = pats.pattern.tone;
     const col = pt === "bull" ? "#1f7a48" : pt === "bear" ? "#d8442f" : "#8b7fd6";
     pats.pattern.lines.forEach((ln) => tline(ln, col, ln.role === "pole" ? DS.Solid : DS.Dashed, ln.role === "pole" ? 3 : 2));
-    if (pats.pattern.breakout != null) line(pats.pattern.breakout, col, DS.Dashed, "Kırılım", 1);
+    if (pats.pattern.breakout != null) line(pats.pattern.breakout, col, DS.Dashed, "Formasyon tetiği", 1, "pattern");
   }
 
+  // 12 Eki: açık fiyat katmanlarının seviyeleri kadrajda kalsın; 2R çizgisi ekran dışında kaybolmasın.
+  const autoscaleLevels = (original) => {
+    const info = original();
+    if (!info) return null;
+    const prices = [...groups.values()].filter(g => g.visible).flatMap(g => g.items.filter(item => typeof item.setData !== "function").map(item => item.options().price)).filter(price => Number.isFinite(price) && price > 0);
+    return { ...info, priceRange: { minValue: Math.min(info.priceRange.minValue, ...prices), maxValue: Math.max(info.priceRange.maxValue, ...prices) } };
+  };
+  candle.applyOptions({ autoscaleInfoProvider: autoscaleLevels });
   // Son ~130 güne (≈6 ay) odakla — trend çizgileri ve formasyon sıkışmadan
   // net görünsün (tüm 360 mumu birden göstermek hareketi ezerdi). Kullanıcı
   // geriye kaydırıp tüm geçmişi yine görebilir.
   const NB = d.candles.length;
   const focusRange = () => chart.timeScale().setVisibleLogicalRange({ from: Math.max(0, NB - 130), to: NB + 3 });
   focusRange();
-  cmResizeHandler = focusRange;
-  window.addEventListener("resize", cmResizeHandler);
+  // 12 Eki: autoSize ilk ölçümünü bitirmeden aralık koymak dar mobil genişliğini taşıyordu.
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    if (request === cmRequest && cmChart === chart) focusRange();
+  }));
+  // autoSize mevcut zoom/pan aralığını korur; resize altı aya sıfırlamaz.
 
   // ── Grafik üstü stats overlay (TradingView tarzı): piyasa değeri · ADR% · RS · sektör ──
   const st = d.stats || {};
@@ -1044,7 +1078,7 @@ async function openChartModal(sym, ctx = null, fresh = false) {
       ${st.marketCap != null ? `<div class="cs-r"><span>Market Cap</span><b>${fmtMktCap(st.marketCap)}</b></div>` : ""}
       ${st.adrPct != null ? `<div class="cs-r"><span>ADR%</span><b class="${adrCls}">${st.adrPct.toFixed(2)}%</b></div>` : ""}
       ${st.rsRating != null ? `<div class="cs-r"><span>RS Rating</span><b class="${rsCls}">${st.rsRating}</b></div>` : ""}
-      ${st.industry ? `<div class="cs-r ind"><span>${st.exchange ? st.exchange + " · " : ""}${st.industry}</span></div>` : ""}`;
+      ${st.industry ? `<div class="cs-r ind"><span>${st.exchange ? esc(st.exchange) + " · " : ""}${st.industry}</span></div>` : ""}`;
     chartEl.appendChild(ov);
   }
 
@@ -1063,7 +1097,7 @@ async function openChartModal(sym, ctx = null, fresh = false) {
       ${row("Ort. maliyet", pos.costUSD != null ? fmtUSD(pos.costUSD) : "—")}
       ${row("Değer", pos.mvUSD != null ? fmtUSD(pos.mvUSD) : "—")}
       ${row("K/Z", pos.profitUSD != null ? `${fmtUSD(pos.profitUSD)} <span class="muted">${fmtPct(pos.profitPct)}</span>` : "—", pos.profitUSD != null ? cls(pos.profitUSD) : "")}
-      ${pos.guard ? row("İz süren stop", `${fmtUSD(pos.guard.stop)} <span class="muted">${pos.guard.breached ? "İHLAL — çık!" : "−%" + pos.guard.distPct.toFixed(1) + " mesafe"}</span>`, pos.guard.breached ? "neg" : "") : ""}
+      ${pos.guard ? row("İz süren stop", `${fmtUSD(pos.guard.stop)} <span class="muted">${pos.guard.breached ? "İHLAL — çık!" : "−%" + (pos.guard.distPct == null ? "—" : pos.guard.distPct.toFixed(1)) + " mesafe"}</span>`, pos.guard.breached ? "neg" : "") : ""}
       ${pos.guard?.target != null ? row("Plan hedef", fmtUSD(pos.guard.target), pos.guard.targetHit ? "pos" : "") : ""}
       ${pos.earnings ? row("Bilanço", `${fmtDate(pos.earnings.date)} <span class="muted">${pos.earnings.daysLeft === 0 ? "bugün" : pos.earnings.daysLeft + " gün"}${pos.earnings.hour === "bmo" ? " · açılış öncesi" : pos.earnings.hour === "amc" ? " · kapanış sonrası" : ""}</span>`, pos.earnings.daysLeft <= 7 ? "neg" : "") : ""}
     </div>` : "";
@@ -1073,7 +1107,7 @@ async function openChartModal(sym, ctx = null, fresh = false) {
   const wkChip = wk ? `<span class="chip wk-${wk.tone}">Haftalık ${WK_ARROW[wk.dir] || ""}</span>` : "";
   const whyHTML = (d.why || []).map((w) => `<li class="s-${w.tone}">${w.text}</li>`).join("");
   // Horizon'a göre lens sırası: uzun-vade pozisyonu → biriktirme önce; aksi halde swing önce
-  const swingHTML = qmChartPanel(d.qm);
+  const swingHTML = qmChartPanel(d.qm, d.analysis);
   const ltHTML = longtermPanel(pl.longterm);
   const horizonChip = pos?.horizon
     ? `<span class="chip ${pos.horizon === "swing" ? "hz-swing" : "hz-long"}">${pos.horizon === "swing" ? "Swing pozisyonu" : "Uzun vade pozisyonu"}</span>` : "";
@@ -1083,7 +1117,7 @@ async function openChartModal(sym, ctx = null, fresh = false) {
   const rsCls2 = st2.rsRating == null ? "" : st2.rsRating >= 80 ? "pos" : st2.rsRating >= 50 ? "warn" : "neg";
   const statsCard = (st2.marketCap != null || st2.adrPct != null || st2.rsRating != null || st2.industry) ? `
     <div class="cm-stats-card">
-      <div class="cm-stats-head">${d.symbol}${st2.exchange ? ` · ${st2.exchange}` : ""}</div>
+      <div class="cm-stats-head">${esc(d.symbol)}${st2.exchange ? ` · ${esc(st2.exchange)}` : ""}</div>
       <div class="cm-stats-grid">
         ${st2.marketCap != null ? `<div class="cs2"><span>Market Cap</span><b>${fmtMktCap(st2.marketCap)}</b></div>` : ""}
         ${st2.adrPct != null ? `<div class="cs2"><span>ADR%</span><b class="${st2.adrPct >= 4 ? "pos" : ""}">${st2.adrPct.toFixed(2)}%</b></div>` : ""}
@@ -1092,7 +1126,7 @@ async function openChartModal(sym, ctx = null, fresh = false) {
         ${(st2.w52High != null && st2.w52Low != null) ? `<div class="cs2"><span>52h Aralık</span><b>${fmtUSD(st2.w52Low)} – ${fmtUSD(st2.w52High)}</b></div>` : ""}
         ${st2.fromHighPct != null ? `<div class="cs2"><span>Zirveden</span><b class="${st2.fromHighPct >= -10 ? "pos" : "neg"}">${st2.fromHighPct.toFixed(1)}%</b></div>` : ""}
       </div>
-      ${st2.industry ? `<div class="cm-stats-ind">${st2.industry}</div>` : ""}
+      ${st2.industry ? `<div class="cm-stats-ind">${esc(st2.industry)}</div>` : ""}
     </div>` : "";
   /* Mobilde yan panel grafiğin ÜSTÜNE çıkar — ama YALNIZ pozisyonun varsa.
    * 3 Eyl: kullanıcı bir hisseye dokunduğunda "kaç adet, ne kadar" görmek
@@ -1110,10 +1144,10 @@ async function openChartModal(sym, ctx = null, fresh = false) {
     ${statsCard}
     ${posCard}
     <div class="cm-ctx">
-      <div class="cm-grade ${GRADE_CLS[pl.grade] || "g-d"}" title="Teknik kalite notu (A–D)">${pl.grade || "—"}</div>
-      <div class="cm-setup">${horizonChip}<span class="sw-trend">${pl.trend || "—"}</span>${pat ? `<span class="chip pat-${patTone}">${pat.label} ~%${pat.confidence}</span>` : ""}${wkChip}</div>
+      <div class="cm-grade ${GRADE_CLS[pl.grade] || "g-d"}" title="Heuristik teknik puan; başarı olasılığı değildir">${pl.grade || "—"}</div>
+      <div class="cm-setup">${horizonChip}<span class="sw-trend">${pl.trend || "—"}</span>${pat ? `<span class="chip pat-${patTone}">${esc(pat.label)} · yapısal aday</span>` : ""}${wkChip}</div>
     </div>
-    ${lensHTML}
+    <details class="cm-extra"><summary>Günlük kurulum ayrıntıları</summary>${lensHTML}</details>
     <div class="cm-sec">Teknik göstergeler</div>
     <div class="cm-sigs">${sigRows || '<span class="muted">—</span>'}</div>
     <div class="cm-key">
@@ -1125,20 +1159,27 @@ async function openChartModal(sym, ctx = null, fresh = false) {
     <div class="cm-disc">Otomatik teknik analiz · yatırım tavsiyesi değildir (Kural 1).</div>
   `;
 
-  legEl.innerHTML = `
-    <span class="lg"><i style="background:#0a8f6e"></i> Swing Giriş</span>
-    <span class="lg"><i style="background:#ab272c"></i> Swing Stop</span>
-    <span class="lg"><i style="background:#1f7a48"></i> Hedef 2R/3R</span>
-    <span class="lg"><i style="background:#7fae8e"></i> Biriktir (uzun vade)</span>
-    <span class="lg"><i style="background:#56b1d6"></i> SMA20</span>
-    <span class="lg"><i style="background:#d9a92b"></i> SMA50</span>
-    <span class="lg"><i style="background:#6b5fd0"></i> SMA200</span>
-    <span class="lg"><i style="background:#0ea5a0"></i> EMA8</span>
-    <span class="lg"><i style="background:#f59e0b"></i> EMA21</span>
-    <span class="lg"><i style="background:rgba(16,185,129,.45)"></i> EMA Bulutu</span>
-    <span class="lg"><i style="background:#c98a3a"></i> Direnç</span>
-    <span class="lg"><i style="background:#9aa7a0"></i> Destek</span>
-    <span class="lg"><i style="background:#8b7fd6"></i> Maliyet</span>`;
+  const metadata = d.analysis?.quality;
+  $("#cmAnalysisMeta").textContent = metadata
+    ? `1D · son kapanış ${metadata.barDate || "—"}${metadata.partialBar ? " · bugünkü mum açık" : ""}${metadata.stale ? " · eski veri" : ""} · gün içi giriş teyidi yok`
+    : "Günlük grafik · giriş teyidi için kaynak bilgisi eksik";
+  const controls = $("#cmLayers");
+  controls.innerHTML = [...groups.values()].map((g) => `<button type="button" data-layer="${g.key}" aria-pressed="${g.visible}">${esc(g.label)}</button>`).join("");
+  const updateLegend = () => {
+    legEl.textContent = [...groups.values()].filter(g => g.visible).map(g => g.label).join(" · ") + " · 2R fiyat tahmini değildir";
+  };
+  controls.onclick = (event) => {
+    const button = event.target.closest("[data-layer]");
+    const g = button && groups.get(button.dataset.layer);
+    if (!g) return;
+    g.visible = !g.visible; button.setAttribute("aria-pressed", String(g.visible));
+    g.items.forEach(item => item.applyOptions(typeof item.setData === "function" ? { visible: g.visible } : { lineVisible: g.visible, axisLabelVisible: g.visible }));
+    candle.applyOptions({ autoscaleInfoProvider: autoscaleLevels });
+    CM_DRAW.redraw?.(); updateLegend();
+  };
+  updateLegend();
+  if (document.body.classList.contains("privacy")) applyMask(true);
+  document.querySelectorAll(".cm-tool").forEach(button => { button.disabled = false; });
 }
 
 async function addWatch() {
