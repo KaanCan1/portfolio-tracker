@@ -186,7 +186,7 @@
     host.innerHTML = `
       <section class="desk-hero-grid">
         <article class="desk-total-card">
-          <div class="desk-balance-head"><p class="desk-kicker">TOPLAM PORTFÖYÜN</p><span class="desk-update">${snapshot.healthy ? "Güncel" : "Son güvenilir değer"} · ${updateLabel}</span></div>
+          <div class="desk-balance-head"><p class="desk-kicker">NET PORTFÖY DEĞERİ</p><span class="desk-update">${snapshot.healthy ? "Güncel" : "Son güvenilir değer"} · ${updateLabel}</span></div>
           <div class="desk-balance-row"><div>
             <div class="desk-total-value desk-sensitive">${fx ? moneyUSD(displayTotal / fx) : moneyTRY(displayTotal)}</div>
             <div class="desk-total-try desk-sensitive">${fx ? `≈ ${moneyTRY(displayTotal)}` : "Muhasebe para birimi TRY"}</div>
@@ -197,7 +197,7 @@
           </div>
         </article>
         <article class="desk-surface desk-actions-card">
-          <header><div><p class="desk-kicker">HIZLI İŞLEMLER</p><h2>Portföyünü güncelle</h2></div><span class="desk-action-decoration" aria-hidden="true">↗</span></header>
+          <header><div><p class="desk-kicker">HIZLI İŞLEMLER</p><h2>İşlem kaydı</h2></div></header>
           <div class="desk-quick-actions">
             <button type="button" data-desk-action="add"><span aria-hidden="true">＋</span><b>Varlık ekle</b><small>Hisse, fon veya altın</small></button>
             <button type="button" data-desk-action="trade"><span aria-hidden="true">⇄</span><b>Alış / satış</b><small>İşlemini kaydet</small></button>
@@ -212,7 +212,7 @@
 
       <section class="desk-overview-grid">
         <article class="desk-surface desk-allocation-card">
-          <header><div><p class="desk-kicker">DENGE</p><h2>Varlık dağılımı</h2></div><button type="button" class="desk-icon-action" data-desk-action="positions" aria-label="Pozisyonları aç">→</button></header>
+          <header><div><p class="desk-kicker">DAĞILIM</p><h2>Varlık dağılımı</h2></div><button type="button" class="desk-icon-action" data-desk-action="positions" aria-label="Pozisyonları aç">→</button></header>
           ${allocationMarkup}
         </article>
         <article class="desk-surface desk-priority-card">

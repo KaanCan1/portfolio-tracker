@@ -11,9 +11,10 @@
  * nötr koyu (%14), doygunlaştıkça AÇILIR. Hue ve doygunluk aynı kalır — hangi
  * rengin ne anlattığı değişmiyor, yalnız hangi uçtan geldiği. */
 function heatStyle(pct) {
-  const koyu = window.matchMedia?.("(prefers-color-scheme: dark)").matches;
+  // 13 Eki 2026: terminal her sistemde koyu; skala gerçek CSS temasını izler.
+  const koyu = getComputedStyle(document.documentElement).colorScheme.includes("dark");
   if (pct == null || isNaN(pct))
-    return koyu ? { bg: "hsl(140 5% 15%)", fg: "#8d9384" } : { bg: "hsl(140 6% 91%)", fg: "#5a655d" };
+    return koyu ? { bg: "#202836", fg: "#8e9eb3" } : { bg: "hsl(140 6% 91%)", fg: "#5a655d" };
   const t = Math.max(-1, Math.min(1, pct / 4));
   const mag = Math.abs(t);
   const hue = t >= 0 ? 146 : 6;
@@ -1061,5 +1062,4 @@ function renderPosTech() {
       ? "RSI &gt; 70 ısınmış · &lt; 30 aşırı satım. Trend = fiyatın SMA50/200'e göre yeri. 52h Zirve = 52 hafta zirvesinden uzaklık. Analist Hedef = ortalama hedefe potansiyel. Açık R = açık kârın stopuna göre kaç risk birimi (Kural 1)."
       : "Teknik veriler henüz taranıyor (RSI/SMA/52h analist). Birkaç dakika sonra tazele — ek API maliyeti olmadan günlük taramadan gelir."}</div>`;
 }
-
 
