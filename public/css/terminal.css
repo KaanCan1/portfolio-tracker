@@ -245,7 +245,7 @@ body.desk-app :where(button, input, select, textarea, summary, a, [tabindex]):fo
  .desk-total-card { padding: 20px; } .desk-total-value { font-size: 36px; }
 }
 @media (max-width: 767px) {
- .desk-app :where(button) { min-height: 44px; }
+ .desk-app button { min-height: 44px !important; }
  .desk-app .content { padding-inline: 12px; padding-bottom: calc(88px + env(safe-area-inset-bottom)); }
  .desk-topbar { min-height: 64px; margin-bottom: 12px; padding: 10px 0; }
  .desk-topbar h1 { font-size: 18px; } .desk-top-actions .btn { min-height: 44px; }
