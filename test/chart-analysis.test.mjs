@@ -1,7 +1,7 @@
 // 12 Eki 2026: günlük mumlar gün içi emir/gerçekleşme gibi sunulmasın.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeChartCandles, closedChartCandles, chartRelativeStrength, chartEntryAnalysis } from '../chart-analysis.js';
+import { normalizeChartCandles, closedChartCandles, chartRelativeStrength, chartVolumeSummary, chartEntryAnalysis } from '../chart-analysis.js';
 import '../public/js/15-chart-tools.js';
 const tools = globalThis.ChartTools;
 const now = new Date('2026-10-12T22:00:00Z');
@@ -109,4 +109,11 @@ test('dejenere, negatif veya sayısal olmayan trend çizgisi çizilmez',()=>{
  assert.deepEqual(tools.trendData({p1:{time:'2026-10-12',value:110},p2:{time:'2026-10-12',value:100}}),[]);
  assert.deepEqual(tools.trendData({p1:{time:'2026-10-09',value:110},p2:{time:'2026-10-12',value:NaN}}),[]);
  assert.deepEqual(tools.trendData({p1:{time:'2026-10-09',value:110},p2:{time:'2026-10-12',value:-10}}),[]);
+});
+
+test('son hacim eksikse geçmiş hacim bugünün teyidi sayılmaz',()=>{
+ const valid=Array.from({length:20},()=>({volume:100}));
+ assert.deepEqual(chartVolumeSummary(valid),{avgVol:100,lastVol:100});
+ assert.deepEqual(chartVolumeSummary([...valid.slice(0,-1),{volume:null}]),{avgVol:null,lastVol:null});
+ assert.deepEqual(chartVolumeSummary([...valid.slice(0,-1),{volume:0}]),{avgVol:95,lastVol:0});
 });
