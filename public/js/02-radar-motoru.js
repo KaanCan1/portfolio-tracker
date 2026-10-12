@@ -950,7 +950,7 @@ async function openChartModal(sym, ctx = null, fresh = false) {
   const grid = palette.getPropertyValue("--desk-line").trim() || "#e3ebed";
   const groups = new Map();
   function group(key, label, visible = false) {
-    if (!groups.has(key)) groups.set(key, { key, label, visible, items: [] });
+    if (!groups.has(key)) groups.set(key, { key, label, visible: key === "position" && document.body.classList.contains("privacy") ? false : visible, items: [] });
     return groups.get(key);
   }
   function addSeries(key, label, series, data, visible = true) {
@@ -1167,19 +1167,33 @@ async function openChartModal(sym, ctx = null, fresh = false) {
     ? `1D · son kapanış ${metadata.barDate || "—"}${metadata.partialBar ? " · bugünkü mum açık" : ""}${metadata.stale ? " · eski veri" : ""} · gün içi giriş teyidi yok`
     : "Günlük grafik · giriş teyidi için kaynak bilgisi eksik";
   const controls = $("#cmLayers");
-  controls.innerHTML = [...groups.values()].map((g) => `<button type="button" data-layer="${g.key}" aria-pressed="${g.visible}">${esc(g.label)}</button>`).join("");
+  controls.innerHTML = [...groups.values()].map((g) => `<button type="button" data-layer="${g.key}" aria-pressed="${g.visible}" ${g.key === "position" && document.body.classList.contains("privacy") ? "disabled" : ""}>${esc(g.label)}</button>`).join("");
   const updateLegend = () => {
     legEl.textContent = [...groups.values()].filter(g => g.visible).map(g => g.label).join(" · ") + " · 2R fiyat tahmini değildir";
   };
   controls.onclick = (event) => {
     const button = event.target.closest("[data-layer]");
     const g = button && groups.get(button.dataset.layer);
-    if (!g) return;
+    if (!g || (g.key === "position" && document.body.classList.contains("privacy"))) return;
     g.visible = !g.visible; button.setAttribute("aria-pressed", String(g.visible));
     g.items.forEach(item => item.applyOptions(typeof item.setData === "function" ? { visible: g.visible } : { lineVisible: g.visible, axisLabelVisible: g.visible }));
     candle.applyOptions({ autoscaleInfoProvider: autoscaleLevels });
     CM_DRAW.redraw?.(); updateLegend();
   };
+  // 12 Eki: maliyet çizgisi de kişisel veridir; metni maskeleyip fiyat ekseninde açık bırakma.
+  const privacyObserver = new MutationObserver(() => {
+    const position = groups.get("position"), button = controls.querySelector('[data-layer="position"]');
+    if (!position || !button) return;
+    const privateMode = document.body.classList.contains("privacy");
+    button.disabled = privateMode;
+    if (privateMode) {
+      position.visible = false; button.setAttribute("aria-pressed", "false");
+      position.items.forEach(item => item.applyOptions({ lineVisible: false, axisLabelVisible: false }));
+      candle.applyOptions({ autoscaleInfoProvider: autoscaleLevels }); updateLegend();
+    }
+  });
+  privacyObserver.observe(document.body, { attributes: true, attributeFilter: ["class"] });
+  CM_DRAW.cleanup.push(() => privacyObserver.disconnect());
   updateLegend();
   if (document.body.classList.contains("privacy")) applyMask(true);
   document.querySelectorAll(".cm-tool").forEach(button => { button.disabled = false; });
