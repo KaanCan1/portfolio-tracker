@@ -1,3 +1,4 @@
+import { normalizeChartCandles, closedChartCandles, chartRelativeStrength, chartEntryAnalysis } from "./chart-analysis.js";
 import express from "express";
 import webpush from "web-push";
 import Anthropic from "@anthropic-ai/sdk";
@@ -4632,11 +4633,16 @@ app.get("/api/chart", async (req, res) => {
     const out = await cached("chart:" + sym, 5 * 60_000, async () => {
       // Birleşik önbellek: tarama zaten çektiyse anında döner (TD çağrısı yok).
       // Yoksa tek bir ön plan TD çağrısı yapar (tarama arkasında beklemez).
-      const candles = await getCandles(sym); // ~17 ay (SMA200 çizgisi tam çizilsin)
-      if (!candles || candles.length < 30) throw new Error("yeterli mum verisi yok (kaynak meşgul, birazdan tekrar dene)");
-      const closes = candles.map((c) => c.close), highs = candles.map((c) => c.high), lows = candles.map((c) => c.low);
-      const vols = candles.map((c) => c.volume).filter((v) => v != null && isFinite(v));
-      const price = radarCache[sym]?.price ?? closes[closes.length - 1];
+      const rawCandles = await getCandles(sym);
+      const chartNow = new Date();
+      const normalized = normalizeChartCandles(rawCandles, chartNow);
+      const candles = normalized.candles;
+      if (candles.length < 30) throw new Error("yeterli geçerli mum verisi yok (kaynak meşgul, birazdan tekrar dene)");
+      const analysisCandles = closedChartCandles(candles, chartNow);
+      if (analysisCandles.length < 30) throw new Error("yeterli kapanmış günlük mum yok");
+      const closes = analysisCandles.map((c) => c.close), highs = analysisCandles.map((c) => c.high), lows = analysisCandles.map((c) => c.low);
+      const vols = analysisCandles.map((c) => c.volume).filter((v) => v != null && isFinite(v));
+      const price = closes[closes.length - 1];
       const macd = macdCalc(closes), adx = adxCalc(highs, lows, closes), bb = bollinger(closes);
       const avgVol = vols.length >= 20 ? vols.slice(-20).reduce((a, b) => a + b, 0) / 20 : null;
       const lastVol = vols.length ? vols[vols.length - 1] : null;
@@ -4649,19 +4655,20 @@ app.get("/api/chart", async (req, res) => {
       const piv = pivotLevels(highs, lows, price);
       const nearestSup = piv.support[0] ?? ind.low20 ?? null;
       const nearestRes = piv.resistance[0] ?? ind.high20 ?? null;
+      const chartRS = chartRelativeStrength(analysisCandles, candleCache[RS_ENDEKS]?.candles, chartNow);
       const plan = buildPlan({
         price, atr: ind.atr, rsi: ind.rsi, sma20: ind.sma20, sma50: ind.sma50, sma200: ind.sma200,
         high20: ind.high20, low20: ind.low20,
         support: nearestSup, resistance: nearestRes, resistance2: piv.resistance[1] ?? null,
-        rsFark: rsFarkFor(sym),   // grafik modalı da liste ile AYNI kapıdan geçsin
+        rsFark: chartRS,   // grafik modalı da liste ile AYNI kapıdan geçsin
       });
-      const patterns = detectPatterns(candles);                   // eğimli trend çizgileri + formasyon
-      const weekly = weeklyTrend(candles);                        // çoklu zaman dilimi onayı
+      const patterns = detectPatterns(analysisCandles);                   // eğimli trend çizgileri + formasyon
+      const weekly = weeklyTrend(analysisCandles);                        // çoklu zaman dilimi onayı
       const why = buildWhy(plan, ind, patterns.pattern, weekly);  // düz Türkçe "neden bu öneri?"
-      const qm = qmAnalyze(candles, { price });                   // Qullamaggie setup/giriş/stop analizi
+      const qm = qmAnalyze(analysisCandles, { price });                   // Qullamaggie setup/giriş/stop analizi
       // ── Grafik üst-bilgi kutusu (TradingView tarzı): piyasa değeri, ADR%, RS, sektör ──
       const profile = await fhProfile(sym).catch(() => ({}));
-      const yr = candles.slice(-252);
+      const yr = analysisCandles.slice(-252);
       const w52High = yr.length ? Math.max(...yr.map((c) => c.high)) : null;
       const w52Low = yr.length ? Math.min(...yr.map((c) => c.low)) : null;
       const dollarVol = (ind.avgVol && price) ? price * ind.avgVol : null;
@@ -4675,13 +4682,14 @@ app.get("/api/chart", async (req, res) => {
         dollarVol,
         fromHighPct: w52High ? +(((price - w52High) / w52High) * 100).toFixed(1) : null,
       };
+      const analysis = chartEntryAnalysis({ candles, qm, plan, atr: ind.atr, rsFark: chartRS, support: piv.support, resistance: piv.resistance, rejected: normalized.rejected, fetchedAt: candleCache[sym]?.t ?? null, now: chartNow });
       return {
         symbol: sym, name: profile.name ?? radarCache[sym]?.name ?? null, theme: RADAR_THEME[sym] || null,
         price, asOf: Date.now(),
         candles,
         sma20: smaSeries(candles, 20), sma50: smaSeries(candles, 50), sma200: smaSeries(candles, 200),
         ema8: emaSeries(candles, 8), ema21: emaSeries(candles, 21), // EMA Cloud (Ripster 8/21)
-        indicators: ind, levels: piv, plan, patterns, weekly, why, stats,
+        indicators: ind, levels: piv, plan, patterns, weekly, why, stats, analysis,
         signals: chartSignals(ind, price),
         qm,
       };

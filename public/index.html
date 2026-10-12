@@ -1041,7 +1041,7 @@
 
   <!-- Swing grafik modalı (TradingView Lightweight Charts) -->
   <div class="chart-modal-bg" id="chartModalBg" hidden>
-    <div class="chart-modal">
+    <div class="chart-modal" role="dialog" aria-modal="true" aria-labelledby="cmSym">
       <div class="cm-head">
         <div class="cm-title">
           <span class="cm-sym" id="cmSym">—</span>
@@ -1063,6 +1063,8 @@
       <!-- Pozisyon şeridi: mobilde başlığın hemen altında, masaüstünde gizli
            (orada aynı kart yan panelin içinde duruyor). Bir hisseye dokunduğunda
            ilk görmen gereken şey kaç adedin olduğu ve ne kadar ettiği. -->
+      <div class="cm-analysis-meta" id="cmAnalysisMeta" role="status"></div>
+      <div class="cm-layer-controls" id="cmLayers" role="group" aria-label="Grafik katmanları"></div>
       <div class="cm-posbar" id="cmPosBar" hidden></div>
       <div class="cm-body">
         <div class="cm-chart" id="cmChart"></div>
@@ -1099,8 +1101,9 @@
     </div>
   </section>
 
-  <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+  <script src="vendor/lightweight-charts/4.2.0/lightweight-charts.standalone.production.js"></script>
   <!-- app.js modüllere bölündü (15 Tem 2026) — SIRA ÖNEMLİ: klasik script'ler global kapsamı paylaşır -->
+  <script src="js/15-chart-tools.js"></script>
   <script src="js/01-cekirdek.js"></script>
   <script src="js/02-radar-motoru.js"></script>
   <script src="js/03-tablolar-modallar.js"></script>
