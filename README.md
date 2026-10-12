@@ -20,6 +20,8 @@ Vanilla JavaScript SPA · Three.js · Express · PostgreSQL · Claude API · MCP
 
 *Screenshots show illustrative sample data from a local preview.*
 
+The interface uses a dark trading-terminal layout: compact tables, sharp panel edges, aligned price columns and a consistent mobile design. [UI verification](docs/testing/terminal-ui.md) covers every view and the entry forms.
+
 > **Why it exists** — I wanted one place that enforces my own trading discipline instead of just charting prices: *Rule #1: don't lose money.* Positions without a stop plan get flagged, new entries are blocked when the market regime is off, profits trigger "pull your initial capital, let the profit ride for free" suggestions. The app is my daily driver; the UI is Turkish because it was built for me first.
 
 ---

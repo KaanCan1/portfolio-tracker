@@ -1378,7 +1378,8 @@ function drawChart() {
     && times.every((t, i) => i === 0 || t > times[i - 1]);
   const px = (i) => pad.l + (timeScale ? (times[i] - times[0]) / (times[pts.length - 1] - times[0]) : i / (pts.length - 1)) * (W - pad.l - pad.r);
   const py = (v) => pad.t + (1 - (v - min) / (max - min)) * (H - pad.t - pad.b);
-  const color = "#0b8884";
+  // 13 Eki 2026: seri rengi terminal temasından gelir; getiri hesabı değişmez.
+  const color = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#8ab5ff";
   const lastX = px(pts.length - 1), lastY = py(last);
   const coords = pts.map((p, i) => [px(i), py(p.total)]);
   const lineD = smoothPath(coords);
