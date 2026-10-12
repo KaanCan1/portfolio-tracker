@@ -1,4 +1,4 @@
-import { normalizeChartCandles, closedChartCandles, chartRelativeStrength, chartEntryAnalysis } from "./chart-analysis.js";
+import { normalizeChartCandles, closedChartCandles, chartRelativeStrength, chartVolumeSummary, chartEntryAnalysis } from "./chart-analysis.js";
 import express from "express";
 import webpush from "web-push";
 import Anthropic from "@anthropic-ai/sdk";
@@ -4641,11 +4641,9 @@ app.get("/api/chart", async (req, res) => {
       const analysisCandles = closedChartCandles(candles, chartNow);
       if (analysisCandles.length < 30) throw new Error("yeterli kapanmış günlük mum yok");
       const closes = analysisCandles.map((c) => c.close), highs = analysisCandles.map((c) => c.high), lows = analysisCandles.map((c) => c.low);
-      const vols = analysisCandles.map((c) => c.volume).filter((v) => v != null && isFinite(v));
       const price = closes[closes.length - 1];
       const macd = macdCalc(closes), adx = adxCalc(highs, lows, closes), bb = bollinger(closes);
-      const avgVol = vols.length >= 20 ? vols.slice(-20).reduce((a, b) => a + b, 0) / 20 : null;
-      const lastVol = vols.length ? vols[vols.length - 1] : null;
+      const { avgVol, lastVol } = chartVolumeSummary(analysisCandles);
       const ind = {
         sma20: sma(closes, 20), sma50: sma(closes, 50), sma200: sma(closes, 200),
         rsi: rsiCalc(closes, 14), atr: atr14(highs, lows, closes, 14),

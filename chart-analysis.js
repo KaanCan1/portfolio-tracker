@@ -30,6 +30,15 @@ export function chartRelativeStrength(candles, benchmark, now = new Date()) {
   if (shared.length < KAPI.rsUfukGun + 1) return null;
   return goreliGuc(shared.map(bar => bar.close), shared.map(bar => reference.get(bar.time)), KAPI.rsUfukGun);
 }
+// 12 Eki: eksik son hacim önceki işlem gününün hacmiyle teyit edilmesin.
+export function chartVolumeSummary(candles) {
+  const window = candles.slice(-20), last = candles.at(-1)?.volume;
+  const valid = value => typeof value === 'number' && Number.isFinite(value) && value >= 0;
+  return {
+    avgVol: window.length === 20 && window.every(bar => valid(bar.volume)) ? window.reduce((sum,bar)=>sum+bar.volume,0)/20 : null,
+    lastVol: valid(last) ? last : null,
+  };
+}
 export function chartEntryAnalysis({ candles = [], qm = {}, plan = {}, atr = null, rsFark = null, support = [], resistance = [], rejected = 0, fetchedAt = null, now = new Date() }) {
   const closed = closedChartCandles(candles, now);
   const last = closed.at(-1), previous = closed.at(-2);
