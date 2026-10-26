@@ -12,18 +12,18 @@
     "eval:rag": "node scripts/rag-eval.mjs"
   },
   "engines": {
-    "node": ">=20"
+    "node": "^24.22.1"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",
-    "@modelcontextprotocol/sdk": "^1.29.0",
-    "express": "^4.19.2",
-    "pg": "^8.21.0",
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "express": "^4.22.3",
+    "pg": "^8.23.1",
     "three": "0.180.0",
     "web-push": "^3.6.7",
-    "zod": "^4.4.3"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
-    "shadcn": "^4.11.0"
+    "shadcn": "^4.22.1"
   }
 }
